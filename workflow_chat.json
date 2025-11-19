@@ -1,0 +1,161 @@
+{
+    "name": "Real Estate - Intelligent Chat",
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "webhook-whatsapp",
+                "options": {}
+            },
+            "name": "WhatsApp Webhook",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 1,
+            "position": [
+                100,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT * FROM leads WHERE phone_number = $1",
+                "additionalFields": {
+                    "queryParams": "={{$json.body.waId}}"
+                }
+            },
+            "name": "Get Lead Context",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 1,
+            "position": [
+                300,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "modelId": "gpt-4-turbo",
+                "messages": {
+                    "values": [
+                        {
+                            "role": "system",
+                            "content": "You are a helpful Real Estate Assistant. Your goal is to qualify the lead and answer questions about the project.\n\nContext:\nProject: {{$json.project_name}}\nPrice: {{$json.price}}\nUnits: {{$json.units}}\n\nTools:\n- search_project_docs: Search for details in the brochure.\n- switch_project_context: If the user asks about another building.\n- recommend_projects: If the user budget is too low.\n\nQualification Status: {{$json.qualification_status}}\nMissing Info: {{$json.missing_info}}"
+                        },
+                        {
+                            "role": "user",
+                            "content": "={{$json.body.text.body}}"
+                        }
+                    ]
+                }
+            },
+            "name": "AI Agent",
+            "type": "n8n-nodes-base.openAi",
+            "typeVersion": 1,
+            "position": [
+                500,
+                300
+            ],
+            "credentials": {
+                "openAiApi": {
+                    "id": "YOUR_OPENAI_CREDENTIALS_ID",
+                    "name": "OpenAI"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "toolDescription": "Search project documents",
+                "toolName": "search_project_docs",
+                "parameters": {
+                    "values": [
+                        {
+                            "name": "query",
+                            "description": "The search query",
+                            "type": "string"
+                        }
+                    ]
+                }
+            },
+            "name": "Tool: Search Docs",
+            "type": "n8n-nodes-base.tool",
+            "typeVersion": 1,
+            "position": [
+                500,
+                500
+            ]
+        },
+        {
+            "parameters": {
+                "tableName": "project_documents",
+                "embeddingColumn": "embedding",
+                "query": "={{$json.query}}"
+            },
+            "name": "Vector Search",
+            "type": "n8n-nodes-base.vectorStore",
+            "typeVersion": 1,
+            "position": [
+                700,
+                500
+            ]
+        },
+        {
+            "parameters": {
+                "operation": "sendMessage",
+                "phoneNumber": "={{$json.phone_number}}",
+                "text": "={{$json.output}}"
+            },
+            "name": "Reply WhatsApp",
+            "type": "n8n-nodes-base.whatsapp",
+            "typeVersion": 1,
+            "position": [
+                900,
+                300
+            ]
+        }
+    ],
+    "connections": {
+        "WhatsApp Webhook": {
+            "main": [
+                [
+                    {
+                        "node": "Get Lead Context",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Get Lead Context": {
+            "main": [
+                [
+                    {
+                        "node": "AI Agent",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "AI Agent": {
+            "main": [
+                [
+                    {
+                        "node": "Reply WhatsApp",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Tool: Search Docs": {
+            "main": [
+                [
+                    {
+                        "node": "Vector Search",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    }
+}

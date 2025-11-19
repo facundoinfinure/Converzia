@@ -1,0 +1,170 @@
+{
+  "name": "Real Estate - Lead Ingestion",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook-facebook",
+        "options": {}
+      },
+      "name": "Facebook Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [100, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM projects WHERE facebook_form_id = $1",
+        "additionalFields": {
+          "queryParams": "={{$json.body.form_id}}"
+        }
+      },
+      "name": "Lookup Project",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [300, 300],
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_SUPABASE_CREDENTIALS_ID",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.company.credit_balance}}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ],
+          "string": [
+            {
+              "value1": "={{$json.company.billing_status}}",
+              "value2": "ACTIVE"
+            }
+          ]
+        }
+      },
+      "name": "Check Credits",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE companies SET credit_balance = credit_balance - 1 WHERE id = $1",
+        "additionalFields": {
+          "queryParams": "={{$json.company_id}}"
+        }
+      },
+      "name": "Deduct Credit",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [700, 200]
+    },
+    {
+      "parameters": {
+        "table": "leads",
+        "columns": "full_name, phone_number, email",
+        "additionalFields": {}
+      },
+      "name": "Insert Lead",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "templateId": "welcome_lead_real_estate",
+        "recipientPhoneNumber": "={{$json.phone_number}}",
+        "components": [
+          {
+            "type": "body",
+            "parameters": [
+              {
+                "type": "text",
+                "text": "={{$json.full_name}}"
+              },
+              {
+                "type": "text",
+                "text": "={{$json.project_name}}"
+              }
+            ]
+          }
+        ]
+      },
+      "name": "Send WhatsApp",
+      "type": "n8n-nodes-base.whatsapp",
+      "typeVersion": 1,
+      "position": [1100, 200],
+      "credentials": {
+        "whatsappApi": {
+          "id": "YOUR_WHATSAPP_CREDENTIALS_ID",
+          "name": "WhatsApp"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Facebook Webhook": {
+      "main": [
+        [
+          {
+            "node": "Lookup Project",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup Project": {
+      "main": [
+        [
+          {
+            "node": "Check Credits",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Credits": {
+      "main": [
+        [
+          {
+            "node": "Deduct Credit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deduct Credit": {
+      "main": [
+        [
+          {
+            "node": "Insert Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Lead": {
+      "main": [
+        [
+          {
+            "node": "Send WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
