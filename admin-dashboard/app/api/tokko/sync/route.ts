@@ -4,8 +4,8 @@ import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
     const { project_id } = await request.json()
-    const cookieStore = cookies()
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
+    const cookieStore = await cookies()
+    const supabase = createRouteHandlerClient({ cookies: () => cookieStore as any })
 
     // 1. Get Project & API Key
     const { data: project } = await supabase
