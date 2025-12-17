@@ -92,71 +92,48 @@ export default function RegisterPage() {
     try {
       if (!user) {
         setError("Debés iniciar sesión primero");
+        setIsSubmitting(false);
         return;
       }
 
       // Validate required fields
       if (!formData.businessName.trim()) {
         setError("El nombre del negocio es requerido");
+        setIsSubmitting(false);
         return;
       }
 
       if (!formData.phone.trim()) {
         setError("El teléfono de contacto es requerido");
+        setIsSubmitting(false);
         return;
       }
 
       const slug = generateSlug(formData.businessName);
 
-      // Check if slug already exists
-      const { data: existingTenant } = await supabase
-        .from("tenants")
-        .select("id")
-        .eq("slug", slug)
-        .single();
+      // Use the register_tenant function to create tenant and membership
+      const { data, error: registerError } = await supabase.rpc("register_tenant", {
+        p_name: formData.businessName.trim(),
+        p_slug: slug,
+        p_contact_email: user.email || profile?.email || "",
+        p_contact_phone: formData.phone.trim(),
+        p_website: formData.website.trim() || null,
+        p_description: formData.description.trim() || null,
+        p_vertical: formData.vertical,
+      });
 
-      if (existingTenant) {
-        setError("Ya existe un negocio con un nombre similar. Probá con otro nombre.");
-        return;
-      }
-
-      // Create tenant with PENDING status
-      const { data: tenant, error: tenantError } = await supabase
-        .from("tenants")
-        .insert({
-          name: formData.businessName.trim(),
-          slug,
-          status: "PENDING",
-          contact_email: user.email || profile?.email,
-          contact_phone: formData.phone.trim(),
-          website: formData.website.trim() || null,
-          description: formData.description.trim() || null,
-          vertical: formData.vertical,
-        })
-        .select()
-        .single();
-
-      if (tenantError) {
-        console.error("Error creating tenant:", tenantError);
-        setError("Error al crear el negocio. Intentá de nuevo.");
-        return;
-      }
-
-      // Create tenant membership with PENDING_APPROVAL status
-      const { error: memberError } = await supabase
-        .from("tenant_members")
-        .insert({
-          tenant_id: tenant.id,
-          user_id: user.id,
-          role: "OWNER",
-          status: "PENDING_APPROVAL",
-        });
-
-      if (memberError) {
-        console.error("Error creating membership:", memberError);
-        // Rollback tenant creation
-        await supabase.from("tenants").delete().eq("id", tenant.id);
-        setError("Error al registrar el negocio. Intentá de nuevo.");
+      if (registerError) {
+        console.error("Error registering tenant:", registerError);
+        
+        // Handle specific error messages
+        if (registerError.message.includes("already has a tenant")) {
+          setError("Ya tenés un negocio registrado. Contactá soporte si necesitás ayuda.");
+        } else if (registerError.message.includes("slug already exists")) {
+          setError("Ya existe un negocio con un nombre similar. Probá con otro nombre.");
+        } else {
+          setError("Error al registrar el negocio. Intentá de nuevo.");
+        }
+        setIsSubmitting(false);
         return;
       }
 
@@ -165,6 +142,7 @@ export default function RegisterPage() {
     } catch (err) {
       console.error("Registration error:", err);
       setError("Error inesperado. Intentá de nuevo.");
+      setIsSubmitting(false);
     } finally {
       setIsSubmitting(false);
     }
