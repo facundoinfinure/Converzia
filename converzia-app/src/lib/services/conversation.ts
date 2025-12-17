@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/server";
-import { sendMessage, findOrCreateContact } from "./chatwoot";
+import { sendMessage, sendTemplateMessage, findOrCreateContact } from "./chatwoot";
 import { extractQualificationFields, generateQualificationResponse, generateConversationSummary } from "./openai";
 import { calculateLeadScore, checkMinimumFieldsForScoring } from "./scoring";
 import type { LeadOffer, QualificationFields, Offer } from "@/types";
@@ -68,15 +68,37 @@ export async function startInitialConversation(leadOfferId: string): Promise<voi
       { onConflict: "chatwoot_conversation_id" }
     );
 
-  // Get initial message template
-  const initialMessage = generateInitialMessage({
-    leadName: lead.first_name || lead.full_name?.split(" ")[0] || "",
-    offerName: offer?.name || "",
-    tenantName: tenant?.name || "",
-  });
+  // Prepare template parameters
+  const leadName = lead.first_name || lead.full_name?.split(" ")[0] || "cliente";
+  const offerName = offer?.name || "nuestros proyectos";
+  const tenantName = tenant?.name || "nuestro equipo";
 
-  // Send message via Chatwoot
-  await sendMessage(chatwootConversationId, initialMessage);
+  // Send WhatsApp template message (required for initiating conversations)
+  // Template: lead_bienvenida
+  // Header: ¡Hola {{1}}!
+  // Body: Gracias por tu interés en {{1}}. Soy el asistente virtual de {{2}}.
+  try {
+    await sendTemplateMessage(
+      chatwootConversationId,
+      "lead_bienvenida",
+      {
+        header: [leadName],
+        body: [offerName, tenantName],
+      },
+      "es_AR"
+    );
+  } catch (templateError) {
+    console.error("Template message failed, trying regular message:", templateError);
+    // Fallback to regular message (only works if user messaged first)
+    const initialMessage = generateInitialMessage({
+      leadName,
+      offerName,
+      tenantName,
+    });
+    await sendMessage(chatwootConversationId, initialMessage);
+  }
+  
+  const initialMessage = `[Template: lead_bienvenida] Hola ${leadName}, gracias por tu interés en ${offerName}.`;
 
   // Update lead offer status
   await supabase

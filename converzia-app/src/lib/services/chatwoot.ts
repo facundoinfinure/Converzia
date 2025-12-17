@@ -224,11 +224,29 @@ export async function sendMessage(
 export async function sendTemplateMessage(
   conversationId: string | number,
   templateName: string,
-  templateParams: string[]
+  templateParams: {
+    header?: string[];
+    body: string[];
+  },
+  language: string = "es_AR"
 ): Promise<void> {
   const config = await getConfig();
 
-  // For WhatsApp template messages, we need to use the template endpoint
+  // Build template params for Chatwoot/WhatsApp
+  const processedParams: Record<string, string> = {};
+  
+  // Header params (if any)
+  if (templateParams.header) {
+    templateParams.header.forEach((param, i) => {
+      processedParams[`header_${i + 1}`] = param;
+    });
+  }
+  
+  // Body params
+  templateParams.body.forEach((param, i) => {
+    processedParams[String(i + 1)] = param;
+  });
+
   const response = await fetch(
     `${config.baseUrl}/api/v1/accounts/${config.accountId}/conversations/${conversationId}/messages`,
     {
@@ -241,19 +259,21 @@ export async function sendTemplateMessage(
         message_type: "template",
         template_params: {
           name: templateName,
-          category: "marketing",
-          language: "es",
-          processed_params: Object.fromEntries(
-            templateParams.map((p, i) => [i + 1, p])
-          ),
+          category: "utility",
+          language: language,
+          processed_params: processedParams,
         },
       }),
     }
   );
 
   if (!response.ok) {
-    throw new Error(`Failed to send template message: ${await response.text()}`);
+    const errorText = await response.text();
+    console.error("Template message failed:", errorText);
+    throw new Error(`Failed to send template message: ${errorText}`);
   }
+  
+  console.log(`Template message sent: ${templateName} to conversation ${conversationId}`);
 }
 
 // ============================================
