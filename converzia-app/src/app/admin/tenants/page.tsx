@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Building2, Users, Package, CreditCard, MoreHorizontal, Search } from "lucide-react";
+import { Plus, Building2, Users, Package, CreditCard, Check, X, Clock, Globe, Phone } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -11,21 +11,34 @@ import { DataTable, Column } from "@/components/ui/Table";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { TenantStatusBadge } from "@/components/ui/Badge";
 import { ActionDropdown } from "@/components/ui/Dropdown";
-import { ConfirmModal } from "@/components/ui/Modal";
+import { ConfirmModal, Modal } from "@/components/ui/Modal";
 import { NoTenantsEmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
+import { TextArea } from "@/components/ui/TextArea";
 import { useToast } from "@/components/ui/Toast";
 import { useTenants, useTenantMutations } from "@/lib/hooks/use-tenants";
+import { useAuth } from "@/lib/auth/context";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import type { TenantWithStats } from "@/types";
+
+const VERTICAL_LABELS: Record<string, string> = {
+  PROPERTY: "Inmobiliaria",
+  AUTO: "Automotriz",
+  LOAN: "Créditos",
+  INSURANCE: "Seguros",
+};
 
 export default function TenantsPage() {
   const router = useRouter();
   const toast = useToast();
+  const { user } = useAuth();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [page, setPage] = useState(1);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [approveId, setApproveId] = useState<string | null>(null);
+  const [rejectId, setRejectId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
 
   const { tenants, total, isLoading, refetch } = useTenants({
     search,
@@ -34,7 +47,10 @@ export default function TenantsPage() {
     pageSize: 20,
   });
 
-  const { updateTenantStatus, deleteTenant, isLoading: isMutating } = useTenantMutations();
+  const { updateTenantStatus, deleteTenant, approveTenant, rejectTenant, isLoading: isMutating } = useTenantMutations();
+
+  // Count pending tenants
+  const pendingCount = tenants.filter((t) => t.status === "PENDING").length;
 
   const handleStatusChange = async (id: string, newStatus: TenantWithStats["status"]) => {
     try {
@@ -43,6 +59,31 @@ export default function TenantsPage() {
       refetch();
     } catch (error) {
       toast.error("Error al actualizar el tenant");
+    }
+  };
+
+  const handleApprove = async () => {
+    if (!approveId || !user) return;
+    try {
+      await approveTenant(approveId, user.id);
+      toast.success("Tenant aprobado correctamente");
+      setApproveId(null);
+      refetch();
+    } catch (error) {
+      toast.error("Error al aprobar el tenant");
+    }
+  };
+
+  const handleReject = async () => {
+    if (!rejectId || !user) return;
+    try {
+      await rejectTenant(rejectId, rejectReason, user.id);
+      toast.success("Tenant rechazado");
+      setRejectId(null);
+      setRejectReason("");
+      refetch();
+    } catch (error) {
+      toast.error("Error al rechazar el tenant");
     }
   };
 
@@ -74,7 +115,15 @@ export default function TenantsPage() {
             >
               {tenant.name}
             </Link>
-            <p className="text-sm text-slate-500">{tenant.slug}</p>
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <span>{tenant.slug}</span>
+              {(tenant as any).vertical && (
+                <>
+                  <span>•</span>
+                  <span>{VERTICAL_LABELS[(tenant as any).vertical] || (tenant as any).vertical}</span>
+                </>
+              )}
+            </div>
           </div>
         </div>
       ),
@@ -83,6 +132,23 @@ export default function TenantsPage() {
       key: "status",
       header: "Estado",
       cell: (tenant) => <TenantStatusBadge status={tenant.status} />,
+    },
+    {
+      key: "contact",
+      header: "Contacto",
+      cell: (tenant) => (
+        <div className="text-sm">
+          {tenant.contact_email && (
+            <div className="text-slate-400">{tenant.contact_email}</div>
+          )}
+          {tenant.contact_phone && (
+            <div className="flex items-center gap-1 text-slate-500">
+              <Phone className="h-3 w-3" />
+              {tenant.contact_phone}
+            </div>
+          )}
+        </div>
+      ),
     },
     {
       key: "stats",
@@ -122,41 +188,67 @@ export default function TenantsPage() {
     {
       key: "actions",
       header: "",
-      width: "60px",
+      width: "100px",
       cell: (tenant) => (
-        <ActionDropdown
-          items={[
-            {
-              label: "Ver detalles",
-              onClick: () => router.push(`/admin/tenants/${tenant.id}`),
-            },
-            {
-              label: "Editar",
-              onClick: () => router.push(`/admin/tenants/${tenant.id}/edit`),
-            },
-            { divider: true, label: "" },
-            tenant.status === "ACTIVE"
-              ? {
-                  label: "Suspender",
-                  onClick: () => handleStatusChange(tenant.id, "SUSPENDED"),
-                }
-              : tenant.status === "PENDING"
-              ? {
-                  label: "Activar",
-                  onClick: () => handleStatusChange(tenant.id, "ACTIVE"),
-                }
-              : {
-                  label: "Reactivar",
-                  onClick: () => handleStatusChange(tenant.id, "ACTIVE"),
-                },
-            { divider: true, label: "" },
-            {
-              label: "Eliminar",
-              onClick: () => setDeleteId(tenant.id),
-              danger: true,
-            },
-          ]}
-        />
+        <div className="flex items-center gap-2">
+          {tenant.status === "PENDING" && (
+            <>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setApproveId(tenant.id);
+                }}
+                className="p-1.5 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors"
+                title="Aprobar"
+              >
+                <Check className="h-4 w-4" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setRejectId(tenant.id);
+                }}
+                className="p-1.5 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"
+                title="Rechazar"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </>
+          )}
+          <ActionDropdown
+            items={[
+              {
+                label: "Ver detalles",
+                onClick: () => router.push(`/admin/tenants/${tenant.id}`),
+              },
+              {
+                label: "Editar",
+                onClick: () => router.push(`/admin/tenants/${tenant.id}/edit`),
+              },
+              { divider: true, label: "" },
+              tenant.status === "ACTIVE"
+                ? {
+                    label: "Suspender",
+                    onClick: () => handleStatusChange(tenant.id, "SUSPENDED"),
+                  }
+                : tenant.status === "PENDING"
+                ? {
+                    label: "Activar",
+                    onClick: () => setApproveId(tenant.id),
+                  }
+                : {
+                    label: "Reactivar",
+                    onClick: () => handleStatusChange(tenant.id, "ACTIVE"),
+                  },
+              { divider: true, label: "" },
+              {
+                label: "Eliminar",
+                onClick: () => setDeleteId(tenant.id),
+                danger: true,
+              },
+            ]}
+          />
+        </div>
       ),
     },
   ];
@@ -189,22 +281,56 @@ export default function TenantsPage() {
             />
 
             <div className="flex items-center gap-2">
-              {["", "ACTIVE", "PENDING", "SUSPENDED"].map((status) => (
+              {[
+                { value: "", label: "Todos" },
+                { value: "PENDING", label: "Pendientes", count: pendingCount },
+                { value: "ACTIVE", label: "Activos" },
+                { value: "SUSPENDED", label: "Suspendidos" },
+              ].map((status) => (
                 <button
-                  key={status}
-                  onClick={() => setStatusFilter(status)}
-                  className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                    statusFilter === status
-                      ? "bg-primary-500/20 text-primary-400 border border-primary-500/30"
+                  key={status.value}
+                  onClick={() => setStatusFilter(status.value)}
+                  className={`px-3 py-1.5 text-sm rounded-lg transition-colors flex items-center gap-1.5 ${
+                    statusFilter === status.value
+                      ? status.value === "PENDING"
+                        ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                        : "bg-primary-500/20 text-primary-400 border border-primary-500/30"
                       : "text-slate-400 hover:text-white hover:bg-card-border"
                   }`}
                 >
-                  {status === "" ? "Todos" : status === "ACTIVE" ? "Activos" : status === "PENDING" ? "Pendientes" : "Suspendidos"}
+                  {status.value === "PENDING" && <Clock className="h-3.5 w-3.5" />}
+                  {status.label}
+                  {status.count !== undefined && status.count > 0 && (
+                    <span className="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-amber-500/30">
+                      {status.count}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
           </div>
         </div>
+
+        {/* Pending Alert */}
+        {statusFilter === "" && pendingCount > 0 && (
+          <div className="mx-4 mt-4 p-4 rounded-lg bg-amber-500/10 border border-amber-500/20">
+            <div className="flex items-center gap-3">
+              <Clock className="h-5 w-5 text-amber-400" />
+              <div className="flex-1">
+                <p className="text-sm text-amber-200">
+                  Tenés <strong>{pendingCount}</strong> solicitud{pendingCount > 1 ? "es" : ""} pendiente{pendingCount > 1 ? "s" : ""} de aprobación
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setStatusFilter("PENDING")}
+              >
+                Ver pendientes
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* Table */}
         <DataTable
@@ -215,12 +341,19 @@ export default function TenantsPage() {
           loadingRows={5}
           onRowClick={(tenant) => router.push(`/admin/tenants/${tenant.id}`)}
           emptyState={
-            <NoTenantsEmptyState
-              action={{
-                label: "Crear primer tenant",
-                onClick: () => router.push("/admin/tenants/new"),
-              }}
-            />
+            statusFilter === "PENDING" ? (
+              <div className="py-12 text-center">
+                <Clock className="h-12 w-12 text-slate-600 mx-auto mb-4" />
+                <p className="text-slate-400">No hay solicitudes pendientes</p>
+              </div>
+            ) : (
+              <NoTenantsEmptyState
+                action={{
+                  label: "Crear primer tenant",
+                  onClick: () => router.push("/admin/tenants/new"),
+                }}
+              />
+            )
           }
         />
 
@@ -238,6 +371,59 @@ export default function TenantsPage() {
         )}
       </Card>
 
+      {/* Approve Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!approveId}
+        onClose={() => setApproveId(null)}
+        onConfirm={handleApprove}
+        title="Aprobar tenant"
+        description="¿Estás seguro de que querés aprobar este tenant? Se activará su cuenta y podrá acceder a la plataforma."
+        confirmText="Aprobar"
+        variant="primary"
+        isLoading={isMutating}
+      />
+
+      {/* Reject Modal */}
+      <Modal
+        isOpen={!!rejectId}
+        onClose={() => {
+          setRejectId(null);
+          setRejectReason("");
+        }}
+        title="Rechazar solicitud"
+      >
+        <div className="space-y-4">
+          <p className="text-slate-400">
+            ¿Estás seguro de que querés rechazar esta solicitud? El usuario será notificado.
+          </p>
+          <TextArea
+            label="Motivo del rechazo (opcional)"
+            placeholder="Explicá brevemente el motivo..."
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            rows={3}
+          />
+          <div className="flex justify-end gap-3 pt-2">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setRejectId(null);
+                setRejectReason("");
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleReject}
+              isLoading={isMutating}
+            >
+              Rechazar
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Delete Confirmation Modal */}
       <ConfirmModal
         isOpen={!!deleteId}
@@ -252,4 +438,3 @@ export default function TenantsPage() {
     </PageContainer>
   );
 }
-

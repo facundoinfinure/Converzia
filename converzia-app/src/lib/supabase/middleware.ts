@@ -14,7 +14,14 @@ const getPublishableKey = () =>
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 // Routes that don't require authentication
-const publicRoutes = ["/login", "/forgot-password", "/api/webhooks"];
+const publicRoutes = [
+  "/login",
+  "/forgot-password",
+  "/register",
+  "/pending-approval",
+  "/auth/callback",
+  "/api/webhooks",
+];
 
 // Routes that require Converzia admin
 const adminRoutes = ["/admin"];
@@ -61,7 +68,10 @@ export async function updateSession(request: NextRequest) {
   // Check if it's a webhook route (always public)
   const isWebhookRoute = path.startsWith("/api/webhooks");
 
-  if (isWebhookRoute) {
+  // Check if it's the auth callback route
+  const isAuthCallback = path.startsWith("/auth/callback");
+
+  if (isWebhookRoute || isAuthCallback) {
     return supabaseResponse;
   }
 
@@ -87,13 +97,67 @@ export async function updateSession(request: NextRequest) {
       .eq("id", user.id)
       .single();
 
-    const url = request.nextUrl.clone();
     if (profile?.is_converzia_admin) {
+      const url = request.nextUrl.clone();
       url.pathname = "/admin";
+      return NextResponse.redirect(url);
+    }
+
+    // Check memberships
+    const { data: memberships } = await supabase
+      .from("tenant_members")
+      .select("id, status")
+      .eq("user_id", user.id);
+
+    const url = request.nextUrl.clone();
+
+    if (!memberships || memberships.length === 0) {
+      // No memberships - redirect to register
+      url.pathname = "/register";
     } else {
-      url.pathname = "/portal";
+      const hasActive = memberships.some((m) => m.status === "ACTIVE");
+      if (hasActive) {
+        url.pathname = "/portal";
+      } else {
+        const hasPending = memberships.some((m) => m.status === "PENDING_APPROVAL");
+        url.pathname = hasPending ? "/pending-approval" : "/no-access";
+      }
     }
     return NextResponse.redirect(url);
+  }
+
+  // If on register page and already has tenant, redirect
+  if (user && path === "/register") {
+    const { data: memberships } = await supabase
+      .from("tenant_members")
+      .select("id, status")
+      .eq("user_id", user.id);
+
+    if (memberships && memberships.length > 0) {
+      const url = request.nextUrl.clone();
+      const hasActive = memberships.some((m) => m.status === "ACTIVE");
+      if (hasActive) {
+        url.pathname = "/portal";
+      } else {
+        url.pathname = "/pending-approval";
+      }
+      return NextResponse.redirect(url);
+    }
+  }
+
+  // If on pending-approval and now approved, redirect to portal
+  if (user && path === "/pending-approval") {
+    const { data: memberships } = await supabase
+      .from("tenant_members")
+      .select("id, status")
+      .eq("user_id", user.id)
+      .eq("status", "ACTIVE");
+
+    if (memberships && memberships.length > 0) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/portal";
+      return NextResponse.redirect(url);
+    }
   }
 
   // Check admin routes
@@ -126,10 +190,11 @@ export async function updateSession(request: NextRequest) {
     const { data: memberships } = await supabase
       .from("tenant_members")
       .select("id, tenant_id, status")
-      .eq("user_id", user.id)
-      .eq("status", "ACTIVE");
+      .eq("user_id", user.id);
 
-    if (!memberships || memberships.length === 0) {
+    const hasActiveMembership = memberships?.some((m) => m.status === "ACTIVE");
+
+    if (!hasActiveMembership) {
       // Check if they're a Converzia admin (can access portal too)
       const { data: profile } = await supabase
         .from("user_profiles")
@@ -138,9 +203,17 @@ export async function updateSession(request: NextRequest) {
         .single();
 
       if (!profile?.is_converzia_admin) {
-        // No access, redirect to a "no access" page or login
         const url = request.nextUrl.clone();
-        url.pathname = "/no-access";
+        
+        // Check if pending approval
+        const hasPending = memberships?.some((m) => m.status === "PENDING_APPROVAL");
+        if (hasPending) {
+          url.pathname = "/pending-approval";
+        } else if (!memberships || memberships.length === 0) {
+          url.pathname = "/register";
+        } else {
+          url.pathname = "/no-access";
+        }
         return NextResponse.redirect(url);
       }
     }
@@ -158,11 +231,26 @@ export async function updateSession(request: NextRequest) {
     if (profile?.is_converzia_admin) {
       url.pathname = "/admin";
     } else {
-      url.pathname = "/portal";
+      // Check memberships
+      const { data: memberships } = await supabase
+        .from("tenant_members")
+        .select("id, status")
+        .eq("user_id", user.id);
+
+      if (!memberships || memberships.length === 0) {
+        url.pathname = "/register";
+      } else {
+        const hasActive = memberships.some((m) => m.status === "ACTIVE");
+        if (hasActive) {
+          url.pathname = "/portal";
+        } else {
+          const hasPending = memberships.some((m) => m.status === "PENDING_APPROVAL");
+          url.pathname = hasPending ? "/pending-approval" : "/no-access";
+        }
+      }
     }
     return NextResponse.redirect(url);
   }
 
   return supabaseResponse;
 }
-

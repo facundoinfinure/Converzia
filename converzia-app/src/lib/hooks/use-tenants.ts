@@ -326,12 +326,111 @@ export function useTenantMutations() {
     }
   };
 
+  /**
+   * Approve a pending tenant registration
+   * Sets both tenant and all pending memberships to ACTIVE
+   */
+  const approveTenant = async (tenantId: string, approvedBy: string) => {
+    setIsLoading(true);
+    try {
+      // Update tenant status to ACTIVE
+      const { error: tenantError } = await supabase
+        .from("tenants")
+        .update({
+          status: "ACTIVE",
+          activated_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", tenantId);
+
+      if (tenantError) throw tenantError;
+
+      // Update all pending memberships to ACTIVE
+      const { error: memberError } = await supabase
+        .from("tenant_members")
+        .update({
+          status: "ACTIVE",
+          approved_by: approvedBy,
+          approved_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("tenant_id", tenantId)
+        .eq("status", "PENDING_APPROVAL");
+
+      if (memberError) throw memberError;
+
+      // Create default pricing if not exists
+      const { data: existingPricing } = await supabase
+        .from("tenant_pricing")
+        .select("id")
+        .eq("tenant_id", tenantId)
+        .single();
+
+      if (!existingPricing) {
+        await supabase.from("tenant_pricing").insert({
+          tenant_id: tenantId,
+          charge_model: "PER_LEAD",
+          cost_per_lead: 10,
+          packages: [
+            { id: "starter", name: "Starter", credits: 50, price: 400 },
+            { id: "growth", name: "Growth", credits: 100, price: 700, discount_pct: 12.5, is_popular: true },
+            { id: "scale", name: "Scale", credits: 250, price: 1500, discount_pct: 25 },
+          ],
+        });
+      }
+
+      return { success: true };
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /**
+   * Reject a pending tenant registration
+   */
+  const rejectTenant = async (tenantId: string, reason: string, rejectedBy: string) => {
+    setIsLoading(true);
+    try {
+      // Update tenant with rejection info
+      const { error: tenantError } = await supabase
+        .from("tenants")
+        .update({
+          rejected_at: new Date().toISOString(),
+          rejected_reason: reason,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", tenantId);
+
+      if (tenantError) throw tenantError;
+
+      // Update memberships to REVOKED
+      const { error: memberError } = await supabase
+        .from("tenant_members")
+        .update({
+          status: "REVOKED",
+          rejected_at: new Date().toISOString(),
+          rejected_reason: reason,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("tenant_id", tenantId)
+        .eq("status", "PENDING_APPROVAL");
+
+      if (memberError) throw memberError;
+
+      return { success: true };
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return {
     createTenant,
     updateTenant,
     updateTenantStatus,
     updatePricing,
     deleteTenant,
+    approveTenant,
+    rejectTenant,
     isLoading,
   };
 }
