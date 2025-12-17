@@ -308,10 +308,13 @@ export function useOfferMutations() {
         .eq("offer_id", id);
 
       if (variants && variants.length > 0) {
-        const variantsToInsert = variants.map(({ id: _, offer_id: _, created_at: _, updated_at: _, ...variant }) => ({
-          ...variant,
-          offer_id: newOffer.id,
-        }));
+        const variantsToInsert = variants.map((variant) => {
+          const { id, offer_id, created_at, updated_at, ...rest } = variant;
+          return {
+            ...rest,
+            offer_id: newOffer.id,
+          };
+        });
 
         await supabase.from("offer_variants").insert(variantsToInsert);
       }

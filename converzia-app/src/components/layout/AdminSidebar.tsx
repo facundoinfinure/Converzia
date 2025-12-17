@@ -179,7 +179,8 @@ export function AdminSidebar() {
           Cerrar sesión
         </button>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }
 
