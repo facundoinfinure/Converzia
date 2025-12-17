@@ -102,6 +102,7 @@ export default function PortalIntegrationsPage() {
     if (activeTenant) {
       loadIntegrations();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTenant]);
 
   async function loadIntegrations() {

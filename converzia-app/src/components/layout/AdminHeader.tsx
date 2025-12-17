@@ -90,7 +90,7 @@ export function AdminHeader() {
         .limit(5);
 
       if (users) {
-        users.forEach((u) => {
+        users.forEach((u: any) => {
           results.push({
             id: `user-${u.id}`,
             title: u.full_name || u.email,

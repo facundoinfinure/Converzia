@@ -39,6 +39,7 @@ export function OnboardingChecklist({ tenantId }: OnboardingChecklistProps) {
 
   useEffect(() => {
     loadOnboardingStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId]);
 
   async function loadOnboardingStatus() {

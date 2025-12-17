@@ -54,6 +54,7 @@ export default function KnowledgePage() {
 
   useEffect(() => {
     fetchSources();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantFilter]);
 
   async function fetchSources() {

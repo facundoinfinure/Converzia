@@ -42,7 +42,7 @@ export function FileUpload({
     setIsDragging(false);
   }, []);
 
-  const validateFiles = (fileList: FileList | null): File[] => {
+  const validateFiles = useCallback((fileList: FileList | null): File[] => {
     if (!fileList) return [];
 
     const validFiles: File[] = [];
@@ -81,7 +81,7 @@ export function FileUpload({
     });
 
     return validFiles;
-  };
+  }, [files.length, maxFiles, maxSize, accept]);
 
   const handleDrop = useCallback(
     async (e: DragEvent) => {
