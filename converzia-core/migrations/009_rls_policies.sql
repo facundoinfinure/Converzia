@@ -31,6 +31,12 @@ ALTER TABLE scoring_templates ENABLE ROW LEVEL SECURITY;
 -- ============================================
 -- USER PROFILES
 -- ============================================
+-- Allow trigger to insert profile when user is created
+-- The trigger runs with SECURITY DEFINER, but RLS still applies
+-- This policy allows INSERT when the id matches the authenticated user
+CREATE POLICY user_profiles_insert_own ON user_profiles
+  FOR INSERT WITH CHECK (auth.uid() = id);
+
 -- Users can read their own profile
 CREATE POLICY user_profiles_select_own ON user_profiles
   FOR SELECT USING (auth.uid() = id);
@@ -46,6 +52,10 @@ CREATE POLICY user_profiles_admin_select ON user_profiles
 -- Converzia admins can update any profile
 CREATE POLICY user_profiles_admin_update ON user_profiles
   FOR UPDATE USING (is_converzia_admin(auth.uid()));
+
+-- Converzia admins can insert profiles
+CREATE POLICY user_profiles_admin_insert ON user_profiles
+  FOR INSERT WITH CHECK (is_converzia_admin(auth.uid()));
 
 -- ============================================
 -- TENANTS
