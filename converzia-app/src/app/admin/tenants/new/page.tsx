@@ -64,8 +64,10 @@ export default function NewTenantPage() {
       });
       toast.success("Tenant creado correctamente");
       router.push(`/admin/tenants/${(tenant as any).id}`);
-    } catch (error) {
-      toast.error("Error al crear el tenant");
+    } catch (error: any) {
+      console.error("Error creating tenant:", error);
+      const errorMessage = error?.message || "Error al crear el tenant";
+      toast.error(errorMessage);
     }
   };
 

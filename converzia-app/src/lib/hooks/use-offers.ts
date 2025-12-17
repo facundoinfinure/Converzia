@@ -273,6 +273,58 @@ export function useOfferMutations() {
     }
   };
 
+  const duplicateOffer = async (id: string) => {
+    setIsLoading(true);
+    try {
+      // Fetch original offer
+      const { data: original, error: fetchError } = await supabase
+        .from("offers")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      if (fetchError || !original) throw fetchError || new Error("Oferta no encontrada");
+
+      // Create new offer without id and timestamps
+      const { id: _, created_at, updated_at, ...offerData } = original;
+      const newName = `${offerData.name} (Copia)`;
+
+      const { data: newOffer, error: createError } = await supabase
+        .from("offers")
+        .insert({
+          ...offerData,
+          name: newName,
+          status: "DRAFT", // Start as draft
+        })
+        .select()
+        .single();
+
+      if (createError || !newOffer) throw createError;
+
+      // Duplicate variants
+      const { data: variants } = await supabase
+        .from("offer_variants")
+        .select("*")
+        .eq("offer_id", id);
+
+      if (variants && variants.length > 0) {
+        const variantsToInsert = variants.map(({ id: _, offer_id: _, created_at: _, updated_at: _, ...variant }) => ({
+          ...variant,
+          offer_id: newOffer.id,
+        }));
+
+        await supabase.from("offer_variants").insert(variantsToInsert);
+      }
+
+      return newOffer;
+    } catch (error) {
+      console.error("Error duplicating offer:", error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const deleteOffer = async (id: string) => {
     setIsLoading(true);
     try {
@@ -388,6 +440,7 @@ export function useOfferMutations() {
   return {
     createOffer,
     updateOffer,
+    duplicateOffer,
     deleteOffer,
     createVariant,
     updateVariant,

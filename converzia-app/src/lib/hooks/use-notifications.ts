@@ -1,0 +1,109 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { realtimeService } from "@/lib/services/realtime";
+import { useAuth } from "@/lib/auth/context";
+
+export interface Notification {
+  id: string;
+  type: "lead_ready" | "approval" | "delivery" | "low_credits";
+  title: string;
+  message: string;
+  timestamp: Date;
+  read: boolean;
+  actionUrl?: string;
+}
+
+export function useNotifications() {
+  const { activeTenantId } = useAuth();
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  const addNotification = useCallback((notification: Omit<Notification, "id" | "read" | "timestamp">) => {
+    const newNotification: Notification = {
+      ...notification,
+      id: `${Date.now()}-${Math.random()}`,
+      timestamp: new Date(),
+      read: false,
+    };
+
+    setNotifications((prev) => [newNotification, ...prev].slice(0, 50)); // Keep last 50
+    setUnreadCount((prev) => prev + 1);
+  }, []);
+
+  const markAsRead = useCallback((id: string) => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+    );
+    setUnreadCount((prev) => Math.max(0, prev - 1));
+  }, []);
+
+  const markAllAsRead = useCallback(() => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    setUnreadCount(0);
+  }, []);
+
+  // Subscribe to real-time events
+  useEffect(() => {
+    if (!activeTenantId) return;
+
+    // Subscribe to new leads ready
+    const unsubscribeLeads = realtimeService.subscribeToLeads(
+      activeTenantId,
+      (payload) => {
+        if (payload.eventType === "INSERT" && payload.new.status === "LEAD_READY") {
+          addNotification({
+            type: "lead_ready",
+            title: "Nuevo Lead Ready",
+            message: `Un nuevo lead está listo para entrega`,
+            actionUrl: "/portal/leads?status=LEAD_READY",
+          });
+        }
+      }
+    );
+
+    // Subscribe to deliveries
+    const unsubscribeDeliveries = realtimeService.subscribeToDeliveries(
+      activeTenantId,
+      (payload) => {
+        if (payload.eventType === "INSERT" && payload.new.status === "DELIVERED") {
+          addNotification({
+            type: "delivery",
+            title: "Lead Entregado",
+            message: `Un lead ha sido entregado exitosamente`,
+            actionUrl: "/portal/leads",
+          });
+        }
+      }
+    );
+
+    return () => {
+      unsubscribeLeads();
+      unsubscribeDeliveries();
+    };
+  }, [activeTenantId, addNotification]);
+
+  // Subscribe to approvals (admin only)
+  useEffect(() => {
+    const unsubscribeApprovals = realtimeService.subscribeToApprovals((payload) => {
+      if (payload.eventType === "INSERT") {
+        addNotification({
+          type: "approval",
+          title: "Nueva Solicitud de Aprobación",
+          message: `Hay una nueva solicitud de acceso pendiente`,
+          actionUrl: "/admin/users",
+        });
+      }
+    });
+
+    return unsubscribeApprovals;
+  }, [addNotification]);
+
+  return {
+    notifications,
+    unreadCount,
+    addNotification,
+    markAsRead,
+    markAllAsRead,
+  };
+}

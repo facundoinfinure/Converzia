@@ -99,11 +99,11 @@ export default function PortalOffersPage() {
                   <div className="flex items-center gap-4 text-sm text-slate-500 pt-3 border-t border-card-border">
                     <span className="flex items-center gap-1">
                       <Users className="h-4 w-4" />
-                      -- leads
+                      {(offer as any).lead_count || 0} leads
                     </span>
                     <span className="flex items-center gap-1">
                       <Layers className="h-4 w-4" />
-                      -- variantes
+                      {(offer as any).variant_count || 0} variantes
                     </span>
                   </div>
                 </CardContent>

@@ -15,10 +15,14 @@ import {
   Zap,
   ChevronDown,
   CreditCard,
+  Menu,
+  X,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
+import { useUnmappedAds } from "@/lib/hooks/use-ads";
+import { usePendingApprovals } from "@/lib/hooks/use-users";
 
 // ============================================
 // Navigation Configuration
@@ -35,7 +39,8 @@ interface NavItem {
   }>;
 }
 
-const navigation: NavItem[] = [
+// Navigation items without badges (badges are added dynamically)
+const baseNavigation: Omit<NavItem, "badge">[] = [
   { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
   { 
     name: "Tenants", 
@@ -55,7 +60,7 @@ const navigation: NavItem[] = [
       { name: "Crear oferta", href: "/admin/offers/new" },
     ]
   },
-  { name: "Mapeo de Ads", href: "/admin/ads-mapping", icon: Megaphone, badge: "5" },
+  { name: "Mapeo de Ads", href: "/admin/ads-mapping", icon: Megaphone },
   { 
     name: "Knowledge (RAG)", 
     href: "/admin/knowledge", 
@@ -65,7 +70,7 @@ const navigation: NavItem[] = [
       { name: "Documentos", href: "/admin/knowledge/documents" },
     ]
   },
-  { name: "Usuarios", href: "/admin/users", icon: Users, badge: "2" },
+  { name: "Usuarios", href: "/admin/users", icon: Users },
   { name: "Operaciones", href: "/admin/operations", icon: Activity },
   { name: "Billing", href: "/admin/billing", icon: CreditCard },
 ];
@@ -89,6 +94,19 @@ const bottomNavigation: NavItem[] = [
 
 export function AdminSidebar() {
   const pathname = usePathname();
+  const { total: unmappedAdsCount } = useUnmappedAds();
+  const { total: pendingApprovalsCount } = usePendingApprovals();
+
+  // Build navigation with dynamic badges
+  const navigation: NavItem[] = baseNavigation.map((item) => {
+    if (item.href === "/admin/ads-mapping" && unmappedAdsCount > 0) {
+      return { ...item, badge: unmappedAdsCount };
+    }
+    if (item.href === "/admin/users" && pendingApprovalsCount > 0) {
+      return { ...item, badge: pendingApprovalsCount };
+    }
+    return item;
+  });
 
   const handleSignOut = async () => {
     const supabase = createClient();
@@ -96,8 +114,33 @@ export function AdminSidebar() {
     window.location.href = "/login";
   };
 
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+
   return (
-    <aside className="fixed left-0 top-0 z-40 hidden lg:flex h-screen w-64 flex-col border-r border-card-border bg-card">
+    <>
+      {/* Mobile menu button */}
+      <button
+        onClick={() => setIsMobileOpen(!isMobileOpen)}
+        className="lg:hidden fixed top-4 left-4 z-50 p-2 rounded-lg bg-card border border-card-border text-slate-400 hover:text-white"
+      >
+        {isMobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+      </button>
+
+      {/* Mobile overlay */}
+      {isMobileOpen && (
+        <div
+          className="lg:hidden fixed inset-0 z-40 bg-black/50"
+          onClick={() => setIsMobileOpen(false)}
+        />
+      )}
+
+      <aside
+        className={cn(
+          "fixed left-0 top-0 z-40 h-screen w-64 flex-col border-r border-card-border bg-card transition-transform",
+          "hidden lg:flex",
+          isMobileOpen ? "flex" : "lg:flex"
+        )}
+      >
       {/* Logo */}
       <div className="flex h-16 items-center gap-3 border-b border-card-border px-6">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-accent-500 to-accent-600 shadow-lg shadow-accent-500/25">

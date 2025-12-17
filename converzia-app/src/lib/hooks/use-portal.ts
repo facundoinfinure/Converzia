@@ -17,6 +17,12 @@ interface DashboardStats {
   creditBalance: number;
   activeOffers: number;
   teamMembers: number;
+  pipelineStats?: {
+    contacted: number;
+    qualifying: number;
+    leadReady: number;
+    delivered: number;
+  };
 }
 
 export function usePortalDashboard() {
@@ -58,6 +64,23 @@ export function usePortalDashboard() {
       const total = totalLeads || 0;
       const delivered = deliveredCount || 0;
 
+      // Get pipeline stats (real data)
+      const [
+        { count: contactedCount },
+        { count: qualifyingCount },
+      ] = await Promise.all([
+        supabase
+          .from("lead_offers")
+          .select("id", { count: "exact", head: true })
+          .eq("tenant_id", activeTenantId)
+          .in("status", ["CONTACTED", "ENGAGED"]),
+        supabase
+          .from("lead_offers")
+          .select("id", { count: "exact", head: true })
+          .eq("tenant_id", activeTenantId)
+          .eq("status", "QUALIFYING"),
+      ]);
+
       setStats({
         totalLeads: total,
         leadReadyCount: leadReadyCount || 0,
@@ -66,6 +89,12 @@ export function usePortalDashboard() {
         creditBalance: creditData?.current_balance || 0,
         activeOffers: activeOffers || 0,
         teamMembers: teamMembers || 0,
+        pipelineStats: {
+          contacted: contactedCount || 0,
+          qualifying: qualifyingCount || 0,
+          leadReady: leadReadyCount || 0,
+          delivered: delivered || 0,
+        },
       });
 
       // Fetch recent leads
@@ -190,7 +219,7 @@ export function usePortalLeads(options: UsePortalLeadsOptions = {}) {
 
 export function usePortalOffers() {
   const { activeTenantId } = useAuth();
-  const [offers, setOffers] = useState<Offer[]>([]);
+  const [offers, setOffers] = useState<(Offer & { lead_count?: number; variant_count?: number })[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const supabase = createClient();
@@ -202,13 +231,44 @@ export function usePortalOffers() {
         return;
       }
 
-      const { data } = await supabase
+      // Fetch offers with stats
+      const { data: offersData } = await supabase
         .from("offers")
         .select("*")
         .eq("tenant_id", activeTenantId)
         .order("priority", { ascending: false });
 
-      setOffers(data || []);
+      if (offersData) {
+        // Fetch stats for each offer
+        const offersWithStats = await Promise.all(
+          offersData.map(async (offer) => {
+            const [
+              { count: leadCount },
+              { count: variantCount },
+            ] = await Promise.all([
+              supabase
+                .from("lead_offers")
+                .select("id", { count: "exact", head: true })
+                .eq("offer_id", offer.id),
+              supabase
+                .from("offer_variants")
+                .select("id", { count: "exact", head: true })
+                .eq("offer_id", offer.id),
+            ]);
+
+            return {
+              ...offer,
+              lead_count: leadCount || 0,
+              variant_count: variantCount || 0,
+            };
+          })
+        );
+
+        setOffers(offersWithStats);
+      } else {
+        setOffers([]);
+      }
+
       setIsLoading(false);
     }
 

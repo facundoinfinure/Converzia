@@ -1,8 +1,23 @@
 "use client";
 
 import { ReactNode, useEffect } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "@/lib/auth/context";
 import { ToastProvider, useToast, setToastHandler } from "@/components/ui/Toast";
+
+// ============================================
+// React Query Client
+// ============================================
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+});
 
 // ============================================
 // Providers Wrapper
@@ -14,12 +29,14 @@ interface ProvidersProps {
 
 export function Providers({ children }: ProvidersProps) {
   return (
-    <ToastProvider position="bottom-right">
-      <AuthProvider>
-        <ToastInitializer />
-        {children}
-      </AuthProvider>
-    </ToastProvider>
+    <QueryClientProvider client={queryClient}>
+      <ToastProvider position="bottom-right">
+        <AuthProvider>
+          <ToastInitializer />
+          {children}
+        </AuthProvider>
+      </ToastProvider>
+    </QueryClientProvider>
   );
 }
 

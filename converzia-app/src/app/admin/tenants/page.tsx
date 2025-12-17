@@ -9,6 +9,8 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { DataTable, Column } from "@/components/ui/Table";
 import { SearchInput } from "@/components/ui/SearchInput";
+import { AdvancedFilters, FilterConfig } from "@/components/ui/AdvancedFilters";
+import { BulkActions } from "@/components/ui/BulkActions";
 import { TenantStatusBadge } from "@/components/ui/Badge";
 import { ActionDropdown } from "@/components/ui/Dropdown";
 import { ConfirmModal, Modal } from "@/components/ui/Modal";
@@ -39,6 +41,8 @@ export default function TenantsPage() {
   const [approveId, setApproveId] = useState<string | null>(null);
   const [rejectId, setRejectId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [selectedTenants, setSelectedTenants] = useState<string[]>([]);
+  const [filterValues, setFilterValues] = useState<Record<string, any>>({});
 
   const { tenants, total, isLoading, refetch } = useTenants({
     search,
@@ -98,6 +102,57 @@ export default function TenantsPage() {
       toast.error("Error al eliminar el tenant");
     }
   };
+
+  // Bulk actions
+  const handleBulkApprove = async () => {
+    if (selectedTenants.length === 0 || !user) return;
+    try {
+      await Promise.all(selectedTenants.map((id) => approveTenant(id, user.id)));
+      toast.success(`${selectedTenants.length} tenant(s) aprobado(s)`);
+      setSelectedTenants([]);
+      refetch();
+    } catch (error) {
+      toast.error("Error al aprobar tenants");
+    }
+  };
+
+  const handleBulkReject = async () => {
+    if (selectedTenants.length === 0 || !user) return;
+    try {
+      await Promise.all(selectedTenants.map((id) => rejectTenant(id, "Rechazo masivo", user.id)));
+      toast.success(`${selectedTenants.length} tenant(s) rechazado(s)`);
+      setSelectedTenants([]);
+      refetch();
+    } catch (error) {
+      toast.error("Error al rechazar tenants");
+    }
+  };
+
+  // Filter config
+  const filterConfig: FilterConfig[] = [
+    {
+      key: "vertical",
+      label: "Vertical",
+      type: "select",
+      options: [
+        { value: "PROPERTY", label: "Inmobiliaria" },
+        { value: "AUTO", label: "Automotriz" },
+        { value: "LOAN", label: "Créditos" },
+        { value: "INSURANCE", label: "Seguros" },
+      ],
+    },
+    {
+      key: "credits_min",
+      label: "Créditos Mínimos",
+      type: "number",
+      placeholder: "Mínimo",
+    },
+    {
+      key: "created_date",
+      label: "Fecha de Creación",
+      type: "dateRange",
+    },
+  ];
 
   const columns: Column<TenantWithStats>[] = [
     {
@@ -307,6 +362,12 @@ export default function TenantsPage() {
                   )}
                 </button>
               ))}
+              <AdvancedFilters
+                filters={filterConfig}
+                values={filterValues}
+                onChange={setFilterValues}
+                onReset={() => setFilterValues({})}
+              />
             </div>
           </div>
         </div>
@@ -340,6 +401,9 @@ export default function TenantsPage() {
           isLoading={isLoading}
           loadingRows={5}
           onRowClick={(tenant) => router.push(`/admin/tenants/${tenant.id}`)}
+          selectable
+          selectedRows={selectedTenants}
+          onSelectionChange={setSelectedTenants}
           emptyState={
             statusFilter === "PENDING" ? (
               <div className="py-12 text-center">
@@ -355,6 +419,49 @@ export default function TenantsPage() {
               />
             )
           }
+        />
+
+        {/* Bulk Actions */}
+        <BulkActions
+          selectedCount={selectedTenants.length}
+          selectedIds={selectedTenants}
+          actions={[
+            {
+              label: "Aprobar",
+              icon: <Check className="h-4 w-4" />,
+              onClick: async (ids) => {
+                if (!user) return;
+                try {
+                  await Promise.all(ids.map((id) => approveTenant(id, user.id)));
+                  toast.success(`${ids.length} tenant(s) aprobado(s)`);
+                  setSelectedTenants([]);
+                  refetch();
+                } catch (error) {
+                  toast.error("Error al aprobar tenants");
+                }
+              },
+              variant: "primary",
+              confirmMessage: `¿Aprobar ${selectedTenants.length} tenant(s)?`,
+            },
+            {
+              label: "Rechazar",
+              icon: <X className="h-4 w-4" />,
+              onClick: async (ids) => {
+                if (!user) return;
+                try {
+                  await Promise.all(ids.map((id) => rejectTenant(id, "Rechazo masivo", user.id)));
+                  toast.success(`${ids.length} tenant(s) rechazado(s)`);
+                  setSelectedTenants([]);
+                  refetch();
+                } catch (error) {
+                  toast.error("Error al rechazar tenants");
+                }
+              },
+              variant: "danger",
+              confirmMessage: `¿Rechazar ${selectedTenants.length} tenant(s)?`,
+            },
+          ]}
+          onClear={() => setSelectedTenants([])}
         />
 
         {/* Pagination */}

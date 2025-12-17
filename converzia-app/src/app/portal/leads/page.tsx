@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Users, Phone, Mail, Calendar, MessageSquare, Download } from "lucide-react";
+import { Users, Phone, Mail, Calendar, MessageSquare, Download, CheckCircle, XCircle } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { DataTable, Column } from "@/components/ui/Table";
 import { SearchInput } from "@/components/ui/SearchInput";
+import { AdvancedFilters, FilterConfig } from "@/components/ui/AdvancedFilters";
+import { BulkActions } from "@/components/ui/BulkActions";
 import { Badge, LeadStatusBadge } from "@/components/ui/Badge";
 import { Tabs, TabsList, TabTrigger, TabContent } from "@/components/ui/Tabs";
 import { Modal } from "@/components/ui/Modal";
@@ -14,6 +16,8 @@ import { NoLeadsEmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
 import { usePortalLeads } from "@/lib/hooks/use-portal";
 import { useAuth } from "@/lib/auth/context";
+import { useToast } from "@/components/ui/Toast";
+import { createClient } from "@/lib/supabase/client";
 import { formatRelativeTime, formatDate, formatPhone, downloadCSV } from "@/lib/utils";
 import type { LeadOffer, QualificationFields, ScoreBreakdown } from "@/types";
 
@@ -27,11 +31,15 @@ const statuses = [
 ];
 
 export default function PortalLeadsPage() {
-  const { hasPermission } = useAuth();
+  const { hasPermission, activeTenantId } = useAuth();
+  const toast = useToast();
+  const supabase = createClient();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [page, setPage] = useState(1);
   const [selectedLead, setSelectedLead] = useState<LeadOffer | null>(null);
+  const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
+  const [filterValues, setFilterValues] = useState<Record<string, any>>({});
 
   const { leads, total, isLoading, refetch } = usePortalLeads({
     status: statusFilter || undefined,
@@ -55,6 +63,54 @@ export default function PortalLeadsPage() {
 
     downloadCSV(exportData, `leads-${new Date().toISOString().split("T")[0]}.csv`);
   };
+
+  const handleBulkStatusChange = async (newStatus: string) => {
+    if (selectedLeads.length === 0 || !activeTenantId) return;
+
+    try {
+      await supabase
+        .from("lead_offers")
+        .update({
+          status: newStatus,
+          status_changed_at: new Date().toISOString(),
+        })
+        .in("id", selectedLeads)
+        .eq("tenant_id", activeTenantId);
+
+      toast.success(`${selectedLeads.length} lead(s) actualizado(s)`);
+      setSelectedLeads([]);
+      refetch();
+    } catch (error) {
+      toast.error("Error al actualizar leads");
+    }
+  };
+
+  // Filter config
+  const filterConfig: FilterConfig[] = [
+    {
+      key: "score_min",
+      label: "Score Mínimo",
+      type: "number",
+      placeholder: "Mínimo",
+    },
+    {
+      key: "score_max",
+      label: "Score Máximo",
+      type: "number",
+      placeholder: "Máximo",
+    },
+    {
+      key: "created_date",
+      label: "Fecha de Creación",
+      type: "dateRange",
+    },
+    {
+      key: "offer",
+      label: "Oferta",
+      type: "select",
+      options: [], // Would need to fetch offers
+    },
+  ];
 
   const columns: Column<LeadOffer>[] = [
     {
@@ -181,6 +237,12 @@ export default function PortalLeadsPage() {
                   {s.label}
                 </button>
               ))}
+              <AdvancedFilters
+                filters={filterConfig}
+                values={filterValues}
+                onChange={setFilterValues}
+                onReset={() => setFilterValues({})}
+              />
             </div>
           </div>
         </div>
@@ -192,7 +254,33 @@ export default function PortalLeadsPage() {
           keyExtractor={(l) => l.id}
           isLoading={isLoading}
           onRowClick={setSelectedLead}
+          selectable
+          selectedRows={selectedLeads}
+          onSelectionChange={setSelectedLeads}
           emptyState={<NoLeadsEmptyState />}
+        />
+
+        {/* Bulk Actions */}
+        <BulkActions
+          selectedCount={selectedLeads.length}
+          selectedIds={selectedLeads}
+          actions={[
+            {
+              label: "Marcar como Lead Ready",
+              icon: <CheckCircle className="h-4 w-4" />,
+              onClick: () => handleBulkStatusChange("LEAD_READY"),
+              variant: "primary",
+              confirmMessage: `¿Marcar ${selectedLeads.length} lead(s) como Lead Ready?`,
+            },
+            {
+              label: "Marcar como Entregado",
+              icon: <CheckCircle className="h-4 w-4" />,
+              onClick: () => handleBulkStatusChange("SENT_TO_DEVELOPER"),
+              variant: "primary",
+              confirmMessage: `¿Marcar ${selectedLeads.length} lead(s) como Entregado?`,
+            },
+          ]}
+          onClear={() => setSelectedLeads([])}
         />
 
         {/* Pagination */}

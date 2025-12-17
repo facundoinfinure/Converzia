@@ -258,28 +258,28 @@ export function CommandPalette({
         onClick={onClose}
       />
 
-      {/* Command palette */}
-      <div className="relative w-full max-w-xl bg-card border border-card-border rounded-xl shadow-2xl overflow-hidden">
+      {/* Command palette - Estilo Mercury */}
+      <div className="relative w-full max-w-2xl bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden">
         {/* Search input */}
-        <div className="flex items-center gap-3 px-4 border-b border-card-border">
-          <Search className="h-5 w-5 text-slate-500" />
+        <div className="flex items-center gap-3 px-4 border-b border-gray-200">
+          <Search className="h-5 w-5 text-gray-400" />
           <input
             ref={inputRef}
             type="text"
             value={query}
             onChange={(e) => handleChange(e.target.value)}
             placeholder={placeholder}
-            className="flex-1 h-14 bg-transparent text-white placeholder-slate-500 focus:outline-none"
+            className="flex-1 h-14 bg-transparent text-gray-900 placeholder-gray-400 focus:outline-none text-base"
           />
           {isLoading && <Spinner size="sm" />}
-          <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded bg-card-border text-slate-500 text-xs">
+          <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded bg-gray-100 text-gray-600 text-xs font-medium border border-gray-200">
             ESC
           </kbd>
         </div>
 
         {/* Results */}
         {results.length > 0 && (
-          <div className="max-h-[300px] overflow-auto p-2">
+          <div className="max-h-[400px] overflow-auto p-2">
             {results.map((result) => (
               <button
                 key={result.id}
@@ -287,21 +287,21 @@ export function CommandPalette({
                   result.action?.();
                   onClose();
                 }}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left hover:bg-card-border transition-colors"
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-left hover:bg-gray-50 transition-colors group"
               >
                 {result.icon && (
-                  <span className="h-5 w-5 text-slate-500">{result.icon}</span>
+                  <span className="h-5 w-5 text-gray-400 group-hover:text-gray-600">{result.icon}</span>
                 )}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-white truncate">{result.title}</p>
+                  <p className="text-sm font-medium text-gray-900 truncate">{result.title}</p>
                   {result.description && (
-                    <p className="text-xs text-slate-500 truncate">
+                    <p className="text-xs text-gray-500 truncate mt-0.5">
                       {result.description}
                     </p>
                   )}
                 </div>
                 {result.category && (
-                  <span className="text-xs text-slate-500">{result.category}</span>
+                  <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">{result.category}</span>
                 )}
               </button>
             ))}
@@ -310,15 +310,21 @@ export function CommandPalette({
 
         {/* Empty state */}
         {query && !isLoading && results.length === 0 && (
-          <div className="p-8 text-center text-slate-500">
+          <div className="p-8 text-center text-gray-500">
             No se encontraron resultados para &ldquo;{query}&rdquo;
           </div>
         )}
 
-        {/* Footer hint */}
-        <div className="flex items-center justify-between px-4 py-2 border-t border-card-border text-xs text-slate-600">
-          <span>Presioná ↵ para seleccionar</span>
-          <span>↑↓ para navegar</span>
+        {/* Footer hint - Estilo Mercury */}
+        <div className="flex items-center justify-between px-4 py-2.5 border-t border-gray-200 text-xs text-gray-500 bg-gray-50">
+          <span className="flex items-center gap-1">
+            <kbd className="px-1.5 py-0.5 rounded bg-white border border-gray-200 font-medium">↵</kbd>
+            <span>para seleccionar</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <kbd className="px-1.5 py-0.5 rounded bg-white border border-gray-200 font-medium">↑↓</kbd>
+            <span>para navegar</span>
+          </span>
         </div>
       </div>
     </div>

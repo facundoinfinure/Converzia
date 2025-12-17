@@ -239,7 +239,7 @@ export function useTenantMutations() {
       if (error) throw error;
 
       // Create default pricing
-      await supabase.from("tenant_pricing").insert({
+      const { error: pricingError } = await supabase.from("tenant_pricing").insert({
         tenant_id: tenant.id,
         charge_model: "PER_LEAD",
         cost_per_lead: 10,
@@ -250,7 +250,15 @@ export function useTenantMutations() {
         ],
       });
 
+      if (pricingError) {
+        console.error("Error creating default pricing:", pricingError);
+        // Don't throw here - tenant is created, pricing can be added later
+      }
+
       return tenant;
+    } catch (error) {
+      console.error("Error creating tenant:", error);
+      throw error; // Re-throw to let component handle it
     } finally {
       setIsLoading(false);
     }

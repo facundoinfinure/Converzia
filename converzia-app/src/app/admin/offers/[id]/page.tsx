@@ -16,6 +16,7 @@ import {
   Trash2,
   Eye,
   EyeOff,
+  Copy,
 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -51,12 +52,13 @@ export default function OfferDetailPage({ params }: Props) {
   const router = useRouter();
   const toast = useToast();
   const { offer, variants, units, adMappings, isLoading, error, refetch } = useOffer(id);
-  const { updateOffer, createVariant, deleteVariant, createUnit, deleteUnit, isLoading: isMutating } = useOfferMutations();
+  const { updateOffer, duplicateOffer, createVariant, deleteVariant, createUnit, deleteUnit, isLoading: isMutating } = useOfferMutations();
 
   const [showVariantModal, setShowVariantModal] = useState(false);
   const [showUnitModal, setShowUnitModal] = useState(false);
   const [deleteVariantId, setDeleteVariantId] = useState<string | null>(null);
   const [deleteUnitId, setDeleteUnitId] = useState<string | null>(null);
+  const [isDuplicating, setIsDuplicating] = useState(false);
 
   // Form states
   const [newVariant, setNewVariant] = useState({ name: "", bedrooms: "", bathrooms: "", area_m2: "", price_from: "" });
@@ -70,6 +72,20 @@ export default function OfferDetailPage({ params }: Props) {
       refetch();
     } catch (error) {
       toast.error("Error al actualizar la oferta");
+    }
+  };
+
+  const handleDuplicate = async () => {
+    if (!offer) return;
+    setIsDuplicating(true);
+    try {
+      const newOffer = await duplicateOffer(offer.id);
+      toast.success("Oferta duplicada correctamente");
+      router.push(`/admin/offers/${newOffer.id}`);
+    } catch (error) {
+      toast.error("Error al duplicar la oferta");
+    } finally {
+      setIsDuplicating(false);
     }
   };
 
@@ -292,6 +308,14 @@ export default function OfferDetailPage({ params }: Props) {
             <Badge variant={statusCfg?.variant || "default"} dot>
               {statusCfg?.label || offer.status}
             </Badge>
+            <Button
+              variant="secondary"
+              leftIcon={<Copy className="h-4 w-4" />}
+              onClick={handleDuplicate}
+              isLoading={isDuplicating}
+            >
+              Duplicar
+            </Button>
             <Button
               variant="secondary"
               leftIcon={<Edit className="h-4 w-4" />}

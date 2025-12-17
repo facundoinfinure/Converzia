@@ -13,6 +13,8 @@ import {
   ChevronDown,
   UserCog,
   Building2,
+  Menu,
+  X,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -34,6 +36,7 @@ const bottomNavigation = [
 
 export function PortalSidebar() {
   const pathname = usePathname();
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
   const { memberships, activeTenantId, activeTenant, setActiveTenant, signOut } = useAuth();
 
   // Tenant options for switcher
@@ -45,8 +48,31 @@ export function PortalSidebar() {
   }));
 
   return (
-    <aside className="fixed left-0 top-0 z-40 hidden lg:flex h-screen w-64 flex-col border-r border-card-border bg-card">
-      {/* Logo */}
+    <>
+      {/* Mobile menu button */}
+      <button
+        onClick={() => setIsMobileOpen(!isMobileOpen)}
+        className="lg:hidden fixed top-4 left-4 z-50 p-2 rounded-lg bg-card border border-card-border text-slate-400 hover:text-white"
+      >
+        {isMobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+      </button>
+
+      {/* Mobile overlay */}
+      {isMobileOpen && (
+        <div
+          className="lg:hidden fixed inset-0 z-40 bg-black/50"
+          onClick={() => setIsMobileOpen(false)}
+        />
+      )}
+
+      <aside
+        className={cn(
+          "fixed left-0 top-0 z-40 h-screen w-64 flex-col border-r border-card-border bg-card transition-transform",
+          "hidden lg:flex",
+          isMobileOpen ? "flex" : "lg:flex"
+        )}
+      >
+        {/* Logo */}
       <div className="flex h-16 items-center gap-3 border-b border-card-border px-6">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 shadow-lg shadow-primary-500/25">
           <Zap className="h-5 w-5 text-white" />
@@ -144,7 +170,8 @@ export function PortalSidebar() {
           Cerrar sesión
         </button>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }
 

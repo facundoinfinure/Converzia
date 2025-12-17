@@ -74,7 +74,7 @@ export function Modal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-4">
       {/* Overlay */}
       <div
         className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity animate-in fade-in duration-200"
@@ -82,11 +82,14 @@ export function Modal({
         aria-hidden="true"
       />
 
-      {/* Modal */}
+      {/* Modal - Full screen on mobile */}
       <div
         className={cn(
-          "relative w-full bg-card border border-card-border rounded-xl shadow-2xl",
+          "relative w-full bg-card border border-card-border shadow-2xl",
           "animate-in fade-in zoom-in-95 duration-200",
+          "md:rounded-xl",
+          "h-full md:h-auto max-h-full md:max-h-[calc(100vh-2rem)]",
+          "flex flex-col",
           sizes[size],
           className
         )}
@@ -129,7 +132,7 @@ export function Modal({
         )}
 
         {/* Body */}
-        <div className="p-6 overflow-y-auto max-h-[calc(100vh-16rem)]">
+        <div className="p-4 md:p-6 overflow-y-auto flex-1">
           {children}
         </div>
 
