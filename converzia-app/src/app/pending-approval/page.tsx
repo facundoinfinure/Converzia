@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Clock, Mail, LogOut, RefreshCw, MessageCircle } from "lucide-react";
@@ -13,24 +13,35 @@ export default function PendingApprovalPage() {
   const router = useRouter();
   const { user, profile, signOut, isLoading, refreshAuth } = useAuth();
   const supabase = createClient();
+  const [pageLoading, setPageLoading] = useState(true);
 
   // Check if user has been approved
   useEffect(() => {
     const checkApproval = async () => {
       if (!user) return;
 
-      const { data: memberships } = await supabase
-        .from("tenant_members")
-        .select("id, status, tenant:tenants(status)")
-        .eq("user_id", user.id);
+      try {
+        const { data: memberships, error } = await supabase
+          .from("tenant_members")
+          .select("id, status, tenant:tenants(status)")
+          .eq("user_id", user.id);
 
-      if (memberships && memberships.length > 0) {
-        const hasActive = memberships.some(
-          (m: any) => m.status === "ACTIVE" && m.tenant?.status === "ACTIVE"
-        );
-        if (hasActive) {
-          router.push("/portal");
+        if (error) {
+          console.error("Error checking approval status:", error);
+          return; // Don't redirect on error, just show the pending page
         }
+
+        if (memberships && memberships.length > 0) {
+          const hasActive = memberships.some(
+            (m: any) => m.status === "ACTIVE" && m.tenant?.status === "ACTIVE"
+          );
+          if (hasActive) {
+            router.push("/portal");
+          }
+        }
+      } catch (err) {
+        console.error("Error in checkApproval:", err);
+        // Don't redirect on error, just show the pending page
       }
     };
 
@@ -46,24 +57,47 @@ export default function PendingApprovalPage() {
     }
   }, [user, isLoading, router]);
 
-  const handleRefresh = async () => {
-    await refreshAuth();
-    
-    // Re-check status after refresh
-    if (user) {
-      const { data: memberships } = await supabase
-        .from("tenant_members")
-        .select("id, status, tenant:tenants(status)")
-        .eq("user_id", user.id);
+  // Set page loading to false after auth is loaded (with timeout as fallback)
+  useEffect(() => {
+    if (!isLoading) {
+      setPageLoading(false);
+    } else {
+      // Timeout fallback: if auth is still loading after 5 seconds, show the page anyway
+      const timeout = setTimeout(() => {
+        console.warn("Auth loading timeout, showing page anyway");
+        setPageLoading(false);
+      }, 5000);
+      return () => clearTimeout(timeout);
+    }
+  }, [isLoading]);
 
-      if (memberships && memberships.length > 0) {
-        const hasActive = memberships.some(
-          (m: any) => m.status === "ACTIVE" && m.tenant?.status === "ACTIVE"
-        );
-        if (hasActive) {
-          router.push("/portal");
+  const handleRefresh = async () => {
+    try {
+      await refreshAuth();
+      
+      // Re-check status after refresh
+      if (user) {
+        const { data: memberships, error } = await supabase
+          .from("tenant_members")
+          .select("id, status, tenant:tenants(status)")
+          .eq("user_id", user.id);
+
+        if (error) {
+          console.error("Error checking approval status:", error);
+          return;
+        }
+
+        if (memberships && memberships.length > 0) {
+          const hasActive = memberships.some(
+            (m: any) => m.status === "ACTIVE" && m.tenant?.status === "ACTIVE"
+          );
+          if (hasActive) {
+            router.push("/portal");
+          }
         }
       }
+    } catch (err) {
+      console.error("Error refreshing approval status:", err);
     }
   };
 
@@ -72,7 +106,7 @@ export default function PendingApprovalPage() {
     router.push("/login");
   };
 
-  if (isLoading) {
+  if (isLoading || pageLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <RefreshCw className="h-8 w-8 animate-spin text-primary-500" />

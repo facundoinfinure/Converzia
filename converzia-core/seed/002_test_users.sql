@@ -177,9 +177,88 @@ ON CONFLICT (tenant_id, user_id) DO NOTHING;
 -- Run this in Supabase SQL Editor with service role
 -- ============================================
 
--- This uses Supabase's admin functions to create users
--- Requires running in a context with service_role privileges
+-- IMPORTANT: This script requires SERVICE_ROLE permissions
+-- Run it in Supabase Dashboard > SQL Editor
+-- Make sure you're using the service_role key, not the anon key
 
+-- Enable pgcrypto extension if not already enabled
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- Helper function to create user if not exists
+CREATE OR REPLACE FUNCTION create_test_user_if_not_exists(
+  p_email TEXT,
+  p_password TEXT,
+  p_full_name TEXT,
+  p_is_admin BOOLEAN DEFAULT FALSE
+)
+RETURNS UUID AS $$
+DECLARE
+  v_user_id UUID;
+  v_existing_id UUID;
+BEGIN
+  -- Check if user already exists
+  SELECT id INTO v_existing_id
+  FROM auth.users
+  WHERE email = p_email;
+  
+  IF v_existing_id IS NOT NULL THEN
+    RAISE NOTICE 'User % already exists with ID: %', p_email, v_existing_id;
+    
+    -- Update profile if exists
+    UPDATE user_profiles
+    SET is_converzia_admin = p_is_admin,
+        full_name = COALESCE(full_name, p_full_name)
+    WHERE id = v_existing_id;
+    
+    RETURN v_existing_id;
+  END IF;
+  
+  -- Create new user
+  INSERT INTO auth.users (
+    instance_id,
+    id,
+    aud,
+    role,
+    email,
+    encrypted_password,
+    email_confirmed_at,
+    raw_user_meta_data,
+    created_at,
+    updated_at,
+    confirmation_token,
+    email_change,
+    email_change_token_new,
+    recovery_token
+  ) VALUES (
+    '00000000-0000-0000-0000-000000000000',
+    gen_random_uuid(),
+    'authenticated',
+    'authenticated',
+    p_email,
+    crypt(p_password, gen_salt('bf')),
+    NOW(),
+    jsonb_build_object('full_name', p_full_name),
+    NOW(),
+    NOW(),
+    '',
+    '',
+    '',
+    ''
+  ) RETURNING id INTO v_user_id;
+  
+  -- Profile should be created by trigger, but update it if needed
+  INSERT INTO user_profiles (id, email, full_name, is_converzia_admin)
+  VALUES (v_user_id, p_email, p_full_name, p_is_admin)
+  ON CONFLICT (id) DO UPDATE SET
+    is_converzia_admin = p_is_admin,
+    full_name = COALESCE(user_profiles.full_name, p_full_name);
+  
+  RAISE NOTICE 'Created user % with ID: %', p_email, v_user_id;
+  RETURN v_user_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Main script to create all test users
 DO $$
 DECLARE
   admin_user_id UUID;
@@ -190,132 +269,52 @@ DECLARE
   admin2_id UUID;
   viewer2_id UUID;
 BEGIN
-  -- Check if we can create auth users (needs service role)
-  -- This will fail gracefully if not running with proper permissions
-  
   -- Create Converzia Admin
-  BEGIN
-    INSERT INTO auth.users (
-      instance_id,
-      id,
-      aud,
-      role,
-      email,
-      encrypted_password,
-      email_confirmed_at,
-      raw_user_meta_data,
-      created_at,
-      updated_at,
-      confirmation_token,
-      email_change,
-      email_change_token_new,
-      recovery_token
-    ) VALUES (
-      '00000000-0000-0000-0000-000000000000',
-      gen_random_uuid(),
-      'authenticated',
-      'authenticated',
-      'admin@converzia.io',
-      crypt('Test123!', gen_salt('bf')),
-      NOW(),
-      '{"full_name": "Admin Converzia"}'::jsonb,
-      NOW(),
-      NOW(),
-      '',
-      '',
-      '',
-      ''
-    ) RETURNING id INTO admin_user_id;
-    
-    INSERT INTO user_profiles (id, email, full_name, is_converzia_admin)
-    VALUES (admin_user_id, 'admin@converzia.io', 'Admin Converzia', TRUE);
-    
-    RAISE NOTICE 'Created admin user: %', admin_user_id;
-  EXCEPTION WHEN OTHERS THEN
-    RAISE NOTICE 'Could not create admin user (may already exist or insufficient permissions): %', SQLERRM;
-  END;
+  SELECT create_test_user_if_not_exists(
+    'admin@converzia.io',
+    'Test123!',
+    'Admin Converzia',
+    TRUE
+  ) INTO admin_user_id;
   
   -- Create Demo Inmobiliaria Users
-  BEGIN
-    -- Owner
-    INSERT INTO auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, raw_user_meta_data, created_at, updated_at, confirmation_token, email_change, email_change_token_new, recovery_token)
-    VALUES ('00000000-0000-0000-0000-000000000000', gen_random_uuid(), 'authenticated', 'authenticated', 'owner1@test.com', crypt('Test123!', gen_salt('bf')), NOW(), '{"full_name": "Owner Demo Inmobiliaria"}'::jsonb, NOW(), NOW(), '', '', '', '')
-    RETURNING id INTO owner1_id;
-    
-    INSERT INTO user_profiles (id, email, full_name, is_converzia_admin)
-    VALUES (owner1_id, 'owner1@test.com', 'Owner Demo Inmobiliaria', FALSE);
-    
-    INSERT INTO tenant_members (tenant_id, user_id, role, status)
-    VALUES ('a1b2c3d4-e5f6-7890-abcd-ef1234567890', owner1_id, 'OWNER', 'ACTIVE');
-    
-    -- Admin
-    INSERT INTO auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, raw_user_meta_data, created_at, updated_at, confirmation_token, email_change, email_change_token_new, recovery_token)
-    VALUES ('00000000-0000-0000-0000-000000000000', gen_random_uuid(), 'authenticated', 'authenticated', 'admin1@test.com', crypt('Test123!', gen_salt('bf')), NOW(), '{"full_name": "Admin Demo Inmobiliaria"}'::jsonb, NOW(), NOW(), '', '', '', '')
-    RETURNING id INTO admin1_id;
-    
-    INSERT INTO user_profiles (id, email, full_name, is_converzia_admin)
-    VALUES (admin1_id, 'admin1@test.com', 'Admin Demo Inmobiliaria', FALSE);
-    
-    INSERT INTO tenant_members (tenant_id, user_id, role, status)
-    VALUES ('a1b2c3d4-e5f6-7890-abcd-ef1234567890', admin1_id, 'ADMIN', 'ACTIVE');
-    
-    -- Viewer
-    INSERT INTO auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, raw_user_meta_data, created_at, updated_at, confirmation_token, email_change, email_change_token_new, recovery_token)
-    VALUES ('00000000-0000-0000-0000-000000000000', gen_random_uuid(), 'authenticated', 'authenticated', 'viewer1@test.com', crypt('Test123!', gen_salt('bf')), NOW(), '{"full_name": "Viewer Demo Inmobiliaria"}'::jsonb, NOW(), NOW(), '', '', '', '')
-    RETURNING id INTO viewer1_id;
-    
-    INSERT INTO user_profiles (id, email, full_name, is_converzia_admin)
-    VALUES (viewer1_id, 'viewer1@test.com', 'Viewer Demo Inmobiliaria', FALSE);
-    
-    INSERT INTO tenant_members (tenant_id, user_id, role, status)
-    VALUES ('a1b2c3d4-e5f6-7890-abcd-ef1234567890', viewer1_id, 'VIEWER', 'ACTIVE');
-    
-    RAISE NOTICE 'Created Demo Inmobiliaria users: owner=%, admin=%, viewer=%', owner1_id, admin1_id, viewer1_id;
-  EXCEPTION WHEN OTHERS THEN
-    RAISE NOTICE 'Could not create Demo Inmobiliaria users: %', SQLERRM;
-  END;
+  SELECT create_test_user_if_not_exists('owner1@test.com', 'Test123!', 'Owner Demo Inmobiliaria', FALSE) INTO owner1_id;
+  SELECT create_test_user_if_not_exists('admin1@test.com', 'Test123!', 'Admin Demo Inmobiliaria', FALSE) INTO admin1_id;
+  SELECT create_test_user_if_not_exists('viewer1@test.com', 'Test123!', 'Viewer Demo Inmobiliaria', FALSE) INTO viewer1_id;
+  
+  -- Create memberships for Demo Inmobiliaria
+  INSERT INTO tenant_members (tenant_id, user_id, role, status)
+  VALUES 
+    ('a1b2c3d4-e5f6-7890-abcd-ef1234567890', owner1_id, 'OWNER', 'ACTIVE'),
+    ('a1b2c3d4-e5f6-7890-abcd-ef1234567890', admin1_id, 'ADMIN', 'ACTIVE'),
+    ('a1b2c3d4-e5f6-7890-abcd-ef1234567890', viewer1_id, 'VIEWER', 'ACTIVE')
+  ON CONFLICT (tenant_id, user_id) DO UPDATE SET
+    role = EXCLUDED.role,
+    status = EXCLUDED.status;
+  
+  RAISE NOTICE 'Created Demo Inmobiliaria users: owner=%, admin=%, viewer=%', owner1_id, admin1_id, viewer1_id;
   
   -- Create Demo Automotriz Users
-  BEGIN
-    -- Owner
-    INSERT INTO auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, raw_user_meta_data, created_at, updated_at, confirmation_token, email_change, email_change_token_new, recovery_token)
-    VALUES ('00000000-0000-0000-0000-000000000000', gen_random_uuid(), 'authenticated', 'authenticated', 'owner2@test.com', crypt('Test123!', gen_salt('bf')), NOW(), '{"full_name": "Owner Demo Automotriz"}'::jsonb, NOW(), NOW(), '', '', '', '')
-    RETURNING id INTO owner2_id;
-    
-    INSERT INTO user_profiles (id, email, full_name, is_converzia_admin)
-    VALUES (owner2_id, 'owner2@test.com', 'Owner Demo Automotriz', FALSE);
-    
-    INSERT INTO tenant_members (tenant_id, user_id, role, status)
-    VALUES ('b2c3d4e5-f6a7-8901-bcde-f23456789012', owner2_id, 'OWNER', 'ACTIVE');
-    
-    -- Admin
-    INSERT INTO auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, raw_user_meta_data, created_at, updated_at, confirmation_token, email_change, email_change_token_new, recovery_token)
-    VALUES ('00000000-0000-0000-0000-000000000000', gen_random_uuid(), 'authenticated', 'authenticated', 'admin2@test.com', crypt('Test123!', gen_salt('bf')), NOW(), '{"full_name": "Admin Demo Automotriz"}'::jsonb, NOW(), NOW(), '', '', '', '')
-    RETURNING id INTO admin2_id;
-    
-    INSERT INTO user_profiles (id, email, full_name, is_converzia_admin)
-    VALUES (admin2_id, 'admin2@test.com', 'Admin Demo Automotriz', FALSE);
-    
-    INSERT INTO tenant_members (tenant_id, user_id, role, status)
-    VALUES ('b2c3d4e5-f6a7-8901-bcde-f23456789012', admin2_id, 'ADMIN', 'ACTIVE');
-    
-    -- Viewer
-    INSERT INTO auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, raw_user_meta_data, created_at, updated_at, confirmation_token, email_change, email_change_token_new, recovery_token)
-    VALUES ('00000000-0000-0000-0000-000000000000', gen_random_uuid(), 'authenticated', 'authenticated', 'viewer2@test.com', crypt('Test123!', gen_salt('bf')), NOW(), '{"full_name": "Viewer Demo Automotriz"}'::jsonb, NOW(), NOW(), '', '', '', '')
-    RETURNING id INTO viewer2_id;
-    
-    INSERT INTO user_profiles (id, email, full_name, is_converzia_admin)
-    VALUES (viewer2_id, 'viewer2@test.com', 'Viewer Demo Automotriz', FALSE);
-    
-    INSERT INTO tenant_members (tenant_id, user_id, role, status)
-    VALUES ('b2c3d4e5-f6a7-8901-bcde-f23456789012', viewer2_id, 'VIEWER', 'ACTIVE');
-    
-    RAISE NOTICE 'Created Demo Automotriz users: owner=%, admin=%, viewer=%', owner2_id, admin2_id, viewer2_id;
-  EXCEPTION WHEN OTHERS THEN
-    RAISE NOTICE 'Could not create Demo Automotriz users: %', SQLERRM;
-  END;
+  SELECT create_test_user_if_not_exists('owner2@test.com', 'Test123!', 'Owner Demo Automotriz', FALSE) INTO owner2_id;
+  SELECT create_test_user_if_not_exists('admin2@test.com', 'Test123!', 'Admin Demo Automotriz', FALSE) INTO admin2_id;
+  SELECT create_test_user_if_not_exists('viewer2@test.com', 'Test123!', 'Viewer Demo Automotriz', FALSE) INTO viewer2_id;
+  
+  -- Create memberships for Demo Automotriz
+  INSERT INTO tenant_members (tenant_id, user_id, role, status)
+  VALUES 
+    ('b2c3d4e5-f6a7-8901-bcde-f23456789012', owner2_id, 'OWNER', 'ACTIVE'),
+    ('b2c3d4e5-f6a7-8901-bcde-f23456789012', admin2_id, 'ADMIN', 'ACTIVE'),
+    ('b2c3d4e5-f6a7-8901-bcde-f23456789012', viewer2_id, 'VIEWER', 'ACTIVE')
+  ON CONFLICT (tenant_id, user_id) DO UPDATE SET
+    role = EXCLUDED.role,
+    status = EXCLUDED.status;
+  
+  RAISE NOTICE 'Created Demo Automotriz users: owner=%, admin=%, viewer=%', owner2_id, admin2_id, viewer2_id;
   
 END $$;
+
+-- Clean up helper function (optional - you can keep it for future use)
+-- DROP FUNCTION IF EXISTS create_test_user_if_not_exists;
 
 -- ============================================
 -- Summary of Test Users
