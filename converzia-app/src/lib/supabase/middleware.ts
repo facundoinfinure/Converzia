@@ -1,0 +1,156 @@
+import { createServerClient } from "@supabase/ssr";
+import { NextResponse, type NextRequest } from "next/server";
+
+// Routes that don't require authentication
+const publicRoutes = ["/login", "/forgot-password", "/api/webhooks"];
+
+// Routes that require Converzia admin
+const adminRoutes = ["/admin"];
+
+// Routes that require tenant membership
+const portalRoutes = ["/portal"];
+
+export async function updateSession(request: NextRequest) {
+  let supabaseResponse = NextResponse.next({
+    request,
+  });
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet: any[]) {
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value)
+          );
+          supabaseResponse = NextResponse.next({
+            request,
+          });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options)
+          );
+        },
+      },
+    }
+  );
+
+  // Get the current path
+  const path = request.nextUrl.pathname;
+
+  // Check if it's a public route
+  const isPublicRoute = publicRoutes.some(
+    (route) => path === route || path.startsWith(route + "/")
+  );
+
+  // Check if it's a webhook route (always public)
+  const isWebhookRoute = path.startsWith("/api/webhooks");
+
+  if (isWebhookRoute) {
+    return supabaseResponse;
+  }
+
+  // Get current user
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // If not authenticated and not on public route, redirect to login
+  if (!user && !isPublicRoute) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.searchParams.set("redirect", path);
+    return NextResponse.redirect(url);
+  }
+
+  // If authenticated and on login page, redirect appropriately
+  if (user && path === "/login") {
+    // Get user profile to check if admin
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("is_converzia_admin")
+      .eq("id", user.id)
+      .single();
+
+    const url = request.nextUrl.clone();
+    if (profile?.is_converzia_admin) {
+      url.pathname = "/admin";
+    } else {
+      url.pathname = "/portal";
+    }
+    return NextResponse.redirect(url);
+  }
+
+  // Check admin routes
+  const isAdminRoute = adminRoutes.some(
+    (route) => path === route || path.startsWith(route + "/")
+  );
+
+  if (isAdminRoute && user) {
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("is_converzia_admin")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile?.is_converzia_admin) {
+      // Not an admin, redirect to portal
+      const url = request.nextUrl.clone();
+      url.pathname = "/portal";
+      return NextResponse.redirect(url);
+    }
+  }
+
+  // Check portal routes
+  const isPortalRoute = portalRoutes.some(
+    (route) => path === route || path.startsWith(route + "/")
+  );
+
+  if (isPortalRoute && user) {
+    // Check if user has any active tenant membership
+    const { data: memberships } = await supabase
+      .from("tenant_members")
+      .select("id, tenant_id, status")
+      .eq("user_id", user.id)
+      .eq("status", "ACTIVE");
+
+    if (!memberships || memberships.length === 0) {
+      // Check if they're a Converzia admin (can access portal too)
+      const { data: profile } = await supabase
+        .from("user_profiles")
+        .select("is_converzia_admin")
+        .eq("id", user.id)
+        .single();
+
+      if (!profile?.is_converzia_admin) {
+        // No access, redirect to a "no access" page or login
+        const url = request.nextUrl.clone();
+        url.pathname = "/no-access";
+        return NextResponse.redirect(url);
+      }
+    }
+  }
+
+  // Redirect root to appropriate dashboard
+  if (path === "/" && user) {
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("is_converzia_admin")
+      .eq("id", user.id)
+      .single();
+
+    const url = request.nextUrl.clone();
+    if (profile?.is_converzia_admin) {
+      url.pathname = "/admin";
+    } else {
+      url.pathname = "/portal";
+    }
+    return NextResponse.redirect(url);
+  }
+
+  return supabaseResponse;
+}
+

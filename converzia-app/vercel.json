@@ -1,0 +1,37 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/cron/process-deliveries",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/retry-contacts",
+      "schedule": "0 */2 * * *"
+    },
+    {
+      "path": "/api/cron/credit-alerts",
+      "schedule": "0 12 * * *"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-XSS-Protection",
+          "value": "1; mode=block"
+        }
+      ]
+    }
+  ]
+}
+
