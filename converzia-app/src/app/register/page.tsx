@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { TextArea } from "@/components/ui/TextArea";
-import { Select } from "@/components/ui/Select";
+import { CustomSelect } from "@/components/ui/Select";
 import { Alert } from "@/components/ui/Alert";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/lib/auth/context";
@@ -240,7 +240,7 @@ export default function RegisterPage() {
                 required
               />
 
-              <Select
+              <CustomSelect
                 label="Rubro / Vertical"
                 value={formData.vertical}
                 onChange={(value) => handleChange("vertical", value)}
