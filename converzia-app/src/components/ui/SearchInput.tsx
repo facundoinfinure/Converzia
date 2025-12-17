@@ -311,7 +311,7 @@ export function CommandPalette({
         {/* Empty state */}
         {query && !isLoading && results.length === 0 && (
           <div className="p-8 text-center text-slate-500">
-            No se encontraron resultados para "{query}"
+            No se encontraron resultados para &ldquo;{query}&rdquo;
           </div>
         )}
 
