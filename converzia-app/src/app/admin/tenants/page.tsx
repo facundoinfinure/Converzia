@@ -379,7 +379,7 @@ export default function TenantsPage() {
         title="Aprobar tenant"
         description="¿Estás seguro de que querés aprobar este tenant? Se activará su cuenta y podrá acceder a la plataforma."
         confirmText="Aprobar"
-        variant="primary"
+        variant="default"
         isLoading={isMutating}
       />
 
