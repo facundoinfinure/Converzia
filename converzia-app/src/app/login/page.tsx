@@ -111,12 +111,12 @@ export default function LoginPage() {
           const { data: memberships } = await supabase
             .from("tenant_members")
             .select("id, status")
-            .eq("user_id", data.user.id);
+            .eq("user_id", data.user.id) as { data: { id: string; status: string }[] | null };
 
           if (!memberships || memberships.length === 0) {
             router.push("/register");
           } else {
-            const hasActive = memberships.some((m) => m.status === "ACTIVE");
+            const hasActive = memberships.some((m: { id: string; status: string }) => m.status === "ACTIVE");
             if (hasActive) {
               router.push("/portal");
             } else {
