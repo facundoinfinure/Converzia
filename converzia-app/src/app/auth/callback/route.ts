@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
     const { data: memberships } = await supabase
       .from("tenant_members")
       .select("id, status")
-      .eq("user_id", user.id);
+      .eq("user_id", user.id) as { data: { id: string; status: string }[] | null };
 
     if (!memberships || memberships.length === 0) {
       // No memberships - redirect to register to create tenant
@@ -87,14 +87,14 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if any membership is active
-    const hasActiveMembership = memberships.some((m) => m.status === "ACTIVE");
+    const hasActiveMembership = memberships.some((m: { id: string; status: string }) => m.status === "ACTIVE");
     
     if (hasActiveMembership) {
       return NextResponse.redirect(`${origin}/portal`);
     }
 
     // Has memberships but none active - pending approval
-    const hasPendingMembership = memberships.some((m) => m.status === "PENDING_APPROVAL");
+    const hasPendingMembership = memberships.some((m: { id: string; status: string }) => m.status === "PENDING_APPROVAL");
     
     if (hasPendingMembership) {
       return NextResponse.redirect(`${origin}/pending-approval`);
