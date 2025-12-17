@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import type { MembershipStatus } from "@/types";
 
 // ============================================
 // Supabase Middleware
@@ -7,6 +8,17 @@ import { NextResponse, type NextRequest } from "next/server";
 // Note: Edge Runtime has limited Node.js API support
 // See: https://supabase.com/docs/guides/api/api-keys
 // ============================================
+
+type MembershipBasic = {
+  id: string;
+  status: MembershipStatus;
+};
+
+type MembershipWithTenant = {
+  id: string;
+  tenant_id: string;
+  status: MembershipStatus;
+};
 
 // Publishable key - supports both new and legacy formats
 const getPublishableKey = () =>
@@ -111,15 +123,17 @@ export async function updateSession(request: NextRequest) {
 
     const url = request.nextUrl.clone();
 
-    if (!memberships || memberships.length === 0) {
+    const typedMemberships = (memberships || []) as MembershipBasic[];
+
+    if (typedMemberships.length === 0) {
       // No memberships - redirect to register
       url.pathname = "/register";
     } else {
-      const hasActive = memberships.some((m) => m.status === "ACTIVE");
+      const hasActive = typedMemberships.some((m) => m.status === "ACTIVE");
       if (hasActive) {
         url.pathname = "/portal";
       } else {
-        const hasPending = memberships.some((m) => m.status === "PENDING_APPROVAL");
+        const hasPending = typedMemberships.some((m) => m.status === "PENDING_APPROVAL");
         url.pathname = hasPending ? "/pending-approval" : "/no-access";
       }
     }
@@ -133,9 +147,11 @@ export async function updateSession(request: NextRequest) {
       .select("id, status")
       .eq("user_id", user.id);
 
-    if (memberships && memberships.length > 0) {
+    const typedMemberships = (memberships || []) as MembershipBasic[];
+
+    if (typedMemberships.length > 0) {
       const url = request.nextUrl.clone();
-      const hasActive = memberships.some((m) => m.status === "ACTIVE");
+      const hasActive = typedMemberships.some((m) => m.status === "ACTIVE");
       if (hasActive) {
         url.pathname = "/portal";
       } else {
@@ -192,7 +208,9 @@ export async function updateSession(request: NextRequest) {
       .select("id, tenant_id, status")
       .eq("user_id", user.id);
 
-    const hasActiveMembership = memberships?.some((m) => m.status === "ACTIVE");
+    const typedMemberships = (memberships || []) as MembershipWithTenant[];
+
+    const hasActiveMembership = typedMemberships.some((m) => m.status === "ACTIVE");
 
     if (!hasActiveMembership) {
       // Check if they're a Converzia admin (can access portal too)
@@ -206,10 +224,10 @@ export async function updateSession(request: NextRequest) {
         const url = request.nextUrl.clone();
         
         // Check if pending approval
-        const hasPending = memberships?.some((m) => m.status === "PENDING_APPROVAL");
+        const hasPending = typedMemberships.some((m) => m.status === "PENDING_APPROVAL");
         if (hasPending) {
           url.pathname = "/pending-approval";
-        } else if (!memberships || memberships.length === 0) {
+        } else if (typedMemberships.length === 0) {
           url.pathname = "/register";
         } else {
           url.pathname = "/no-access";
@@ -237,14 +255,16 @@ export async function updateSession(request: NextRequest) {
         .select("id, status")
         .eq("user_id", user.id);
 
-      if (!memberships || memberships.length === 0) {
+      const typedMemberships = (memberships || []) as MembershipBasic[];
+
+      if (typedMemberships.length === 0) {
         url.pathname = "/register";
       } else {
-        const hasActive = memberships.some((m) => m.status === "ACTIVE");
+        const hasActive = typedMemberships.some((m) => m.status === "ACTIVE");
         if (hasActive) {
           url.pathname = "/portal";
         } else {
-          const hasPending = memberships.some((m) => m.status === "PENDING_APPROVAL");
+          const hasPending = typedMemberships.some((m) => m.status === "PENDING_APPROVAL");
           url.pathname = hasPending ? "/pending-approval" : "/no-access";
         }
       }
