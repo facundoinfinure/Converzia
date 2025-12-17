@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
  * Estilo: Clean, minimalista, con colores azules como acento
  */
 export interface MercuryButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "primary" | "secondary" | "outline" | "ghost" | "text";
+  variant?: "primary" | "secondary" | "outline" | "ghost" | "text" | "danger";
   size?: "xs" | "sm" | "md" | "lg";
   isLoading?: boolean;
   leftIcon?: ReactNode;
@@ -65,6 +65,12 @@ export const MercuryButton = forwardRef<HTMLButtonElement, MercuryButtonProps>(
         "text-blue-600 bg-transparent",
         "hover:bg-blue-50",
         "focus:ring-blue-500"
+      ),
+      danger: cn(
+        "bg-red-600 text-white",
+        "hover:bg-red-700",
+        "focus:ring-red-500",
+        "shadow-sm hover:shadow"
       ),
     };
 
