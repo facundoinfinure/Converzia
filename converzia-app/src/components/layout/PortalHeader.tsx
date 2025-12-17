@@ -77,7 +77,7 @@ export function PortalHeader() {
         .limit(5);
 
       if (offers) {
-        offers.forEach((o) => {
+        offers.forEach((o: any) => {
           results.push({
             id: `offer-${o.id}`,
             title: o.name,

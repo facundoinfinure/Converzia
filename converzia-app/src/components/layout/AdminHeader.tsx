@@ -50,7 +50,7 @@ export function AdminHeader() {
         .limit(5);
 
       if (tenants) {
-        tenants.forEach((t) => {
+        tenants.forEach((t: any) => {
           results.push({
             id: `tenant-${t.id}`,
             title: t.name,
