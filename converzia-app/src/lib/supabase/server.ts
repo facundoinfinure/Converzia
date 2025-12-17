@@ -1,13 +1,33 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
+// ============================================
+// Supabase API Keys Configuration
+// Supports both new (sb_publishable_, sb_secret_) and legacy (anon, service_role) keys
+// See: https://supabase.com/docs/guides/api/api-keys
+// ============================================
+
+// Publishable key (client-safe) - new format or legacy anon key
+const getPublishableKey = () => 
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+// Secret key (server-only) - new format or legacy service_role key
+const getSecretKey = () => 
+  process.env.SUPABASE_SECRET_KEY || 
+  process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+/**
+ * Creates a Supabase client for authenticated user operations.
+ * Uses the publishable key which respects RLS policies.
+ * Safe for Server Components and Route Handlers with user context.
+ */
 export async function createClient() {
   const cookieStore = await cookies();
 
-  // Using 'any' to bypass strict type checking for tables not in Database types
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    getPublishableKey()!,
     {
       cookies: {
         getAll() {
@@ -27,11 +47,26 @@ export async function createClient() {
   ) as any;
 }
 
-// Admin client with service role (for API routes only)
+/**
+ * Creates a Supabase admin client with elevated privileges.
+ * IMPORTANT: Only use in secure server-side code (API routes, webhooks, crons).
+ * This client bypasses RLS - never expose to client-side code.
+ * 
+ * Uses secret key (sb_secret_*) or legacy service_role key.
+ * See: https://supabase.com/docs/guides/api/api-keys#service_role-and-secret-keys
+ */
 export function createAdminClient() {
+  const secretKey = getSecretKey();
+  
+  if (!secretKey) {
+    throw new Error(
+      "Missing Supabase secret key. Set SUPABASE_SECRET_KEY or SUPABASE_SERVICE_ROLE_KEY."
+    );
+  }
+
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    secretKey,
     {
       cookies: {
         getAll: () => [],

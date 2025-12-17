@@ -1,6 +1,18 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+// ============================================
+// Supabase Middleware
+// Uses publishable key (sb_publishable_*) or legacy anon key
+// Note: Edge Runtime has limited Node.js API support
+// See: https://supabase.com/docs/guides/api/api-keys
+// ============================================
+
+// Publishable key - supports both new and legacy formats
+const getPublishableKey = () =>
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
 // Routes that don't require authentication
 const publicRoutes = ["/login", "/forgot-password", "/api/webhooks"];
 
@@ -17,7 +29,7 @@ export async function updateSession(request: NextRequest) {
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    getPublishableKey()!,
     {
       cookies: {
         getAll() {
