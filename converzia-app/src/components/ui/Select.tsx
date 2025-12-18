@@ -1,11 +1,11 @@
 "use client";
 
-import { forwardRef, SelectHTMLAttributes, ReactNode, useState, useRef, useEffect } from "react";
+import { forwardRef, SelectHTMLAttributes, useState, useRef, useEffect } from "react";
 import { ChevronDown, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ============================================
-// Native Select Component
+// Native Select Component - Clean, Modern Design
 // ============================================
 
 export interface SelectOption {
@@ -51,10 +51,10 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
         {label && (
           <label
             htmlFor={selectId}
-            className="block text-sm font-medium text-slate-300 mb-1.5"
+            className="block text-sm font-medium text-[var(--text-primary)] mb-1.5"
           >
             {label}
-            {props.required && <span className="text-red-400 ml-1">*</span>}
+            {props.required && <span className="text-[var(--error)] ml-0.5">*</span>}
           </label>
         )}
 
@@ -63,14 +63,15 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             ref={ref}
             id={selectId}
             className={cn(
-              "w-full appearance-none rounded-lg border bg-card text-white px-4 pr-10",
+              "w-full appearance-none rounded-lg border bg-[var(--bg-primary)]",
+              "text-[var(--text-primary)] px-4 pr-10",
               "transition-all duration-200 cursor-pointer",
-              "focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500",
-              "disabled:opacity-50 disabled:cursor-not-allowed",
+              "focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] focus:border-[var(--accent-primary)]",
+              "disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-[var(--bg-tertiary)]",
               sizes[selectSize],
               error
-                ? "border-red-500 focus:ring-red-500 focus:border-red-500"
-                : "border-card-border",
+                ? "border-[var(--error)] focus:ring-[var(--error)] focus:border-[var(--error)]"
+                : "border-[var(--border-primary)] hover:border-[var(--border-secondary)]",
               className
             )}
             {...props}
@@ -91,14 +92,14 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             ))}
           </select>
 
-          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 pointer-events-none" />
+          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--text-tertiary)] pointer-events-none" />
         </div>
 
         {(error || hint) && (
           <p
             className={cn(
               "mt-1.5 text-sm",
-              error ? "text-red-400" : "text-slate-500"
+              error ? "text-[var(--error)]" : "text-[var(--text-tertiary)]"
             )}
           >
             {error || hint}
@@ -167,9 +168,9 @@ export function CustomSelect({
   return (
     <div className="w-full" ref={containerRef}>
       {label && (
-        <label className="block text-sm font-medium text-slate-300 mb-1.5">
+        <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">
           {label}
-          {required && <span className="text-red-400 ml-1">*</span>}
+          {required && <span className="text-[var(--error)] ml-0.5">*</span>}
         </label>
       )}
 
@@ -178,33 +179,33 @@ export function CustomSelect({
           type="button"
           onClick={() => !disabled && setIsOpen(!isOpen)}
           className={cn(
-            "w-full flex items-center justify-between rounded-lg border bg-card px-4",
+            "w-full flex items-center justify-between rounded-lg border bg-[var(--bg-primary)] px-4",
             "transition-all duration-200",
-            "focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500",
-            disabled && "opacity-50 cursor-not-allowed",
+            "focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] focus:border-[var(--accent-primary)]",
+            disabled && "opacity-50 cursor-not-allowed bg-[var(--bg-tertiary)]",
             sizes[size],
             error
-              ? "border-red-500"
+              ? "border-[var(--error)]"
               : isOpen
-              ? "border-primary-500 ring-2 ring-primary-500"
-              : "border-card-border",
+              ? "border-[var(--accent-primary)] ring-2 ring-[var(--accent-primary)]"
+              : "border-[var(--border-primary)] hover:border-[var(--border-secondary)]",
             className
           )}
           disabled={disabled}
         >
-          <span className={selectedOption ? "text-white" : "text-slate-500"}>
+          <span className={selectedOption ? "text-[var(--text-primary)]" : "text-[var(--text-tertiary)]"}>
             {selectedOption?.label || placeholder}
           </span>
           <ChevronDown
             className={cn(
-              "h-4 w-4 text-slate-500 transition-transform",
+              "h-4 w-4 text-[var(--text-tertiary)] transition-transform",
               isOpen && "rotate-180"
             )}
           />
         </button>
 
         {isOpen && (
-          <div className="absolute z-50 w-full mt-1 py-1 bg-card border border-card-border rounded-lg shadow-xl max-h-60 overflow-auto">
+          <div className="absolute z-[var(--z-dropdown)] w-full mt-1 py-1 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-lg shadow-[var(--shadow-lg)] max-h-60 overflow-auto">
             {options.map((option) => (
               <button
                 key={option.value}
@@ -218,10 +219,10 @@ export function CustomSelect({
                   "w-full flex items-center justify-between px-4 py-2 text-left text-sm",
                   "transition-colors duration-150",
                   option.disabled
-                    ? "text-slate-600 cursor-not-allowed"
+                    ? "text-[var(--text-tertiary)] cursor-not-allowed"
                     : option.value === value
-                    ? "text-primary-400 bg-primary-500/10"
-                    : "text-slate-300 hover:bg-card-border hover:text-white"
+                    ? "text-[var(--accent-primary)] bg-[var(--accent-primary-light)]"
+                    : "text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
                 )}
               >
                 {option.label}
@@ -233,7 +234,7 @@ export function CustomSelect({
       </div>
 
       {(error || hint) && (
-        <p className={cn("mt-1.5 text-sm", error ? "text-red-400" : "text-slate-500")}>
+        <p className={cn("mt-1.5 text-sm", error ? "text-[var(--error)]" : "text-[var(--text-tertiary)]")}>
           {error || hint}
         </p>
       )}
@@ -305,9 +306,9 @@ export function MultiSelect({
   return (
     <div className="w-full" ref={containerRef}>
       {label && (
-        <label className="block text-sm font-medium text-slate-300 mb-1.5">
+        <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">
           {label}
-          {required && <span className="text-red-400 ml-1">*</span>}
+          {required && <span className="text-[var(--error)] ml-0.5">*</span>}
         </label>
       )}
 
@@ -316,15 +317,15 @@ export function MultiSelect({
           type="button"
           onClick={() => !disabled && setIsOpen(!isOpen)}
           className={cn(
-            "w-full min-h-10 flex items-center flex-wrap gap-1.5 rounded-lg border bg-card px-3 py-2",
+            "w-full min-h-10 flex items-center flex-wrap gap-1.5 rounded-lg border bg-[var(--bg-primary)] px-3 py-2",
             "transition-all duration-200",
-            "focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500",
-            disabled && "opacity-50 cursor-not-allowed",
+            "focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] focus:border-[var(--accent-primary)]",
+            disabled && "opacity-50 cursor-not-allowed bg-[var(--bg-tertiary)]",
             error
-              ? "border-red-500"
+              ? "border-[var(--error)]"
               : isOpen
-              ? "border-primary-500 ring-2 ring-primary-500"
-              : "border-card-border",
+              ? "border-[var(--accent-primary)] ring-2 ring-[var(--accent-primary)]"
+              : "border-[var(--border-primary)] hover:border-[var(--border-secondary)]",
             className
           )}
           disabled={disabled}
@@ -333,28 +334,28 @@ export function MultiSelect({
             selectedOptions.map((option) => (
               <span
                 key={option.value}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary-500/20 text-primary-400 text-sm"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--accent-primary-light)] text-[var(--accent-primary)] text-sm"
               >
                 {option.label}
                 <X
-                  className="h-3 w-3 cursor-pointer hover:text-primary-300"
+                  className="h-3 w-3 cursor-pointer hover:opacity-70"
                   onClick={(e) => removeOption(option.value, e)}
                 />
               </span>
             ))
           ) : (
-            <span className="text-slate-500 text-sm">{placeholder}</span>
+            <span className="text-[var(--text-tertiary)] text-sm">{placeholder}</span>
           )}
           <ChevronDown
             className={cn(
-              "ml-auto h-4 w-4 text-slate-500 transition-transform flex-shrink-0",
+              "ml-auto h-4 w-4 text-[var(--text-tertiary)] transition-transform flex-shrink-0",
               isOpen && "rotate-180"
             )}
           />
         </button>
 
         {isOpen && (
-          <div className="absolute z-50 w-full mt-1 py-1 bg-card border border-card-border rounded-lg shadow-xl max-h-60 overflow-auto">
+          <div className="absolute z-[var(--z-dropdown)] w-full mt-1 py-1 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-lg shadow-[var(--shadow-lg)] max-h-60 overflow-auto">
             {options.map((option) => {
               const isSelected = value.includes(option.value);
               const isMaxed = max && value.length >= max && !isSelected;
@@ -369,10 +370,10 @@ export function MultiSelect({
                     "w-full flex items-center justify-between px-4 py-2 text-left text-sm",
                     "transition-colors duration-150",
                     option.disabled || isMaxed
-                      ? "text-slate-600 cursor-not-allowed"
+                      ? "text-[var(--text-tertiary)] cursor-not-allowed"
                       : isSelected
-                      ? "text-primary-400 bg-primary-500/10"
-                      : "text-slate-300 hover:bg-card-border hover:text-white"
+                      ? "text-[var(--accent-primary)] bg-[var(--accent-primary-light)]"
+                      : "text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
                   )}
                 >
                   {option.label}
@@ -385,11 +386,10 @@ export function MultiSelect({
       </div>
 
       {(error || hint) && (
-        <p className={cn("mt-1.5 text-sm", error ? "text-red-400" : "text-slate-500")}>
+        <p className={cn("mt-1.5 text-sm", error ? "text-[var(--error)]" : "text-[var(--text-tertiary)]")}>
           {error || hint}
         </p>
       )}
     </div>
   );
 }
-

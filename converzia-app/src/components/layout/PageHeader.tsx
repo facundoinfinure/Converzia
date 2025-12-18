@@ -4,7 +4,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 // ============================================
-// Page Header Component
+// Page Header Component - Clean, Modern Design
 // ============================================
 
 interface PageHeaderProps {
@@ -32,16 +32,20 @@ export function PageHeader({
         <nav className="flex items-center gap-2 text-sm mb-4">
           {breadcrumbs.map((item, index) => (
             <div key={index} className="flex items-center gap-2">
-              {index > 0 && <ChevronRight className="h-4 w-4 text-slate-600" />}
+              {index > 0 && (
+                <ChevronRight className="h-4 w-4 text-[var(--text-tertiary)]" />
+              )}
               {item.href ? (
                 <Link
                   href={item.href}
-                  className="text-slate-400 hover:text-white transition-colors"
+                  className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
                 >
                   {item.label}
                 </Link>
               ) : (
-                <span className="text-slate-300">{item.label}</span>
+                <span className="text-[var(--text-primary)] font-medium">
+                  {item.label}
+                </span>
               )}
             </div>
           ))}
@@ -51,9 +55,11 @@ export function PageHeader({
       {/* Title and Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">{title}</h1>
+          <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
+            {title}
+          </h1>
           {description && (
-            <p className="text-slate-400 mt-1">{description}</p>
+            <p className="text-[var(--text-secondary)] mt-1">{description}</p>
           )}
         </div>
 
@@ -88,9 +94,13 @@ export function SectionHeader({
       )}
     >
       <div>
-        <h2 className="text-lg font-semibold text-white">{title}</h2>
+        <h2 className="text-lg font-semibold text-[var(--text-primary)]">
+          {title}
+        </h2>
         {description && (
-          <p className="text-sm text-slate-500 mt-0.5">{description}</p>
+          <p className="text-sm text-[var(--text-tertiary)] mt-0.5">
+            {description}
+          </p>
         )}
       </div>
 
@@ -127,4 +137,3 @@ export function PageContainer({
     <div className={cn("p-6", maxWidths[maxWidth], className)}>{children}</div>
   );
 }
-

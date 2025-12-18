@@ -1,15 +1,19 @@
-import { ReactNode, forwardRef, HTMLAttributes } from "react";
+"use client";
+
+import { ReactNode, forwardRef, HTMLAttributes, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ============================================
-// Card Component
+// Card Component - Clean, Modern Design
 // ============================================
 
 export interface CardProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;
-  variant?: "default" | "elevated" | "outlined" | "ghost";
-  padding?: "none" | "sm" | "md" | "lg";
+  variant?: "default" | "elevated" | "outlined" | "ghost" | "highlight";
+  padding?: "none" | "sm" | "md" | "lg" | "xl";
   hover?: boolean;
+  interactive?: boolean;
 }
 
 export const Card = forwardRef<HTMLDivElement, CardProps>(
@@ -19,33 +23,37 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
       variant = "default",
       padding = "none",
       hover = false,
+      interactive = false,
       className,
       ...props
     },
     ref
   ) => {
     const variants = {
-      default: "bg-card border border-card-border",
-      elevated: "bg-card border border-card-border shadow-xl shadow-black/20",
-      outlined: "bg-transparent border border-card-border",
+      default: "bg-[var(--bg-primary)] border border-[var(--border-primary)]",
+      elevated: "bg-[var(--bg-primary)] border border-[var(--border-primary)] shadow-[var(--shadow-md)]",
+      outlined: "bg-transparent border border-[var(--border-primary)]",
       ghost: "bg-transparent",
+      highlight: "bg-[var(--accent-primary-light)] border border-[var(--accent-primary-muted)]",
     };
 
     const paddings = {
       none: "",
       sm: "p-4",
-      md: "p-6",
-      lg: "p-8",
+      md: "p-5",
+      lg: "p-6",
+      xl: "p-8",
     };
 
     return (
       <div
         ref={ref}
         className={cn(
-          "rounded-xl",
+          "rounded-xl transition-all duration-200",
           variants[variant],
           paddings[padding],
-          hover && "transition-all duration-200 hover:border-slate-600 hover:shadow-lg cursor-pointer",
+          hover && "hover:border-[var(--border-secondary)]",
+          interactive && "cursor-pointer hover:shadow-[var(--shadow-sm)] active:scale-[0.99]",
           className
         )}
         {...props}
@@ -66,18 +74,20 @@ interface CardHeaderProps {
   children: ReactNode;
   className?: string;
   action?: ReactNode;
+  noBorder?: boolean;
 }
 
-export function CardHeader({ children, className, action }: CardHeaderProps) {
+export function CardHeader({ children, className, action, noBorder = false }: CardHeaderProps) {
   return (
     <div
       className={cn(
-        "flex items-center justify-between px-6 py-4 border-b border-card-border",
+        "flex items-center justify-between px-6 py-4",
+        !noBorder && "border-b border-[var(--border-primary)]",
         className
       )}
     >
-      <div>{children}</div>
-      {action && <div>{action}</div>}
+      <div className="flex-1">{children}</div>
+      {action && <div className="flex-shrink-0 ml-4">{action}</div>}
     </div>
   );
 }
@@ -90,11 +100,18 @@ interface CardTitleProps {
   children: ReactNode;
   className?: string;
   as?: "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
+  size?: "sm" | "md" | "lg";
 }
 
-export function CardTitle({ children, className, as: Tag = "h3" }: CardTitleProps) {
+export function CardTitle({ children, className, as: Tag = "h3", size = "md" }: CardTitleProps) {
+  const sizes = {
+    sm: "text-base font-medium",
+    md: "text-lg font-semibold",
+    lg: "text-xl font-semibold",
+  };
+  
   return (
-    <Tag className={cn("text-lg font-semibold text-white", className)}>
+    <Tag className={cn(sizes[size], "text-[var(--text-primary)]", className)}>
       {children}
     </Tag>
   );
@@ -111,7 +128,9 @@ interface CardDescriptionProps {
 
 export function CardDescription({ children, className }: CardDescriptionProps) {
   return (
-    <p className={cn("text-sm text-slate-400 mt-1", className)}>{children}</p>
+    <p className={cn("text-sm text-[var(--text-secondary)] mt-1", className)}>
+      {children}
+    </p>
   );
 }
 
@@ -122,10 +141,15 @@ export function CardDescription({ children, className }: CardDescriptionProps) {
 interface CardContentProps {
   children: ReactNode;
   className?: string;
+  noPadding?: boolean;
 }
 
-export function CardContent({ children, className }: CardContentProps) {
-  return <div className={cn("p-6", className)}>{children}</div>;
+export function CardContent({ children, className, noPadding = false }: CardContentProps) {
+  return (
+    <div className={cn(!noPadding && "p-6", className)}>
+      {children}
+    </div>
+  );
 }
 
 // ============================================
@@ -135,13 +159,29 @@ export function CardContent({ children, className }: CardContentProps) {
 interface CardFooterProps {
   children: ReactNode;
   className?: string;
+  noBorder?: boolean;
+  align?: "left" | "center" | "right" | "between";
 }
 
-export function CardFooter({ children, className }: CardFooterProps) {
+export function CardFooter({ 
+  children, 
+  className, 
+  noBorder = false,
+  align = "right" 
+}: CardFooterProps) {
+  const alignments = {
+    left: "justify-start",
+    center: "justify-center",
+    right: "justify-end",
+    between: "justify-between",
+  };
+  
   return (
     <div
       className={cn(
-        "flex items-center justify-end gap-3 px-6 py-4 border-t border-card-border",
+        "flex items-center gap-3 px-6 py-4",
+        !noBorder && "border-t border-[var(--border-primary)]",
+        alignments[align],
         className
       )}
     >
@@ -159,6 +199,7 @@ interface CardSectionProps {
   title?: string;
   description?: string;
   className?: string;
+  action?: ReactNode;
 }
 
 export function CardSection({
@@ -166,15 +207,25 @@ export function CardSection({
   title,
   description,
   className,
+  action,
 }: CardSectionProps) {
   return (
     <div className={cn("py-6 first:pt-0 last:pb-0", className)}>
-      {(title || description) && (
-        <div className="mb-4">
-          {title && <h4 className="text-sm font-medium text-white">{title}</h4>}
-          {description && (
-            <p className="text-sm text-slate-500 mt-0.5">{description}</p>
-          )}
+      {(title || description || action) && (
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            {title && (
+              <h4 className="text-sm font-medium text-[var(--text-primary)]">
+                {title}
+              </h4>
+            )}
+            {description && (
+              <p className="text-sm text-[var(--text-tertiary)] mt-0.5">
+                {description}
+              </p>
+            )}
+          </div>
+          {action && <div className="flex-shrink-0">{action}</div>}
         </div>
       )}
       {children}
@@ -186,15 +237,13 @@ export function CardSection({
 // Collapsible Card
 // ============================================
 
-import { useState } from "react";
-import { ChevronDown } from "lucide-react";
-
 interface CollapsibleCardProps {
   title: string;
   description?: string;
   children: ReactNode;
   defaultOpen?: boolean;
   className?: string;
+  icon?: ReactNode;
 }
 
 export function CollapsibleCard({
@@ -203,6 +252,7 @@ export function CollapsibleCard({
   children,
   defaultOpen = false,
   className,
+  icon,
 }: CollapsibleCardProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
 
@@ -211,26 +261,42 @@ export function CollapsibleCard({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between p-6 text-left"
+        className="w-full flex items-center justify-between p-6 text-left group"
       >
-        <div>
-          <h3 className="text-lg font-semibold text-white">{title}</h3>
-          {description && (
-            <p className="text-sm text-slate-400 mt-1">{description}</p>
+        <div className="flex items-center gap-3">
+          {icon && (
+            <div className="flex-shrink-0 text-[var(--text-tertiary)] group-hover:text-[var(--accent-primary)] transition-colors">
+              {icon}
+            </div>
           )}
+          <div>
+            <h3 className="text-base font-medium text-[var(--text-primary)] group-hover:text-[var(--accent-primary)] transition-colors">
+              {title}
+            </h3>
+            {description && (
+              <p className="text-sm text-[var(--text-secondary)] mt-0.5">
+                {description}
+              </p>
+            )}
+          </div>
         </div>
         <ChevronDown
           className={cn(
-            "h-5 w-5 text-slate-400 transition-transform duration-200",
+            "h-5 w-5 text-[var(--text-tertiary)] transition-transform duration-200",
             isOpen && "rotate-180"
           )}
         />
       </button>
-      {isOpen && (
-        <div className="px-6 pb-6 border-t border-card-border pt-6">
+      <div
+        className={cn(
+          "overflow-hidden transition-all duration-200",
+          isOpen ? "max-h-[1000px] opacity-100" : "max-h-0 opacity-0"
+        )}
+      >
+        <div className="px-6 pb-6 border-t border-[var(--border-primary)] pt-6">
           {children}
         </div>
-      )}
+      </div>
     </Card>
   );
 }

@@ -44,7 +44,7 @@ interface ToastProviderProps {
   position?: "top-right" | "top-left" | "bottom-right" | "bottom-left" | "top-center" | "bottom-center";
 }
 
-export function ToastProvider({ children, position = "bottom-right" }: ToastProviderProps) {
+export function ToastProvider({ children, position = "bottom-center" }: ToastProviderProps) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const addToast = useCallback((toast: Omit<Toast, "id">) => {
@@ -103,7 +103,7 @@ export function ToastProvider({ children, position = "bottom-right" }: ToastProv
       {children}
 
       {/* Toast container */}
-      <div className={cn("fixed z-[100] flex flex-col gap-2 w-full max-w-sm", positions[position])}>
+      <div className={cn("fixed z-[var(--z-toast)] flex flex-col gap-2 w-full max-w-md", positions[position])}>
         {toasts.map((toast) => (
           <ToastItem key={toast.id} toast={toast} onDismiss={() => removeToast(toast.id)} />
         ))}
@@ -125,7 +125,7 @@ export function useToast() {
 }
 
 // ============================================
-// Toast Item
+// Toast Item - Modern dark style
 // ============================================
 
 interface ToastItemProps {
@@ -136,20 +136,20 @@ interface ToastItemProps {
 function ToastItem({ toast, onDismiss }: ToastItemProps) {
   const variants = {
     info: {
-      container: "bg-card border-blue-500/30",
-      icon: <Info className="h-5 w-5 text-blue-400" />,
+      icon: <Info className="h-5 w-5 text-[var(--info)]" />,
+      iconBg: "bg-[var(--info)]",
     },
     success: {
-      container: "bg-card border-emerald-500/30",
-      icon: <CheckCircle className="h-5 w-5 text-emerald-400" />,
+      icon: <CheckCircle className="h-5 w-5 text-[var(--success)]" />,
+      iconBg: "bg-[var(--success)]",
     },
     warning: {
-      container: "bg-card border-amber-500/30",
-      icon: <AlertTriangle className="h-5 w-5 text-amber-400" />,
+      icon: <AlertTriangle className="h-5 w-5 text-[var(--warning)]" />,
+      iconBg: "bg-[var(--warning)]",
     },
     error: {
-      container: "bg-card border-red-500/30",
-      icon: <AlertCircle className="h-5 w-5 text-red-400" />,
+      icon: <AlertCircle className="h-5 w-5 text-[var(--error)]" />,
+      iconBg: "bg-[var(--error)]",
     },
   };
 
@@ -158,24 +158,29 @@ function ToastItem({ toast, onDismiss }: ToastItemProps) {
   return (
     <div
       className={cn(
-        "flex items-start gap-3 p-4 rounded-lg border shadow-xl",
-        "animate-in slide-in-from-right fade-in duration-300",
-        config.container
+        "flex items-center gap-3 px-4 py-3 rounded-xl",
+        "bg-[#1F2937] text-white shadow-xl",
+        "animate-in slide-in-from-bottom-2 fade-in duration-300"
       )}
       role="alert"
     >
-      <div className="flex-shrink-0 mt-0.5">{config.icon}</div>
+      {/* Icon with colored dot */}
+      <div className="flex-shrink-0 relative">
+        {config.icon}
+      </div>
 
+      {/* Content */}
       <div className="flex-1 min-w-0">
         {toast.title && (
           <h4 className="font-medium text-white text-sm">{toast.title}</h4>
         )}
-        <p className="text-sm text-slate-400">{toast.message}</p>
+        <p className="text-sm text-gray-300">{toast.message}</p>
       </div>
 
+      {/* Close button */}
       <button
         onClick={onDismiss}
-        className="flex-shrink-0 p-1 rounded text-slate-500 hover:text-white hover:bg-card-border transition-colors"
+        className="flex-shrink-0 p-1 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700/50 transition-colors"
         aria-label="Cerrar"
       >
         <X className="h-4 w-4" />
@@ -201,4 +206,3 @@ export const toast = {
   warning: (message: string, title?: string) => toastHandler?.warning(message, title),
   info: (message: string, title?: string) => toastHandler?.info(message, title),
 };
-

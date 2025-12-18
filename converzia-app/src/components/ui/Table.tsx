@@ -1,7 +1,7 @@
 "use client";
 
 import { ReactNode, useState } from "react";
-import { ChevronDown, ChevronUp, ChevronsUpDown, ArrowUpDown } from "lucide-react";
+import { ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "./Checkbox";
 import { Skeleton } from "./Skeleton";
@@ -28,7 +28,7 @@ export interface SortState {
 }
 
 // ============================================
-// Data Table Component
+// Data Table Component - Clean, Modern Design
 // ============================================
 
 interface DataTableProps<T> {
@@ -116,21 +116,21 @@ export function DataTable<T>({
 
   const getSortIcon = (key: string) => {
     if (sortState?.key !== key) {
-      return <ChevronsUpDown className="h-4 w-4 text-slate-600" />;
+      return <ChevronsUpDown className="h-3.5 w-3.5 text-[var(--text-tertiary)]" />;
     }
     if (sortState.direction === "asc") {
-      return <ChevronUp className="h-4 w-4 text-primary-400" />;
+      return <ChevronUp className="h-3.5 w-3.5 text-[var(--accent-primary)]" />;
     }
-    return <ChevronDown className="h-4 w-4 text-primary-400" />;
+    return <ChevronDown className="h-3.5 w-3.5 text-[var(--accent-primary)]" />;
   };
 
-  const cellPadding = compact ? "px-4 py-2" : "px-6 py-4";
+  const cellPadding = compact ? "px-4 py-2.5" : "px-6 py-4";
 
   return (
-    <div className={cn("overflow-auto", className)}>
+    <div className={cn("overflow-auto rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)]", className)}>
       <table className="w-full">
         <thead className={cn(stickyHeader && "sticky top-0 z-10")}>
-          <tr className="border-b border-card-border bg-card">
+          <tr className="border-b border-[var(--border-primary)]">
             {selectable && (
               <th className={cn("w-12", cellPadding)}>
                 <Checkbox
@@ -145,12 +145,12 @@ export function DataTable<T>({
               <th
                 key={column.key}
                 className={cn(
-                  "text-left text-xs font-medium text-slate-400 uppercase tracking-wider",
+                  "text-left text-xs font-medium text-[var(--text-tertiary)] uppercase tracking-wider",
                   cellPadding,
                   column.width && `w-[${column.width}]`,
                   column.align === "center" && "text-center",
                   column.align === "right" && "text-right",
-                  column.sortable && sortable && "cursor-pointer select-none hover:text-slate-300",
+                  column.sortable && sortable && "cursor-pointer select-none hover:text-[var(--text-secondary)] transition-colors",
                   column.className
                 )}
                 style={{ width: column.width }}
@@ -158,7 +158,7 @@ export function DataTable<T>({
               >
                 <div
                   className={cn(
-                    "flex items-center gap-2",
+                    "flex items-center gap-1.5",
                     column.align === "center" && "justify-center",
                     column.align === "right" && "justify-end"
                   )}
@@ -171,11 +171,11 @@ export function DataTable<T>({
           </tr>
         </thead>
 
-        <tbody className="divide-y divide-card-border">
+        <tbody>
           {isLoading ? (
             // Loading skeleton
             Array.from({ length: loadingRows }).map((_, index) => (
-              <tr key={`loading-${index}`}>
+              <tr key={`loading-${index}`} className="border-b border-[var(--border-primary)] last:border-0">
                 {selectable && (
                   <td className={cellPadding}>
                     <Skeleton className="h-5 w-5 rounded" />
@@ -193,10 +193,10 @@ export function DataTable<T>({
             <tr>
               <td
                 colSpan={columns.length + (selectable ? 1 : 0)}
-                className="px-6 py-12 text-center"
+                className="px-6 py-16 text-center"
               >
                 {emptyState || (
-                  <div className="text-slate-500">No hay datos para mostrar</div>
+                  <div className="text-[var(--text-tertiary)]">No hay datos para mostrar</div>
                 )}
               </td>
             </tr>
@@ -210,10 +210,10 @@ export function DataTable<T>({
                 <tr
                   key={key}
                   className={cn(
-                    "transition-colors",
-                    striped && index % 2 === 1 && "bg-card-border/30",
-                    isSelected && "bg-primary-500/10",
-                    hoverable && !isSelected && "hover:bg-card-border/50",
+                    "border-b border-[var(--border-primary)] last:border-0 transition-colors",
+                    striped && index % 2 === 1 && "bg-[var(--bg-secondary)]",
+                    isSelected && "bg-[var(--accent-primary-light)]",
+                    hoverable && !isSelected && "hover:bg-[var(--bg-tertiary)]",
                     onRowClick && "cursor-pointer"
                   )}
                   onClick={() => onRowClick?.(row)}
@@ -234,7 +234,7 @@ export function DataTable<T>({
                     <td
                       key={column.key}
                       className={cn(
-                        "text-sm text-slate-300",
+                        "text-sm text-[var(--text-primary)]",
                         cellPadding,
                         column.align === "center" && "text-center",
                         column.align === "right" && "text-right",
@@ -265,7 +265,7 @@ interface SimpleTableProps {
 
 export function Table({ children, className }: SimpleTableProps) {
   return (
-    <div className={cn("overflow-auto", className)}>
+    <div className={cn("overflow-auto rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)]", className)}>
       <table className="w-full">{children}</table>
     </div>
   );
@@ -273,7 +273,7 @@ export function Table({ children, className }: SimpleTableProps) {
 
 export function TableHeader({ children, className }: SimpleTableProps) {
   return (
-    <thead className={cn("border-b border-card-border bg-card", className)}>
+    <thead className={cn("border-b border-[var(--border-primary)]", className)}>
       {children}
     </thead>
   );
@@ -281,7 +281,7 @@ export function TableHeader({ children, className }: SimpleTableProps) {
 
 export function TableBody({ children, className }: SimpleTableProps) {
   return (
-    <tbody className={cn("divide-y divide-card-border", className)}>
+    <tbody className={className}>
       {children}
     </tbody>
   );
@@ -291,7 +291,7 @@ export function TableRow({ children, className, onClick }: SimpleTableProps & { 
   return (
     <tr
       className={cn(
-        "transition-colors hover:bg-card-border/50",
+        "border-b border-[var(--border-primary)] last:border-0 transition-colors hover:bg-[var(--bg-tertiary)]",
         onClick && "cursor-pointer",
         className
       )}
@@ -310,7 +310,7 @@ export function TableHead({ children, className, align = "left" }: TableCellProp
   return (
     <th
       className={cn(
-        "px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider",
+        "px-6 py-4 text-left text-xs font-medium text-[var(--text-tertiary)] uppercase tracking-wider",
         align === "center" && "text-center",
         align === "right" && "text-right",
         className
@@ -325,7 +325,7 @@ export function TableCell({ children, className, align = "left" }: TableCellProp
   return (
     <td
       className={cn(
-        "px-6 py-4 text-sm text-slate-300",
+        "px-6 py-4 text-sm text-[var(--text-primary)]",
         align === "center" && "text-center",
         align === "right" && "text-right",
         className
@@ -335,4 +335,3 @@ export function TableCell({ children, className, align = "left" }: TableCellProp
     </td>
   );
 }
-

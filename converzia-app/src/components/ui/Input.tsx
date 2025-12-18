@@ -1,8 +1,9 @@
 import { forwardRef, InputHTMLAttributes, ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { Control, Controller, FieldValues, Path } from "react-hook-form";
 
 // ============================================
-// Input Component
+// Input Component - Clean, Modern Design
 // ============================================
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
@@ -14,6 +15,7 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   leftAddon?: ReactNode;
   rightAddon?: ReactNode;
   inputSize?: "sm" | "md" | "lg";
+  optional?: boolean;
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
@@ -28,6 +30,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       leftAddon,
       rightAddon,
       inputSize = "md",
+      optional = false,
       id,
       ...props
     },
@@ -43,7 +46,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
 
     const iconSizes = {
       sm: "h-4 w-4",
-      md: "h-5 w-5",
+      md: "h-4 w-4",
       lg: "h-5 w-5",
     };
 
@@ -52,23 +55,30 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         {label && (
           <label
             htmlFor={inputId}
-            className="block text-sm font-medium text-slate-300 mb-1.5"
+            className="block text-sm font-medium text-[var(--text-primary)] mb-1.5"
           >
             {label}
-            {props.required && <span className="text-red-400 ml-1">*</span>}
+            {props.required && (
+              <span className="text-[var(--error)] ml-0.5">*</span>
+            )}
+            {optional && (
+              <span className="text-[var(--text-tertiary)] font-normal ml-1">
+                (opcional)
+              </span>
+            )}
           </label>
         )}
 
         <div className="relative flex">
           {leftAddon && (
-            <div className="flex items-center px-3 rounded-l-lg border border-r-0 border-card-border bg-card text-slate-400 text-sm">
+            <div className="flex items-center px-3 rounded-l-lg border border-r-0 border-[var(--border-primary)] bg-[var(--bg-tertiary)] text-[var(--text-secondary)] text-sm">
               {leftAddon}
             </div>
           )}
 
           <div className="relative flex-1">
             {leftIcon && (
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]">
                 <span className={iconSizes[inputSize]}>{leftIcon}</span>
               </div>
             )}
@@ -77,32 +87,33 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
               ref={ref}
               id={inputId}
               className={cn(
-                "w-full rounded-lg border bg-card text-white placeholder-slate-500",
+                "w-full rounded-lg border bg-[var(--bg-primary)]",
+                "text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)]",
                 "transition-all duration-200",
-                "focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500",
-                "disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-card-border",
+                "focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] focus:ring-offset-0 focus:border-[var(--accent-primary)]",
+                "disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-[var(--bg-tertiary)]",
                 sizes[inputSize],
                 leftIcon ? "pl-10" : "pl-4",
                 rightIcon ? "pr-10" : "pr-4",
                 leftAddon && "rounded-l-none",
                 rightAddon && "rounded-r-none",
                 error
-                  ? "border-red-500 focus:ring-red-500 focus:border-red-500"
-                  : "border-card-border",
+                  ? "border-[var(--error)] focus:ring-[var(--error)] focus:border-[var(--error)]"
+                  : "border-[var(--border-primary)] hover:border-[var(--border-secondary)]",
                 className
               )}
               {...props}
             />
 
             {rightIcon && (
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]">
                 <span className={iconSizes[inputSize]}>{rightIcon}</span>
               </div>
             )}
           </div>
 
           {rightAddon && (
-            <div className="flex items-center px-3 rounded-r-lg border border-l-0 border-card-border bg-card text-slate-400 text-sm">
+            <div className="flex items-center px-3 rounded-r-lg border border-l-0 border-[var(--border-primary)] bg-[var(--bg-tertiary)] text-[var(--text-secondary)] text-sm">
               {rightAddon}
             </div>
           )}
@@ -112,7 +123,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           <p
             className={cn(
               "mt-1.5 text-sm",
-              error ? "text-red-400" : "text-slate-500"
+              error ? "text-[var(--error)]" : "text-[var(--text-tertiary)]"
             )}
           >
             {error || hint}
@@ -128,8 +139,6 @@ Input.displayName = "Input";
 // ============================================
 // Form Input (with react-hook-form support)
 // ============================================
-
-import { Control, Controller, FieldValues, Path } from "react-hook-form";
 
 interface FormInputProps<T extends FieldValues> extends Omit<InputProps, "name"> {
   name: Path<T>;
@@ -155,4 +164,3 @@ export function FormInput<T extends FieldValues>({
     />
   );
 }
-

@@ -1,12 +1,12 @@
 "use client";
 
-import { Fragment, ReactNode, useEffect } from "react";
+import { ReactNode, useEffect } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./Button";
 
 // ============================================
-// Modal Component
+// Modal Component - Clean, Modern Design
 // ============================================
 
 export interface ModalProps {
@@ -74,10 +74,10 @@ export function Modal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-4">
+    <div className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center p-4 md:p-4">
       {/* Overlay */}
       <div
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity animate-in fade-in duration-200"
+        className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity animate-in fade-in duration-200"
         onClick={closeOnOverlayClick ? onClose : undefined}
         aria-hidden="true"
       />
@@ -85,10 +85,10 @@ export function Modal({
       {/* Modal - Full screen on mobile */}
       <div
         className={cn(
-          "relative w-full bg-card border border-card-border shadow-2xl",
+          "relative w-full bg-[var(--bg-primary)] border border-[var(--border-primary)]",
+          "shadow-[var(--shadow-xl)] rounded-xl",
           "animate-in fade-in zoom-in-95 duration-200",
-          "md:rounded-xl",
-          "h-full md:h-auto max-h-full md:max-h-[calc(100vh-2rem)]",
+          "h-auto max-h-[calc(100vh-2rem)]",
           "flex flex-col",
           sizes[size],
           className
@@ -100,12 +100,12 @@ export function Modal({
       >
         {/* Header */}
         {(title || showCloseButton) && (
-          <div className="flex items-start justify-between p-6 border-b border-card-border">
-            <div>
+          <div className="flex items-start justify-between p-6 border-b border-[var(--border-primary)]">
+            <div className="flex-1">
               {title && (
                 <h2
                   id="modal-title"
-                  className="text-lg font-semibold text-white"
+                  className="text-lg font-semibold text-[var(--text-primary)]"
                 >
                   {title}
                 </h2>
@@ -113,7 +113,7 @@ export function Modal({
               {description && (
                 <p
                   id="modal-description"
-                  className="mt-1 text-sm text-slate-400"
+                  className="mt-1 text-sm text-[var(--text-secondary)]"
                 >
                   {description}
                 </p>
@@ -122,7 +122,7 @@ export function Modal({
             {showCloseButton && (
               <button
                 onClick={onClose}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-card-border transition-colors"
+                className="flex-shrink-0 p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors ml-4"
                 aria-label="Cerrar"
               >
                 <X className="h-5 w-5" />
@@ -132,13 +132,13 @@ export function Modal({
         )}
 
         {/* Body */}
-        <div className="p-4 md:p-6 overflow-y-auto flex-1">
+        <div className="p-6 overflow-y-auto flex-1">
           {children}
         </div>
 
         {/* Footer */}
         {footer && (
-          <div className="flex items-center justify-end gap-3 p-6 border-t border-card-border">
+          <div className="flex items-center justify-end gap-3 p-6 border-t border-[var(--border-primary)] bg-[var(--bg-secondary)]">
             {footer}
           </div>
         )}
@@ -190,11 +190,11 @@ export function ConfirmModal({
       closeOnOverlayClick={!isLoading}
       closeOnEscape={!isLoading}
     >
-      <p className="text-slate-400">{description}</p>
+      <p className="text-[var(--text-secondary)]">{description}</p>
 
       <div className="flex items-center justify-end gap-3 mt-6">
         <Button
-          variant="secondary"
+          variant="outline"
           onClick={onClose}
           disabled={isLoading}
         >
@@ -233,11 +233,11 @@ export function AlertModal({
   buttonText = "Entendido",
   variant = "info",
 }: AlertModalProps) {
-  const iconColors = {
-    info: "text-blue-400",
-    success: "text-emerald-400",
-    warning: "text-amber-400",
-    error: "text-red-400",
+  const variantColors = {
+    info: "text-[var(--info)]",
+    success: "text-[var(--success)]",
+    warning: "text-[var(--warning)]",
+    error: "text-[var(--error)]",
   };
 
   return (
@@ -247,7 +247,7 @@ export function AlertModal({
       title={title}
       size="sm"
     >
-      <p className="text-slate-400">{description}</p>
+      <p className="text-[var(--text-secondary)]">{description}</p>
 
       <div className="flex justify-end mt-6">
         <Button onClick={onClose}>{buttonText}</Button>
@@ -309,17 +309,18 @@ export function Drawer({
   };
 
   return (
-    <div className="fixed inset-0 z-50">
+    <div className="fixed inset-0 z-[var(--z-modal)]">
       {/* Overlay */}
       <div
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+        className="fixed inset-0 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
         onClick={onClose}
       />
 
       {/* Drawer */}
       <div
         className={cn(
-          "fixed top-0 bottom-0 bg-card border-card-border flex flex-col",
+          "fixed top-0 bottom-0 bg-[var(--bg-primary)] flex flex-col",
+          "border-[var(--border-primary)]",
           sizes[size],
           position === "right"
             ? "right-0 border-l animate-in slide-in-from-right duration-300"
@@ -328,18 +329,18 @@ export function Drawer({
       >
         {/* Header */}
         {(title || true) && (
-          <div className="flex items-start justify-between p-6 border-b border-card-border">
+          <div className="flex items-start justify-between p-6 border-b border-[var(--border-primary)]">
             <div>
               {title && (
-                <h2 className="text-lg font-semibold text-white">{title}</h2>
+                <h2 className="text-lg font-semibold text-[var(--text-primary)]">{title}</h2>
               )}
               {description && (
-                <p className="mt-1 text-sm text-slate-400">{description}</p>
+                <p className="mt-1 text-sm text-[var(--text-secondary)]">{description}</p>
               )}
             </div>
             <button
               onClick={onClose}
-              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-card-border transition-colors"
+              className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors"
             >
               <X className="h-5 w-5" />
             </button>
@@ -351,7 +352,7 @@ export function Drawer({
 
         {/* Footer */}
         {footer && (
-          <div className="flex items-center justify-end gap-3 p-6 border-t border-card-border">
+          <div className="flex items-center justify-end gap-3 p-6 border-t border-[var(--border-primary)] bg-[var(--bg-secondary)]">
             {footer}
           </div>
         )}
@@ -359,4 +360,3 @@ export function Drawer({
     </div>
   );
 }
-

@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { ingestFromUrl, ingestManualContent, ingestDocument } from "@/lib/services/rag";
+import { createAdminClient } from "@/lib/supabase/server";
+import { 
+  ingestFromUrl, 
+  ingestManualContent, 
+  ingestDocument,
+  ingestFromPdf 
+} from "@/lib/services/rag";
 
 // ============================================
 // RAG Ingest API
@@ -26,6 +32,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Admin access required" }, { status: 403 });
     }
 
+    // Check if this is a multipart form (PDF upload) or JSON
+    const contentType = request.headers.get("content-type") || "";
+    
+    if (contentType.includes("multipart/form-data")) {
+      // Handle PDF file upload
+      return handlePdfUpload(request);
+    }
+
+    // Handle JSON body (existing flow)
     const body = await request.json();
     const { source_id, source_type, tenant_id, offer_id, content, title, url, doc_type } = body;
 
@@ -75,6 +90,129 @@ export async function POST(request: NextRequest) {
     console.error("RAG ingest error:", error);
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : "Unknown error" },
+      { status: 500 }
+    );
+  }
+}
+
+// ============================================
+// PDF Upload Handler
+// ============================================
+
+async function handlePdfUpload(request: NextRequest): Promise<NextResponse> {
+  try {
+    const formData = await request.formData();
+    
+    const file = formData.get("file") as File | null;
+    const tenantId = formData.get("tenant_id") as string | null;
+    const offerId = formData.get("offer_id") as string | null;
+    const title = formData.get("title") as string | null;
+
+    if (!file) {
+      return NextResponse.json(
+        { success: false, error: "No file uploaded" },
+        { status: 400 }
+      );
+    }
+
+    if (!tenantId) {
+      return NextResponse.json(
+        { success: false, error: "tenant_id is required" },
+        { status: 400 }
+      );
+    }
+
+    // Validate file type
+    if (file.type !== "application/pdf") {
+      return NextResponse.json(
+        { success: false, error: "Only PDF files are allowed" },
+        { status: 400 }
+      );
+    }
+
+    // Validate file size (max 10MB)
+    const maxSize = 10 * 1024 * 1024;
+    if (file.size > maxSize) {
+      return NextResponse.json(
+        { success: false, error: "File too large (max 10MB)" },
+        { status: 400 }
+      );
+    }
+
+    const supabase = createAdminClient();
+
+    // Create RAG source record
+    const { data: source, error: sourceError } = await supabase
+      .from("rag_sources")
+      .insert({
+        tenant_id: tenantId,
+        offer_id: offerId || null,
+        source_type: "PDF",
+        name: title || file.name.replace(".pdf", ""),
+        is_active: true,
+      })
+      .select()
+      .single();
+
+    if (sourceError || !source) {
+      return NextResponse.json(
+        { success: false, error: sourceError?.message || "Failed to create source" },
+        { status: 500 }
+      );
+    }
+
+    // Read file as buffer
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    // Upload to Supabase Storage
+    const storagePath = `${tenantId}/${source.id}/${file.name}`;
+    const { error: uploadError } = await supabase.storage
+      .from("rag-documents")
+      .upload(storagePath, buffer, {
+        contentType: "application/pdf",
+        upsert: true,
+      });
+
+    if (uploadError) {
+      // Clean up the source if upload fails
+      await supabase.from("rag_sources").delete().eq("id", source.id);
+      return NextResponse.json(
+        { success: false, error: `Upload failed: ${uploadError.message}` },
+        { status: 500 }
+      );
+    }
+
+    // Update source with storage path
+    await supabase
+      .from("rag_sources")
+      .update({ storage_path: storagePath })
+      .eq("id", source.id);
+
+    // Ingest the PDF content
+    const result = await ingestFromPdf(
+      source.id,
+      buffer,
+      title || file.name.replace(".pdf", "")
+    );
+
+    if (result.success) {
+      return NextResponse.json({
+        success: true,
+        sourceId: source.id,
+        chunkCount: result.chunkCount,
+      });
+    } else {
+      return NextResponse.json({
+        success: false,
+        sourceId: source.id,
+        error: result.error,
+      });
+    }
+  } catch (error) {
+    console.error("PDF upload error:", error);
+    return NextResponse.json(
+      { success: false, error: error instanceof Error ? error.message : "Upload failed" },
       { status: 500 }
     );
   }

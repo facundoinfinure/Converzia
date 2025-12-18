@@ -3,7 +3,7 @@ import { Check, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ============================================
-// Checkbox Component
+// Checkbox Component - Clean, Modern Design
 // ============================================
 
 export interface CheckboxProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "size"> {
@@ -66,14 +66,14 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
           <div
             className={cn(
               "rounded border-2 transition-all duration-200",
-              "peer-focus:ring-2 peer-focus:ring-primary-500 peer-focus:ring-offset-2 peer-focus:ring-offset-background",
+              "peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--accent-primary)] peer-focus-visible:ring-offset-2",
               "peer-disabled:opacity-50 peer-disabled:cursor-not-allowed",
               sizes[size].box,
               checked || indeterminate
-                ? "bg-primary-500 border-primary-500"
+                ? "bg-[var(--accent-primary)] border-[var(--accent-primary)]"
                 : error
-                ? "border-red-500 bg-transparent"
-                : "border-card-border bg-transparent peer-hover:border-slate-500"
+                ? "border-[var(--error)] bg-transparent"
+                : "border-[var(--border-secondary)] bg-transparent peer-hover:border-[var(--accent-primary)]"
             )}
           />
           {(checked || indeterminate) && (
@@ -93,7 +93,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
               <label
                 htmlFor={checkboxId}
                 className={cn(
-                  "font-medium text-slate-300 cursor-pointer",
+                  "font-medium text-[var(--text-primary)] cursor-pointer",
                   props.disabled && "cursor-not-allowed opacity-50",
                   sizes[size].label
                 )}
@@ -104,7 +104,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
             {description && (
               <p
                 className={cn(
-                  "text-slate-500 mt-0.5",
+                  "text-[var(--text-tertiary)] mt-0.5",
                   sizes[size].description
                 )}
               >
@@ -112,7 +112,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
               </p>
             )}
             {error && (
-              <p className="text-red-400 text-sm mt-0.5">{error}</p>
+              <p className="text-[var(--error)] text-sm mt-0.5">{error}</p>
             )}
           </div>
         )}
@@ -145,7 +145,7 @@ export function CheckboxGroup({
   return (
     <div className={cn("w-full", className)}>
       {label && (
-        <p className="text-sm font-medium text-slate-300 mb-3">{label}</p>
+        <p className="text-sm font-medium text-[var(--text-primary)] mb-3">{label}</p>
       )}
       <div
         className={cn(
@@ -155,8 +155,7 @@ export function CheckboxGroup({
       >
         {children}
       </div>
-      {error && <p className="text-red-400 text-sm mt-2">{error}</p>}
+      {error && <p className="text-[var(--error)] text-sm mt-2">{error}</p>}
     </div>
   );
 }
-

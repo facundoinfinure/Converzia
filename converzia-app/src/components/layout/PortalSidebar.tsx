@@ -10,7 +10,6 @@ import {
   Settings,
   LogOut,
   Zap,
-  ChevronDown,
   UserCog,
   Building2,
   Menu,
@@ -52,7 +51,7 @@ export function PortalSidebar() {
       {/* Mobile menu button */}
       <button
         onClick={() => setIsMobileOpen(!isMobileOpen)}
-        className="lg:hidden fixed top-4 left-4 z-50 p-2 rounded-lg bg-card border border-card-border text-slate-400 hover:text-white"
+        className="lg:hidden fixed top-4 left-4 z-50 p-2 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
       >
         {isMobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
       </button>
@@ -60,66 +59,100 @@ export function PortalSidebar() {
       {/* Mobile overlay */}
       {isMobileOpen && (
         <div
-          className="lg:hidden fixed inset-0 z-40 bg-black/50"
+          className="lg:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
           onClick={() => setIsMobileOpen(false)}
         />
       )}
 
       <aside
         className={cn(
-          "fixed left-0 top-0 z-40 h-screen w-64 flex-col border-r border-card-border bg-card transition-transform",
+          "fixed left-0 top-0 z-40 h-screen w-64 flex-col",
+          "border-r border-[var(--sidebar-border)] bg-[var(--sidebar-bg)]",
+          "transition-transform duration-300",
           "hidden lg:flex",
-          isMobileOpen ? "flex" : "lg:flex"
+          isMobileOpen ? "flex translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}
       >
         {/* Logo */}
-      <div className="flex h-16 items-center gap-3 border-b border-card-border px-6">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 shadow-lg shadow-primary-500/25">
-          <Zap className="h-5 w-5 text-white" />
-        </div>
-        <div>
-          <h1 className="text-lg font-bold text-white">Converzia</h1>
-          <p className="text-[10px] text-slate-500 uppercase tracking-wider">
-            Portal
-          </p>
-        </div>
-      </div>
-
-      {/* Tenant Switcher */}
-      {memberships.length > 1 && (
-        <div className="px-3 py-4 border-b border-card-border">
-          <label className="block text-xs text-slate-500 mb-2 px-1">Tenant activo</label>
-          <SelectDropdown
-            value={activeTenantId || ""}
-            onChange={setActiveTenant}
-            options={tenantOptions}
-            placeholder="Seleccionar tenant"
-          />
-        </div>
-      )}
-
-      {/* Current Tenant */}
-      {memberships.length === 1 && activeTenant && (
-        <div className="px-4 py-4 border-b border-card-border">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-medium">
-              {activeTenant.name.slice(0, 2).toUpperCase()}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white truncate">{activeTenant.name}</p>
-              <p className="text-xs text-slate-500">/{activeTenant.slug}</p>
-            </div>
+        <div className="flex h-16 items-center gap-3 border-b border-[var(--sidebar-border)] px-6">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--accent-primary)]">
+            <Zap className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <h1 className="text-lg font-semibold text-[var(--text-primary)]">
+              Converzia
+            </h1>
+            <p className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">
+              Portal
+            </p>
           </div>
         </div>
-      )}
 
-      {/* Main Navigation */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4">
-        <div className="space-y-1">
-          {navigation.map((item) => {
-            const isActive = item.href === "/portal"
-              ? pathname === "/portal"
-              : pathname.startsWith(item.href);
+        {/* Tenant Switcher */}
+        {memberships.length > 1 && (
+          <div className="px-3 py-4 border-b border-[var(--sidebar-border)]">
+            <label className="block text-xs text-[var(--text-tertiary)] mb-2 px-1 font-medium">
+              Tenant activo
+            </label>
+            <SelectDropdown
+              value={activeTenantId || ""}
+              onChange={setActiveTenant}
+              options={tenantOptions}
+              placeholder="Seleccionar tenant"
+            />
+          </div>
+        )}
+
+        {/* Current Tenant */}
+        {memberships.length === 1 && activeTenant && (
+          <div className="px-4 py-4 border-b border-[var(--sidebar-border)]">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-[var(--accent-primary)] flex items-center justify-center text-white font-medium text-sm">
+                {activeTenant.name.slice(0, 2).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-[var(--text-primary)] truncate">
+                  {activeTenant.name}
+                </p>
+                <p className="text-xs text-[var(--text-tertiary)]">
+                  /{activeTenant.slug}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Main Navigation */}
+        <nav className="flex-1 overflow-y-auto px-3 py-4">
+          <div className="space-y-1">
+            {navigation.map((item) => {
+              const isActive = item.href === "/portal"
+                ? pathname === "/portal"
+                : pathname.startsWith(item.href);
+
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
+                    isActive
+                      ? "bg-[var(--sidebar-item-active)] text-[var(--sidebar-item-active-text)]"
+                      : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--sidebar-item-hover)]"
+                  )}
+                >
+                  <item.icon className={cn("h-5 w-5", isActive && "text-[var(--sidebar-item-active-text)]")} />
+                  {item.name}
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
+
+        {/* Bottom Navigation */}
+        <div className="border-t border-[var(--sidebar-border)] px-3 py-4 space-y-1">
+          {bottomNavigation.map((item) => {
+            const isActive = pathname.startsWith(item.href);
 
             return (
               <Link
@@ -128,50 +161,25 @@ export function PortalSidebar() {
                 className={cn(
                   "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
                   isActive
-                    ? "bg-primary-500/10 text-white border border-primary-500/20"
-                    : "text-slate-400 hover:text-white hover:bg-card-border"
+                    ? "bg-[var(--sidebar-item-active)] text-[var(--sidebar-item-active-text)]"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--sidebar-item-hover)]"
                 )}
               >
-                <item.icon className={cn("h-5 w-5", isActive && "text-primary-400")} />
+                <item.icon className={cn("h-5 w-5", isActive && "text-[var(--sidebar-item-active-text)]")} />
                 {item.name}
               </Link>
             );
           })}
+
+          <button
+            onClick={signOut}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--error)] hover:bg-[var(--error-light)] transition-all"
+          >
+            <LogOut className="h-5 w-5" />
+            Cerrar sesión
+          </button>
         </div>
-      </nav>
-
-      {/* Bottom Navigation */}
-      <div className="border-t border-card-border px-3 py-4 space-y-1">
-        {bottomNavigation.map((item) => {
-          const isActive = pathname.startsWith(item.href);
-
-          return (
-            <Link
-              key={item.name}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
-                isActive
-                  ? "bg-primary-500/10 text-white"
-                  : "text-slate-400 hover:text-white hover:bg-card-border"
-              )}
-            >
-              <item.icon className="h-5 w-5" />
-              {item.name}
-            </Link>
-          );
-        })}
-
-        <button
-          onClick={signOut}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-all"
-        >
-          <LogOut className="h-5 w-5" />
-          Cerrar sesión
-        </button>
-      </div>
       </aside>
     </>
   );
 }
-

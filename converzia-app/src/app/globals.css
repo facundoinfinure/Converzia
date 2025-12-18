@@ -2,64 +2,152 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Import Light theme */
-@import '../styles/light-theme.css';
+/* Import Design System */
+@import '../styles/design-system.css';
 
+/* ============================================
+   LEGACY VARIABLE MAPPING
+   Para mantener compatibilidad con componentes existentes
+   ============================================ */
 :root {
-  /* Dark theme (default) - mantener compatibilidad */
-  --background: #0a0a0f;
-  --foreground: #f0f0f5;
-  --card-bg: #111118;
-  --card-border: #1e1e2e;
+  /* Map old variables to new design system */
+  --background: var(--bg-secondary);
+  --foreground: var(--text-primary);
+  --card-bg: var(--bg-primary);
+  --card-border: var(--border-primary);
   
-  /* Light theme variables */
-  --light-bg-primary: #ffffff;
-  --light-bg-secondary: #fafafa;
-  --light-text-primary: #1a1a1a;
-  --light-text-secondary: #6b7280;
-  --light-primary: #3b82f6;
-  --light-border: #e5e7eb;
+  /* Primary colors mapping */
+  --primary-50: #EEF2FF;
+  --primary-100: #E0E7FF;
+  --primary-200: #C7D2FE;
+  --primary-300: #A5B4FC;
+  --primary-400: #818CF8;
+  --primary-500: var(--accent-primary);
+  --primary-600: #4F46E5;
+  --primary-700: #4338CA;
+  --primary-800: #3730A3;
+  --primary-900: #312E81;
 }
 
-/* Toggle entre dark y light theme */
-[data-theme="light"] {
-  --background: var(--light-bg-primary);
-  --foreground: var(--light-text-primary);
-  --card-bg: var(--light-bg-primary);
-  --card-border: var(--light-border);
+/* Dark theme overrides for legacy variables */
+[data-theme="dark"] {
+  --background: var(--bg-secondary);
+  --foreground: var(--text-primary);
+  --card-bg: var(--bg-primary);
+  --card-border: var(--border-primary);
+}
+
+/* ============================================
+   BASE ELEMENT STYLES
+   ============================================ */
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  min-height: 100vh;
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* Selection color */
+::selection {
+  background-color: var(--accent-primary-light);
+  color: var(--accent-primary);
 }
 
-::-webkit-scrollbar-track {
-  background: var(--card-bg);
+/* Focus visible for accessibility */
+:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
 }
 
-::-webkit-scrollbar-thumb {
-  background: var(--card-border);
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #2e2e4e;
-}
-
-@layer utilities {
-  .glass {
-    background: rgba(17, 17, 24, 0.8);
-    backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+/* ============================================
+   TAILWIND LAYER OVERRIDES
+   ============================================ */
+@layer base {
+  /* Smooth transitions on theme change */
+  * {
+    transition-property: background-color, border-color;
+    transition-duration: 150ms;
+    transition-timing-function: ease;
   }
 }
 
+@layer utilities {
+  /* Glass effect for modals/overlays */
+  .glass {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border-primary);
+  }
+  
+  [data-theme="dark"] .glass {
+    background: rgba(15, 15, 18, 0.8);
+  }
+  
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  
+  /* Gradient text */
+  .text-gradient {
+    background: linear-gradient(135deg, var(--accent-primary) 0%, #818CF8 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+}
 
+/* ============================================
+   ANIMATION KEYFRAMES
+   ============================================ */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-fadeIn { animation: fadeIn 0.2s ease-out; }
+.animate-fadeInUp { animation: fadeInUp 0.3s ease-out; }
+.animate-slideInRight { animation: slideInRight 0.3s ease-out; }
+.animate-pulse { animation: pulse 2s ease-in-out infinite; }
+.animate-spin { animation: spin 1s linear infinite; }

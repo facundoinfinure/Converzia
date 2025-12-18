@@ -2,7 +2,7 @@ import { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 // ============================================
-// Badge Component
+// Badge Component - Clean, Modern Design
 // ============================================
 
 export type BadgeVariant =
@@ -35,25 +35,25 @@ export function Badge({
   className,
 }: BadgeProps) {
   const variants = {
-    default: "bg-slate-500/20 text-slate-300 border-slate-500/30",
-    primary: "bg-primary-500/20 text-primary-400 border-primary-500/30",
-    secondary: "bg-slate-600/20 text-slate-400 border-slate-600/30",
-    success: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
-    warning: "bg-amber-500/20 text-amber-400 border-amber-500/30",
-    danger: "bg-red-500/20 text-red-400 border-red-500/30",
-    info: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-    outline: "bg-transparent text-slate-400 border-card-border",
+    default: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
+    primary: "bg-[var(--accent-primary-light)] text-[var(--accent-primary)]",
+    secondary: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
+    success: "bg-[var(--success-light)] text-[var(--success-dark)]",
+    warning: "bg-[var(--warning-light)] text-[var(--warning-dark)]",
+    danger: "bg-[var(--error-light)] text-[var(--error-dark)]",
+    info: "bg-[var(--info-light)] text-[var(--info-dark)]",
+    outline: "bg-transparent text-[var(--text-secondary)] border border-[var(--border-primary)]",
   };
 
   const dotColors = {
-    default: "bg-slate-400",
-    primary: "bg-primary-400",
-    secondary: "bg-slate-400",
-    success: "bg-emerald-400",
-    warning: "bg-amber-400",
-    danger: "bg-red-400",
-    info: "bg-blue-400",
-    outline: "bg-slate-400",
+    default: "bg-[var(--text-tertiary)]",
+    primary: "bg-[var(--accent-primary)]",
+    secondary: "bg-[var(--text-tertiary)]",
+    success: "bg-[var(--success)]",
+    warning: "bg-[var(--warning)]",
+    danger: "bg-[var(--error)]",
+    info: "bg-[var(--info)]",
+    outline: "bg-[var(--text-tertiary)]",
   };
 
   const sizes = {
@@ -65,7 +65,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 font-medium rounded-md border",
+        "inline-flex items-center gap-1.5 font-medium rounded-full",
         variants[variant],
         sizes[size],
         className
@@ -114,11 +114,14 @@ type StatusType =
   | "error"
   | "warning"
   | "draft"
-  | "archived";
+  | "archived"
+  | "paid"
+  | "failed";
 
 interface StatusBadgeProps {
   status: StatusType | string;
   className?: string;
+  showDot?: boolean;
 }
 
 const statusConfig: Record<StatusType, { variant: BadgeVariant; label: string }> = {
@@ -130,16 +133,18 @@ const statusConfig: Record<StatusType, { variant: BadgeVariant; label: string }>
   warning: { variant: "warning", label: "Advertencia" },
   draft: { variant: "secondary", label: "Borrador" },
   archived: { variant: "default", label: "Archivado" },
+  paid: { variant: "success", label: "Pagado" },
+  failed: { variant: "danger", label: "Fallido" },
 };
 
-export function StatusBadge({ status, className }: StatusBadgeProps) {
+export function StatusBadge({ status, className, showDot = true }: StatusBadgeProps) {
   const config = statusConfig[status as StatusType] || {
     variant: "default" as BadgeVariant,
     label: status,
   };
 
   return (
-    <Badge variant={config.variant} dot className={className}>
+    <Badge variant={config.variant} dot={showDot} className={className}>
       {config.label}
     </Badge>
   );
@@ -241,3 +246,25 @@ export function RoleBadge({ role, className }: RoleBadgeProps) {
   );
 }
 
+// ============================================
+// Count Badge (for notification counts)
+// ============================================
+
+interface CountBadgeProps {
+  count: number;
+  max?: number;
+  variant?: BadgeVariant;
+  className?: string;
+}
+
+export function CountBadge({ count, max = 99, variant = "danger", className }: CountBadgeProps) {
+  const displayCount = count > max ? `${max}+` : count;
+  
+  if (count === 0) return null;
+  
+  return (
+    <Badge variant={variant} size="sm" className={cn("min-w-[20px] justify-center", className)}>
+      {displayCount}
+    </Badge>
+  );
+}

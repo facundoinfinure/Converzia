@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { Card, CardContent } from "./Card";
 
 // ============================================
-// Stat Card Component
+// Stat Card Component - Clean, Modern Design
 // ============================================
 
 interface StatCardProps {
@@ -26,14 +26,14 @@ export function StatCard({
   changeLabel,
   trend = "neutral",
   icon,
-  iconColor = "from-primary-500 to-primary-600",
+  iconColor,
   loading = false,
   className,
 }: StatCardProps) {
   const trendColors = {
-    up: "text-emerald-400",
-    down: "text-red-400",
-    neutral: "text-slate-400",
+    up: "text-[var(--success)]",
+    down: "text-[var(--error)]",
+    neutral: "text-[var(--text-tertiary)]",
   };
 
   const TrendIcon = trend === "up" ? ArrowUpRight : trend === "down" ? ArrowDownRight : Minus;
@@ -43,12 +43,12 @@ export function StatCard({
       <Card className={className}>
         <CardContent className="p-6">
           <div className="flex items-center justify-between">
-            <div className="h-12 w-12 rounded-xl bg-card-border animate-pulse" />
-            <div className="h-5 w-16 rounded bg-card-border animate-pulse" />
+            <div className="h-12 w-12 rounded-xl bg-[var(--bg-tertiary)] animate-pulse" />
+            <div className="h-5 w-16 rounded bg-[var(--bg-tertiary)] animate-pulse" />
           </div>
           <div className="mt-4 space-y-2">
-            <div className="h-8 w-24 rounded bg-card-border animate-pulse" />
-            <div className="h-4 w-32 rounded bg-card-border animate-pulse" />
+            <div className="h-8 w-24 rounded bg-[var(--bg-tertiary)] animate-pulse" />
+            <div className="h-4 w-32 rounded bg-[var(--bg-tertiary)] animate-pulse" />
           </div>
         </CardContent>
       </Card>
@@ -62,16 +62,16 @@ export function StatCard({
           {icon && (
             <div
               className={cn(
-                "h-12 w-12 rounded-xl flex items-center justify-center shadow-lg",
-                `bg-gradient-to-br ${iconColor}`
+                "h-12 w-12 rounded-xl flex items-center justify-center",
+                iconColor || "bg-[var(--accent-primary-light)] text-[var(--accent-primary)]"
               )}
             >
-              <span className="h-6 w-6 text-white">{icon}</span>
+              <span className="h-6 w-6">{icon}</span>
             </div>
           )}
 
           {change !== undefined && (
-            <div className={cn("flex items-center gap-1 text-sm", trendColors[trend])}>
+            <div className={cn("flex items-center gap-1 text-sm font-medium", trendColors[trend])}>
               <TrendIcon className="h-4 w-4" />
               {Math.abs(change)}%
             </div>
@@ -79,10 +79,10 @@ export function StatCard({
         </div>
 
         <div className="mt-4">
-          <p className="text-2xl font-bold text-white">{value}</p>
-          <p className="text-sm text-slate-500">
+          <p className="text-2xl font-semibold text-[var(--text-primary)]">{value}</p>
+          <p className="text-sm text-[var(--text-secondary)]">
             {title}
-            {changeLabel && <span className="ml-1 text-slate-600">({changeLabel})</span>}
+            {changeLabel && <span className="ml-1 text-[var(--text-tertiary)]">({changeLabel})</span>}
           </p>
         </div>
       </CardContent>
@@ -112,29 +112,29 @@ export function MiniStatCard({
   className,
 }: MiniStatCardProps) {
   const trendColors = {
-    up: "text-emerald-400",
-    down: "text-red-400",
-    neutral: "text-slate-400",
+    up: "text-[var(--success)]",
+    down: "text-[var(--error)]",
+    neutral: "text-[var(--text-tertiary)]",
   };
 
   return (
     <div
       className={cn(
-        "flex items-center gap-4 p-4 rounded-lg bg-card border border-card-border",
+        "flex items-center gap-4 p-4 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-primary)]",
         className
       )}
     >
       {icon && (
-        <div className="h-10 w-10 rounded-lg bg-primary-500/20 flex items-center justify-center text-primary-400">
+        <div className="h-10 w-10 rounded-lg bg-[var(--accent-primary-light)] flex items-center justify-center text-[var(--accent-primary)]">
           {icon}
         </div>
       )}
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-slate-500 truncate">{title}</p>
+        <p className="text-sm text-[var(--text-secondary)] truncate">{title}</p>
         <div className="flex items-center gap-2">
-          <p className="text-lg font-semibold text-white">{value}</p>
+          <p className="text-lg font-semibold text-[var(--text-primary)]">{value}</p>
           {change && trend && (
-            <span className={cn("text-xs", trendColors[trend])}>{change}</span>
+            <span className={cn("text-xs font-medium", trendColors[trend])}>{change}</span>
           )}
         </div>
       </div>
@@ -176,7 +176,7 @@ interface ProgressStatCardProps {
   max: number;
   unit?: string;
   icon?: ReactNode;
-  color?: string;
+  color?: "primary" | "success" | "warning" | "danger";
   className?: string;
 }
 
@@ -193,24 +193,24 @@ export function ProgressStatCard({
 
   const colorClasses = {
     primary: {
-      bar: "bg-primary-500",
-      text: "text-primary-400",
+      bar: "bg-[var(--accent-primary)]",
+      text: "text-[var(--accent-primary)]",
     },
     success: {
-      bar: "bg-emerald-500",
-      text: "text-emerald-400",
+      bar: "bg-[var(--success)]",
+      text: "text-[var(--success)]",
     },
     warning: {
-      bar: "bg-amber-500",
-      text: "text-amber-400",
+      bar: "bg-[var(--warning)]",
+      text: "text-[var(--warning)]",
     },
     danger: {
-      bar: "bg-red-500",
-      text: "text-red-400",
+      bar: "bg-[var(--error)]",
+      text: "text-[var(--error)]",
     },
   };
 
-  const colors = colorClasses[color as keyof typeof colorClasses] || colorClasses.primary;
+  const colors = colorClasses[color];
 
   return (
     <Card className={className}>
@@ -218,29 +218,28 @@ export function ProgressStatCard({
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             {icon && (
-              <div className={cn("h-10 w-10 rounded-lg bg-card-border flex items-center justify-center", colors.text)}>
+              <div className={cn("h-10 w-10 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center", colors.text)}>
                 {icon}
               </div>
             )}
-            <span className="text-sm text-slate-400">{title}</span>
+            <span className="text-sm text-[var(--text-secondary)]">{title}</span>
           </div>
           <span className={cn("text-sm font-medium", colors.text)}>
             {value}{unit} / {max}{unit}
           </span>
         </div>
 
-        <div className="h-2 rounded-full bg-card-border overflow-hidden">
+        <div className="h-2 rounded-full bg-[var(--bg-tertiary)] overflow-hidden">
           <div
             className={cn("h-full rounded-full transition-all duration-500", colors.bar)}
             style={{ width: `${percentage}%` }}
           />
         </div>
 
-        <p className="mt-2 text-xs text-slate-500 text-right">
+        <p className="mt-2 text-xs text-[var(--text-tertiary)] text-right">
           {percentage.toFixed(0)}% usado
         </p>
       </CardContent>
     </Card>
   );
 }
-

@@ -1,6 +1,6 @@
 "use client";
 
-import { use } from "react";
+import { use, useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -18,6 +18,8 @@ import {
   TrendingUp,
   Clock,
   CheckCircle,
+  XCircle,
+  Loader2,
 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -32,7 +34,23 @@ import { ConfirmModal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { useTenant, useTenantMutations } from "@/lib/hooks/use-tenants";
 import { formatDate, formatCurrency } from "@/lib/utils";
-import { useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { IntegrationConfigModal } from "@/components/admin/IntegrationConfigModal";
+import { useImpersonation } from "@/lib/hooks/use-impersonation";
+
+type IntegrationType = "GOOGLE_SHEETS" | "TOKKO";
+
+interface TenantIntegration {
+  id: string;
+  tenant_id: string;
+  integration_type: IntegrationType;
+  name: string;
+  status: string;
+  is_active: boolean;
+  config: Record<string, unknown>;
+  last_sync_at: string | null;
+  last_error: string | null;
+}
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -42,9 +60,65 @@ export default function TenantDetailPage({ params }: Props) {
   const { id } = use(params);
   const router = useRouter();
   const toast = useToast();
+  const supabase = createClient();
   const { tenant, pricing, isLoading, error, refetch } = useTenant(id);
   const { updateTenantStatus, isLoading: isMutating } = useTenantMutations();
   const [showStatusModal, setShowStatusModal] = useState<"activate" | "suspend" | null>(null);
+
+  // Integration state
+  const [integrations, setIntegrations] = useState<TenantIntegration[]>([]);
+  const [integrationsLoading, setIntegrationsLoading] = useState(true);
+  const [integrationModal, setIntegrationModal] = useState<{
+    type: IntegrationType;
+    existingConfig?: Record<string, unknown>;
+    existingId?: string;
+  } | null>(null);
+
+  // Fetch integrations
+  const fetchIntegrations = useCallback(async () => {
+    if (!id) return;
+    setIntegrationsLoading(true);
+    
+    const { data, error } = await supabase
+      .from("tenant_integrations")
+      .select("*")
+      .eq("tenant_id", id);
+    
+    if (error) {
+      console.error("Error fetching integrations:", error);
+    } else {
+      setIntegrations(data || []);
+    }
+    setIntegrationsLoading(false);
+  }, [id, supabase]);
+
+  useEffect(() => {
+    fetchIntegrations();
+  }, [fetchIntegrations]);
+
+  // Get integration by type
+  const getIntegration = (type: IntegrationType): TenantIntegration | undefined => {
+    return integrations.find((i) => i.integration_type === type);
+  };
+
+  // Handle opening integration modal
+  const openIntegrationModal = (type: IntegrationType) => {
+    const existing = getIntegration(type);
+    setIntegrationModal({
+      type,
+      existingConfig: existing?.config,
+      existingId: existing?.id,
+    });
+  };
+
+  // Impersonation
+  const { startImpersonation } = useImpersonation();
+
+  const handleViewAsTenant = () => {
+    if (tenant) {
+      startImpersonation(tenant.id, tenant.name);
+    }
+  };
 
   const handleStatusChange = async () => {
     if (!tenant || !showStatusModal) return;
@@ -120,7 +194,7 @@ export default function TenantDetailPage({ params }: Props) {
                 { divider: true, label: "" },
                 {
                   label: "Ver como tenant",
-                  onClick: () => {},
+                  onClick: handleViewAsTenant,
                 },
               ]}
             />
@@ -358,33 +432,21 @@ export default function TenantDetailPage({ params }: Props) {
         {/* Integrations Tab */}
         <TabContent value="integrations">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Google Sheets</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-slate-500 text-center py-4">
-                  No configurado
-                </p>
-                <Button variant="secondary" fullWidth className="mt-4">
-                  Configurar
-                </Button>
-              </CardContent>
-            </Card>
+            <IntegrationCard
+              title="Google Sheets"
+              description="Envía leads calificados automáticamente a un spreadsheet"
+              integration={getIntegration("GOOGLE_SHEETS")}
+              isLoading={integrationsLoading}
+              onConfigure={() => openIntegrationModal("GOOGLE_SHEETS")}
+            />
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Tokko CRM</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-slate-500 text-center py-4">
-                  No configurado
-                </p>
-                <Button variant="secondary" fullWidth className="mt-4">
-                  Configurar
-                </Button>
-              </CardContent>
-            </Card>
+            <IntegrationCard
+              title="Tokko CRM"
+              description="Sincroniza leads con tu cuenta de Tokko Broker"
+              integration={getIntegration("TOKKO")}
+              isLoading={integrationsLoading}
+              onConfigure={() => openIntegrationModal("TOKKO")}
+            />
           </div>
         </TabContent>
 
@@ -418,6 +480,19 @@ export default function TenantDetailPage({ params }: Props) {
         variant={showStatusModal === "suspend" ? "danger" : "default"}
         isLoading={isMutating}
       />
+
+      {/* Integration Config Modal */}
+      {integrationModal && tenant && (
+        <IntegrationConfigModal
+          isOpen={true}
+          onClose={() => setIntegrationModal(null)}
+          onSuccess={fetchIntegrations}
+          type={integrationModal.type}
+          tenantId={tenant.id}
+          existingConfig={integrationModal.existingConfig as any}
+          existingIntegrationId={integrationModal.existingId}
+        />
+      )}
     </PageContainer>
   );
 }
@@ -443,6 +518,73 @@ function InfoRow({
       </div>
       <div className="text-white">{value}</div>
     </div>
+  );
+}
+
+function IntegrationCard({
+  title,
+  description,
+  integration,
+  isLoading,
+  onConfigure,
+}: {
+  title: string;
+  description: string;
+  integration?: TenantIntegration;
+  isLoading: boolean;
+  onConfigure: () => void;
+}) {
+  const isConfigured = !!integration;
+  const isActive = integration?.is_active;
+  const hasError = integration?.status === "ERROR";
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle>{title}</CardTitle>
+          {isLoading ? (
+            <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
+          ) : isConfigured ? (
+            hasError ? (
+              <Badge variant="danger" dot>Error</Badge>
+            ) : isActive ? (
+              <Badge variant="success" dot>Activo</Badge>
+            ) : (
+              <Badge variant="secondary" dot>Inactivo</Badge>
+            )
+          ) : null}
+        </div>
+      </CardHeader>
+      <CardContent>
+        <p className="text-slate-400 text-sm mb-4">{description}</p>
+        
+        {isConfigured ? (
+          <div className="space-y-3">
+            {integration.last_sync_at && (
+              <p className="text-xs text-slate-500">
+                Última sync: {formatDate(integration.last_sync_at)}
+              </p>
+            )}
+            {integration.last_error && (
+              <Alert variant="error" className="text-xs">
+                {integration.last_error}
+              </Alert>
+            )}
+            <Button variant="secondary" fullWidth onClick={onConfigure}>
+              Editar configuración
+            </Button>
+          </div>
+        ) : (
+          <div className="text-center py-2">
+            <p className="text-slate-500 mb-4">No configurado</p>
+            <Button variant="secondary" fullWidth onClick={onConfigure}>
+              Configurar
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

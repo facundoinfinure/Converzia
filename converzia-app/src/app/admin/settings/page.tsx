@@ -13,6 +13,7 @@ import {
   Eye,
   EyeOff,
   Save,
+  Palette,
 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/Card";
@@ -25,6 +26,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
 import { useSettings, useSettingsMutations } from "@/lib/hooks/use-settings";
 import { TextArea } from "@/components/ui/TextArea";
+import { ThemeSetting } from "@/components/ui/ThemeToggle";
 
 export default function SettingsPage() {
   const toast = useToast();
@@ -210,8 +212,11 @@ export default function SettingsPage() {
         ]}
       />
 
-      <Tabs defaultValue="meta">
+      <Tabs defaultValue="preferences">
         <TabsList>
+          <TabTrigger value="preferences" icon={<Palette className="h-4 w-4" />}>
+            Preferencias
+          </TabTrigger>
           <TabTrigger value="meta" icon={<Facebook className="h-4 w-4" />}>
             Meta / Facebook
           </TabTrigger>
@@ -228,6 +233,21 @@ export default function SettingsPage() {
             Prompts
           </TabTrigger>
         </TabsList>
+
+        {/* Preferences Tab */}
+        <TabContent value="preferences">
+          <Card>
+            <CardHeader>
+              <CardTitle>Preferencias de usuario</CardTitle>
+              <p className="text-sm text-slate-500 mt-1">
+                Personalizá tu experiencia en la plataforma
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <ThemeSetting />
+            </CardContent>
+          </Card>
+        </TabContent>
 
         {/* Meta Settings */}
         <TabContent value="meta">

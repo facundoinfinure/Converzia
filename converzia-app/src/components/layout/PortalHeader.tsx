@@ -1,13 +1,16 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Bell, Menu, Search, X } from "lucide-react";
+import { Menu, Search, X, ArrowLeft, Eye } from "lucide-react";
 import { useAuth } from "@/lib/auth/context";
 import { Avatar } from "@/components/ui/Avatar";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { CommandPalette } from "@/components/ui/SearchInput";
 import { NotificationCenter } from "@/components/ui/NotificationCenter";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { useImpersonation } from "@/lib/hooks/use-impersonation";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -17,6 +20,9 @@ export function PortalHeader() {
   const [showSearch, setShowSearch] = useState(false);
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  
+  // Impersonation state
+  const { isImpersonating, impersonatedTenantName, stopImpersonation } = useImpersonation();
 
   // Keyboard shortcut for search (⌘K / Ctrl+K)
   useEffect(() => {
@@ -99,24 +105,46 @@ export function PortalHeader() {
 
   return (
     <>
-      <header className="sticky top-0 z-30 h-16 border-b border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
+      {/* Impersonation Banner */}
+      {isImpersonating && (
+        <div className="sticky top-0 z-40 bg-[var(--warning)] text-[var(--warning-dark)]">
+          <div className="flex items-center justify-between px-4 py-2">
+            <div className="flex items-center gap-2">
+              <Eye className="h-4 w-4" />
+              <span className="text-sm font-medium">
+                Viendo como: <strong>{impersonatedTenantName}</strong>
+              </span>
+            </div>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={stopImpersonation}
+              leftIcon={<ArrowLeft className="h-4 w-4" />}
+            >
+              Volver al Admin
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <header className={`sticky ${isImpersonating ? 'top-10' : 'top-0'} z-30 h-16 border-b border-[var(--border-primary)] bg-[var(--bg-primary)]`}>
         <div className="flex h-full items-center justify-between px-6">
           {/* Left side */}
           <div className="flex items-center gap-4 flex-1 max-w-2xl">
             {/* Mobile menu button */}
-            <button className="lg:hidden p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors">
+            <button className="lg:hidden p-2 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors">
               <Menu className="h-5 w-5" />
             </button>
 
-            {/* Search bar */}
+            {/* Search bar - Pill shaped */}
             <button
               onClick={() => setShowSearch(true)}
-              className="hidden md:flex items-center gap-3 flex-1 max-w-xl px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-100 transition-colors text-sm"
+              className="hidden md:flex items-center gap-3 flex-1 max-w-xl px-4 py-2 rounded-full bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-[var(--text-tertiary)] hover:border-[var(--border-secondary)] hover:bg-[var(--bg-secondary)] transition-all text-sm"
             >
               <Search className="h-4 w-4 flex-shrink-0" />
-              <span className="flex-1 text-left">Buscar para cualquier cosa...</span>
-              <kbd className="hidden lg:inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-white border border-gray-200 font-medium text-gray-600">
-                {navigator.platform.includes("Mac") ? "⌘" : "Ctrl"} K
+              <span className="flex-1 text-left">Buscar...</span>
+              <kbd className="hidden lg:inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-[var(--bg-primary)] border border-[var(--border-primary)] font-medium text-[var(--text-tertiary)]">
+                ⌘K
               </kbd>
             </button>
           </div>
@@ -125,13 +153,16 @@ export function PortalHeader() {
           <div className="flex-1" />
 
           {/* Right side */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
             {/* Role badge */}
             {activeRole && (
               <Badge variant="secondary" size="sm">
                 {activeRole}
               </Badge>
             )}
+
+            {/* Theme toggle */}
+            <ThemeToggle size="sm" />
 
             {/* Notifications */}
             <NotificationCenter />
@@ -140,23 +171,23 @@ export function PortalHeader() {
             <Dropdown
               align="right"
               trigger={
-                <button className="flex items-center gap-3 p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+                <button className="flex items-center gap-3 p-1.5 rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors ml-2">
                   <Avatar
                     src={profile?.avatar_url}
                     name={profile?.full_name || profile?.email || "User"}
                     size="sm"
                   />
                   <div className="hidden md:block text-left">
-                    <p className="text-sm font-medium text-gray-900">
+                    <p className="text-sm font-medium text-[var(--text-primary)]">
                       {profile?.full_name || "Usuario"}
                     </p>
-                    <p className="text-xs text-gray-500">{profile?.email}</p>
+                    <p className="text-xs text-[var(--text-tertiary)]">{profile?.email}</p>
                   </div>
                 </button>
               }
               items={[
-                { label: "Mi perfil", onClick: () => {} },
-                { label: "Configuración", onClick: () => {} },
+                { label: "Mi perfil", onClick: () => router.push("/portal/settings") },
+                { label: "Configuración", onClick: () => router.push("/portal/settings") },
                 { divider: true, label: "" },
                 { label: "Cerrar sesión", onClick: signOut, danger: true },
               ]}
@@ -180,4 +211,3 @@ export function PortalHeader() {
     </>
   );
 }
-

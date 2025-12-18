@@ -31,4 +31,5 @@ export * from "./SimpleChart";
 export * from "./AdvancedFilters";
 export * from "./BulkActions";
 export * from "./NotificationCenter";
+export * from "./ThemeToggle";
 

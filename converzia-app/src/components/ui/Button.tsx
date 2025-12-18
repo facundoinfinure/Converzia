@@ -3,16 +3,17 @@ import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ============================================
-// Button Component
+// Button Component - Clean, Modern Design
 // ============================================
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "primary" | "secondary" | "outline" | "ghost" | "danger" | "success";
+  variant?: "primary" | "secondary" | "outline" | "ghost" | "danger" | "success" | "link";
   size?: "xs" | "sm" | "md" | "lg" | "xl";
   isLoading?: boolean;
   leftIcon?: ReactNode;
   rightIcon?: ReactNode;
   fullWidth?: boolean;
+  pill?: boolean;
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
@@ -25,6 +26,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       leftIcon,
       rightIcon,
       fullWidth = false,
+      pill = false,
       disabled,
       children,
       ...props
@@ -32,43 +34,50 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     ref
   ) => {
     const baseStyles = cn(
-      "inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-all duration-200",
-      "focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background",
-      "disabled:opacity-50 disabled:cursor-not-allowed",
+      "inline-flex items-center justify-center gap-2 font-medium transition-all duration-200",
+      "focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+      "disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none",
+      pill ? "rounded-full" : "rounded-lg",
       fullWidth && "w-full"
     );
 
     const variants = {
       primary: cn(
-        "bg-gradient-to-r from-primary-500 to-primary-600 text-white",
-        "hover:from-primary-600 hover:to-primary-700",
-        "focus:ring-primary-500",
-        "shadow-lg shadow-primary-500/25 hover:shadow-xl hover:shadow-primary-500/30"
+        "bg-[var(--accent-primary)] text-white",
+        "hover:bg-[var(--accent-primary-hover)]",
+        "focus-visible:ring-[var(--accent-primary)]",
+        "active:scale-[0.98]"
       ),
       secondary: cn(
-        "bg-card text-white border border-card-border",
-        "hover:bg-card-border hover:border-slate-600",
-        "focus:ring-slate-500"
+        "bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-primary)]",
+        "hover:bg-[var(--bg-secondary)] hover:border-[var(--border-secondary)]",
+        "focus-visible:ring-[var(--border-secondary)]"
       ),
       outline: cn(
-        "border border-card-border text-slate-300 bg-transparent",
-        "hover:bg-card-border hover:text-white",
-        "focus:ring-slate-500"
+        "border border-[var(--border-primary)] text-[var(--text-primary)] bg-transparent",
+        "hover:bg-[var(--bg-tertiary)] hover:border-[var(--border-secondary)]",
+        "focus-visible:ring-[var(--border-secondary)]"
       ),
       ghost: cn(
-        "text-slate-400 bg-transparent",
-        "hover:bg-card-border hover:text-white",
-        "focus:ring-slate-500"
+        "text-[var(--text-secondary)] bg-transparent",
+        "hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]",
+        "focus-visible:ring-[var(--border-secondary)]"
       ),
       danger: cn(
-        "bg-red-500/20 text-red-400 border border-red-500/30",
-        "hover:bg-red-500/30 hover:text-red-300",
-        "focus:ring-red-500"
+        "bg-[var(--error)] text-white",
+        "hover:bg-[var(--error-dark)]",
+        "focus-visible:ring-[var(--error)]"
       ),
       success: cn(
-        "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30",
-        "hover:bg-emerald-500/30 hover:text-emerald-300",
-        "focus:ring-emerald-500"
+        "bg-[var(--success)] text-white",
+        "hover:bg-[var(--success-dark)]",
+        "focus-visible:ring-[var(--success)]"
+      ),
+      link: cn(
+        "text-[var(--accent-primary)] bg-transparent underline-offset-4",
+        "hover:underline hover:text-[var(--accent-primary-hover)]",
+        "focus-visible:ring-[var(--accent-primary)]",
+        "p-0 h-auto"
       ),
     };
 
@@ -91,18 +100,23 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     return (
       <button
         ref={ref}
-        className={cn(baseStyles, variants[variant], sizes[size], className)}
+        className={cn(
+          baseStyles, 
+          variants[variant], 
+          variant !== "link" && sizes[size], 
+          className
+        )}
         disabled={disabled || isLoading}
         {...props}
       >
         {isLoading ? (
           <Loader2 className={cn("animate-spin", iconSizes[size])} />
         ) : (
-          leftIcon && <span className={iconSizes[size]}>{leftIcon}</span>
+          leftIcon && <span className={cn("flex-shrink-0", iconSizes[size])}>{leftIcon}</span>
         )}
         {children}
         {!isLoading && rightIcon && (
-          <span className={iconSizes[size]}>{rightIcon}</span>
+          <span className={cn("flex-shrink-0", iconSizes[size])}>{rightIcon}</span>
         )}
       </button>
     );
@@ -121,7 +135,7 @@ export interface IconButtonProps extends Omit<ButtonProps, "leftIcon" | "rightIc
 }
 
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
-  ({ icon, size = "md", className, ...props }, ref) => {
+  ({ icon, size = "md", className, variant = "ghost", ...props }, ref) => {
     const sizes = {
       xs: "h-7 w-7",
       sm: "h-8 w-8",
@@ -130,14 +144,28 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
       xl: "h-12 w-12",
     };
 
+    const iconSizes = {
+      xs: "h-3.5 w-3.5",
+      sm: "h-4 w-4",
+      md: "h-5 w-5",
+      lg: "h-5 w-5",
+      xl: "h-6 w-6",
+    };
+
     return (
       <Button
         ref={ref}
         size={size}
-        className={cn(sizes[size], "p-0", className)}
+        variant={variant}
+        className={cn(
+          sizes[size], 
+          "p-0 rounded-lg",
+          "[&>span]:flex [&>span]:items-center [&>span]:justify-center",
+          className
+        )}
         {...props}
       >
-        {icon}
+        <span className={iconSizes[size]}>{icon}</span>
       </Button>
     );
   }
@@ -157,10 +185,38 @@ interface ButtonGroupProps {
 export function ButtonGroup({ children, className }: ButtonGroupProps) {
   return (
     <div className={cn("flex items-center", className)}>
-      <div className="inline-flex rounded-lg overflow-hidden border border-card-border divide-x divide-card-border">
+      <div className={cn(
+        "inline-flex overflow-hidden",
+        "border border-[var(--border-primary)] rounded-lg",
+        "divide-x divide-[var(--border-primary)]",
+        "[&>button]:rounded-none [&>button]:border-0"
+      )}>
         {children}
       </div>
     </div>
   );
 }
 
+// ============================================
+// Action Button Group (for row actions)
+// ============================================
+
+interface ActionButtonProps {
+  children: ReactNode;
+  className?: string;
+  gap?: "sm" | "md" | "lg";
+}
+
+export function ActionButtons({ children, className, gap = "sm" }: ActionButtonProps) {
+  const gaps = {
+    sm: "gap-1",
+    md: "gap-2",
+    lg: "gap-3",
+  };
+  
+  return (
+    <div className={cn("flex items-center", gaps[gap], className)}>
+      {children}
+    </div>
+  );
+}

@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/server";
 import { generateEmbedding } from "./openai";
+import { extractTextFromPdf, cleanPdfText } from "./pdf";
 
 // ============================================
 // RAG (Retrieval Augmented Generation) Service
@@ -516,6 +517,80 @@ export async function deleteRagSource(sourceId: string): Promise<boolean> {
 }
 
 /**
+ * Ingest content from a PDF file
+ */
+export async function ingestFromPdf(
+  sourceId: string,
+  pdfBuffer: Buffer,
+  title: string
+): Promise<{ success: boolean; chunkCount: number; error?: string }> {
+  try {
+    // Extract text from PDF
+    const { text, numPages, info } = await extractTextFromPdf(pdfBuffer);
+    const cleanedText = cleanPdfText(text);
+
+    if (!cleanedText || cleanedText.length < 10) {
+      return {
+        success: false,
+        chunkCount: 0,
+        error: "No text content found in PDF",
+      };
+    }
+
+    // Use standard ingestDocument with PDF metadata
+    return await ingestDocument(sourceId, cleanedText, {
+      title: title || (info.Title as string) || "PDF Document",
+      doc_type: "PDF",
+    });
+  } catch (error) {
+    console.error("PDF ingestion error:", error);
+    return {
+      success: false,
+      chunkCount: 0,
+      error: error instanceof Error ? error.message : "Failed to process PDF",
+    };
+  }
+}
+
+/**
+ * Ingest PDF from Supabase Storage
+ */
+export async function ingestFromStoragePdf(
+  sourceId: string,
+  storagePath: string,
+  title: string
+): Promise<{ success: boolean; chunkCount: number; error?: string }> {
+  const supabase = createAdminClient();
+
+  try {
+    // Download file from storage
+    const { data, error } = await supabase.storage
+      .from("rag-documents")
+      .download(storagePath);
+
+    if (error) {
+      return {
+        success: false,
+        chunkCount: 0,
+        error: `Failed to download PDF: ${error.message}`,
+      };
+    }
+
+    // Convert blob to buffer
+    const arrayBuffer = await data.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    return await ingestFromPdf(sourceId, buffer, title);
+  } catch (error) {
+    return {
+      success: false,
+      chunkCount: 0,
+      error: error instanceof Error ? error.message : "Failed to process stored PDF",
+    };
+  }
+}
+
+/**
  * Re-index all documents for a source
  */
 export async function reindexSource(sourceId: string): Promise<{ success: boolean; error?: string }> {
@@ -542,6 +617,10 @@ export async function reindexSource(sourceId: string): Promise<{ success: boolea
     // Re-process based on source type
     if (source.source_type === "URL" && source.source_url) {
       return await ingestFromUrl(sourceId, source.source_url);
+    }
+
+    if (source.source_type === "PDF" && source.storage_path) {
+      return await ingestFromStoragePdf(sourceId, source.storage_path, source.name);
     }
 
     // For manual content, get from existing document
