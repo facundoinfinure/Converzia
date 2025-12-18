@@ -212,7 +212,7 @@ export default function AdminDashboard() {
             id,
             role,
             created_at,
-            user:user_profiles(full_name, email),
+            user:user_profiles!tenant_members_user_id_fkey(full_name, email),
             tenant:tenants(name)
           `)
           .eq("status", "PENDING_APPROVAL")

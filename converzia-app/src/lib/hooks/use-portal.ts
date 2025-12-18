@@ -358,7 +358,7 @@ export function usePortalTeam() {
         role,
         status,
         created_at,
-        user:user_profiles(id, email, full_name, avatar_url)
+        user:user_profiles!tenant_members_user_id_fkey(id, email, full_name, avatar_url)
       `)
       .eq("tenant_id", activeTenantId)
       .order("created_at");
