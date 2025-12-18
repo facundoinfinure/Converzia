@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { Bell, X, Check, CheckCheck } from "lucide-react";
-import { MercuryButton } from "./MercuryButton";
-import { MercuryCard } from "./MercuryCard";
+import { LightButton } from "./LightButton";
+import { LightCard } from "./LightCard";
 import { useNotifications, Notification } from "@/lib/hooks/use-notifications";
 import { formatRelativeTime } from "@/lib/utils";
 import { useRouter } from "next/navigation";
@@ -56,19 +56,19 @@ export function NotificationCenter() {
             className="fixed inset-0 z-40"
             onClick={() => setIsOpen(false)}
           />
-          <MercuryCard className="absolute top-full right-0 mt-2 w-96 z-50 max-h-[500px] overflow-hidden flex flex-col">
+          <LightCard className="absolute top-full right-0 mt-2 w-96 z-50 max-h-[500px] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h3 className="font-semibold text-gray-900">Notificaciones</h3>
               <div className="flex items-center gap-2">
                 {unreadCount > 0 && (
-                  <MercuryButton
+                  <LightButton
                     size="sm"
                     variant="ghost"
                     onClick={markAllAsRead}
                     leftIcon={<CheckCheck className="h-4 w-4" />}
                   >
                     Marcar todas
-                  </MercuryButton>
+                  </LightButton>
                 )}
                 <button
                   onClick={() => setIsOpen(false)}
@@ -124,7 +124,7 @@ export function NotificationCenter() {
                 </div>
               )}
             </div>
-          </MercuryCard>
+          </LightCard>
         </>
       )}
     </div>

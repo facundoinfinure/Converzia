@@ -113,12 +113,12 @@ export function useAnalytics(timeRange: TimeRange = "30d", customStart?: Date, c
         .gte("created_at", startDate.toISOString())
         .lte("created_at", endDate.toISOString());
 
-      const tenantCounts: Record<string, { name: string; count: number }> = {};
+      const tenantCounts: Record<string, { tenant: string; count: number }> = {};
       tenantData?.forEach((l: any) => {
         const tenantId = l.tenant_id;
         const tenantName = Array.isArray(l.tenant) ? l.tenant[0]?.name : l.tenant?.name || "Sin tenant";
         if (!tenantCounts[tenantId]) {
-          tenantCounts[tenantId] = { name: tenantName, count: 0 };
+          tenantCounts[tenantId] = { tenant: tenantName, count: 0 };
         }
         tenantCounts[tenantId].count++;
       });

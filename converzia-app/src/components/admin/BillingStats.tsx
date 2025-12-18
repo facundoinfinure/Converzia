@@ -2,7 +2,7 @@
 
 import { DashboardCard } from "@/components/dashboard/DashboardCard";
 import { SimpleChart } from "@/components/ui/SimpleChart";
-import { MercuryCard, MercuryCardHeader, MercuryCardTitle, MercuryCardContent } from "@/components/ui/MercuryCard";
+import { LightCard, LightCardHeader, LightCardTitle, LightCardContent } from "@/components/ui/LightCard";
 
 interface BillingStatsProps {
   totalRevenue: number;
@@ -30,13 +30,13 @@ export function BillingStats({
   return (
     <div className="space-y-6">
       {/* Main Revenue Card */}
-      <MercuryCard className="border-blue-200 bg-gradient-to-br from-blue-50 to-white">
-        <MercuryCardHeader>
+      <LightCard className="border-blue-200 bg-gradient-to-br from-blue-50 to-white">
+        <LightCardHeader>
           <div className="flex items-center justify-between w-full">
             <div>
-              <MercuryCardTitle className="text-gray-600 text-sm font-medium">
+              <LightCardTitle className="text-gray-600 text-sm font-medium">
                 Ingresos Totales
-              </MercuryCardTitle>
+              </LightCardTitle>
               <div className="flex items-baseline gap-2 mt-2">
                 <span className="text-4xl font-bold text-gray-900">
                   ${totalRevenue.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -58,8 +58,8 @@ export function BillingStats({
               </div>
             </div>
           </div>
-        </MercuryCardHeader>
-        <MercuryCardContent>
+        </LightCardHeader>
+        <LightCardContent>
           {revenueTrend.length > 0 && (
             <div className="mt-4">
               <SimpleChart
@@ -71,8 +71,8 @@ export function BillingStats({
               />
             </div>
           )}
-        </MercuryCardContent>
-      </MercuryCard>
+        </LightCardContent>
+      </LightCard>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

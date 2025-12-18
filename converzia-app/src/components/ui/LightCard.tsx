@@ -2,10 +2,10 @@ import { ReactNode, forwardRef, HTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * MercuryCard - Card component inspirado en el diseño de Mercury
+ * LightCard - Card component con estilo light y minimalista
  * Estilo: Light, minimalista, con bordes sutiles y sombras suaves
  */
-export interface MercuryCardProps extends HTMLAttributes<HTMLDivElement> {
+export interface LightCardProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;
   variant?: "default" | "elevated" | "outlined" | "subtle";
   padding?: "none" | "sm" | "md" | "lg";
@@ -13,7 +13,7 @@ export interface MercuryCardProps extends HTMLAttributes<HTMLDivElement> {
   interactive?: boolean;
 }
 
-export const MercuryCard = forwardRef<HTMLDivElement, MercuryCardProps>(
+export const LightCard = forwardRef<HTMLDivElement, LightCardProps>(
   (
     {
       children,
@@ -59,19 +59,19 @@ export const MercuryCard = forwardRef<HTMLDivElement, MercuryCardProps>(
   }
 );
 
-MercuryCard.displayName = "MercuryCard";
+LightCard.displayName = "LightCard";
 
 // ============================================
-// Mercury Card Header
+// Light Card Header
 // ============================================
 
-interface MercuryCardHeaderProps {
+interface LightCardHeaderProps {
   children: ReactNode;
   className?: string;
   action?: ReactNode;
 }
 
-export function MercuryCardHeader({ children, className, action }: MercuryCardHeaderProps) {
+export function LightCardHeader({ children, className, action }: LightCardHeaderProps) {
   return (
     <div
       className={cn(
@@ -86,16 +86,16 @@ export function MercuryCardHeader({ children, className, action }: MercuryCardHe
 }
 
 // ============================================
-// Mercury Card Title
+// Light Card Title
 // ============================================
 
-interface MercuryCardTitleProps {
+interface LightCardTitleProps {
   children: ReactNode;
   className?: string;
   as?: "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
 }
 
-export function MercuryCardTitle({ children, className, as: Tag = "h3" }: MercuryCardTitleProps) {
+export function LightCardTitle({ children, className, as: Tag = "h3" }: LightCardTitleProps) {
   return (
     <Tag className={cn("text-lg font-semibold text-gray-900", className)}>
       {children}
@@ -104,43 +104,43 @@ export function MercuryCardTitle({ children, className, as: Tag = "h3" }: Mercur
 }
 
 // ============================================
-// Mercury Card Description
+// Light Card Description
 // ============================================
 
-interface MercuryCardDescriptionProps {
+interface LightCardDescriptionProps {
   children: ReactNode;
   className?: string;
 }
 
-export function MercuryCardDescription({ children, className }: MercuryCardDescriptionProps) {
+export function LightCardDescription({ children, className }: LightCardDescriptionProps) {
   return (
     <p className={cn("text-sm text-gray-600 mt-1", className)}>{children}</p>
   );
 }
 
 // ============================================
-// Mercury Card Content
+// Light Card Content
 // ============================================
 
-interface MercuryCardContentProps {
+interface LightCardContentProps {
   children: ReactNode;
   className?: string;
 }
 
-export function MercuryCardContent({ children, className }: MercuryCardContentProps) {
+export function LightCardContent({ children, className }: LightCardContentProps) {
   return <div className={cn("", className)}>{children}</div>;
 }
 
 // ============================================
-// Mercury Card Footer
+// Light Card Footer
 // ============================================
 
-interface MercuryCardFooterProps {
+interface LightCardFooterProps {
   children: ReactNode;
   className?: string;
 }
 
-export function MercuryCardFooter({ children, className }: MercuryCardFooterProps) {
+export function LightCardFooter({ children, className }: LightCardFooterProps) {
   return (
     <div
       className={cn(

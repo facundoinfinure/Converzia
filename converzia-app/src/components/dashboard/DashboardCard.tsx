@@ -1,12 +1,12 @@
 "use client";
 
 import { ReactNode } from "react";
-import { MercuryCard, MercuryCardHeader, MercuryCardTitle, MercuryCardContent, MercuryCardFooter } from "@/components/ui/MercuryCard";
-import { MercuryButton } from "@/components/ui/MercuryButton";
+import { LightCard, LightCardHeader, LightCardTitle, LightCardContent, LightCardFooter } from "@/components/ui/LightCard";
+import { LightButton } from "@/components/ui/LightButton";
 import { cn } from "@/lib/utils";
 
 /**
- * DashboardCard - Card component para dashboards estilo Mercury
+ * DashboardCard - Card component para dashboards
  * Incluye título, descripción, métricas y CTA
  */
 export interface DashboardCardProps {
@@ -45,17 +45,17 @@ export function DashboardCard({
     : "text-gray-600";
 
   return (
-    <MercuryCard className={cn("", className)}>
-      <MercuryCardHeader>
+    <LightCard className={cn("", className)}>
+      <LightCardHeader>
         <div>
-          <MercuryCardTitle>{title}</MercuryCardTitle>
+          <LightCardTitle>{title}</LightCardTitle>
           {description && (
             <p className="text-sm text-gray-600 mt-1">{description}</p>
           )}
         </div>
-      </MercuryCardHeader>
+      </LightCardHeader>
       
-      <MercuryCardContent>
+      <LightCardContent>
         {value !== undefined && (
           <div className="mb-4">
             <div className="text-3xl font-bold text-gray-900">{value}</div>
@@ -70,23 +70,23 @@ export function DashboardCard({
           </div>
         )}
         {children}
-      </MercuryCardContent>
+      </LightCardContent>
 
       {(action || footer) && (
-        <MercuryCardFooter>
+        <LightCardFooter>
           {footer || (
             action && (
-              <MercuryButton
+              <LightButton
                 variant={action.variant || "secondary"}
                 onClick={action.onClick}
                 size="sm"
               >
                 {action.label}
-              </MercuryButton>
+              </LightButton>
             )
           )}
-        </MercuryCardFooter>
+        </LightCardFooter>
       )}
-    </MercuryCard>
+    </LightCard>
   );
 }

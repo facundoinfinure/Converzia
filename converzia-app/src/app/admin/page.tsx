@@ -24,8 +24,8 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
-import { MercuryCard, MercuryCardHeader, MercuryCardTitle, MercuryCardContent, MercuryCardFooter } from "@/components/ui/MercuryCard";
-import { MercuryButton } from "@/components/ui/MercuryButton";
+import { LightCard, LightCardHeader, LightCardTitle, LightCardContent, LightCardFooter } from "@/components/ui/LightCard";
+import { LightButton } from "@/components/ui/LightButton";
 import { QuickActions } from "@/components/dashboard/QuickActions";
 import { DashboardCard } from "@/components/dashboard/DashboardCard";
 import { SimpleChart } from "@/components/ui/SimpleChart";
@@ -300,17 +300,17 @@ export default function AdminDashboard() {
       />
 
       {hasNoData ? (
-        <MercuryCard>
+        <LightCard>
           <EmptyState
             icon={<LayoutDashboard />}
             title="Sin información disponible"
             description="Aún no hay datos para mostrar en el dashboard. Los datos aparecerán aquí cuando haya actividad en la plataforma."
             size="lg"
           />
-        </MercuryCard>
+        </LightCard>
       ) : (
         <div className="space-y-6">
-          {/* Quick Actions - Estilo Mercury */}
+          {/* Quick Actions */}
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-sm font-medium text-gray-600 mb-1">Bienvenido</h2>
@@ -323,14 +323,14 @@ export default function AdminDashboard() {
           </div>
           <QuickActions actions={quickActions} />
 
-          {/* Main Metric Card - Estilo Mercury */}
-          <MercuryCard className="border-blue-200 bg-gradient-to-br from-blue-50 to-white">
-            <MercuryCardHeader>
+          {/* Main Metric Card */}
+          <LightCard className="border-blue-200 bg-gradient-to-br from-blue-50 to-white">
+            <LightCardHeader>
               <div className="flex items-center justify-between w-full">
                 <div>
-                  <MercuryCardTitle className="text-gray-600 text-sm font-medium">
+                  <LightCardTitle className="text-gray-600 text-sm font-medium">
                     Total Leads
-                  </MercuryCardTitle>
+                  </LightCardTitle>
                   <div className="flex items-baseline gap-2 mt-2">
                     <span className="text-4xl font-bold text-gray-900">
                       {stats?.totalLeads.toLocaleString() || "0"}
@@ -353,8 +353,8 @@ export default function AdminDashboard() {
                   </div>
                 </div>
               </div>
-            </MercuryCardHeader>
-            <MercuryCardContent>
+            </LightCardHeader>
+            <LightCardContent>
               {stats?.leadsTrend && stats.leadsTrend.length > 0 && (
                 <div className="mt-4">
                   <SimpleChart
@@ -366,10 +366,10 @@ export default function AdminDashboard() {
                   />
                 </div>
               )}
-            </MercuryCardContent>
-          </MercuryCard>
+            </LightCardContent>
+          </LightCard>
 
-          {/* Stats Grid - Estilo Mercury */}
+          {/* Stats Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <DashboardCard
               title="Tenants Activos"
@@ -398,8 +398,8 @@ export default function AdminDashboard() {
 
           {/* Alerts Row - Estilo Mercury */}
           {(stats?.unmappedAds || 0) > 0 && (
-            <MercuryCard className="border-amber-200 bg-amber-50">
-              <MercuryCardContent>
+            <LightCard className="border-amber-200 bg-amber-50">
+              <LightCardContent>
                 <div className="flex items-center gap-4">
                   <div className="h-12 w-12 rounded-lg bg-amber-100 flex items-center justify-center">
                     <AlertTriangle className="h-6 w-6 text-amber-600" />
@@ -413,23 +413,23 @@ export default function AdminDashboard() {
                     </p>
                   </div>
                   <Link href="/admin/ads-mapping">
-                    <MercuryButton variant="primary" size="sm">
+                    <LightButton variant="primary" size="sm">
                       Mapear ahora
-                    </MercuryButton>
+                    </LightButton>
                   </Link>
                 </div>
-              </MercuryCardContent>
-            </MercuryCard>
+              </LightCardContent>
+            </LightCard>
           )}
 
-          {/* Cards Informativos - Estilo Mercury */}
+          {/* Cards Informativos */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Recent Activity */}
-            <MercuryCard>
-              <MercuryCardHeader>
-                <MercuryCardTitle>Actividad Reciente</MercuryCardTitle>
-              </MercuryCardHeader>
-              <MercuryCardContent className="p-0">
+            <LightCard>
+              <LightCardHeader>
+                <LightCardTitle>Actividad Reciente</LightCardTitle>
+              </LightCardHeader>
+              <LightCardContent className="p-0">
                 <div className="divide-y divide-gray-200">
                   {recentActivity.length > 0 ? (
                     recentActivity.map((activity) => {
@@ -457,25 +457,25 @@ export default function AdminDashboard() {
                     </div>
                   )}
                 </div>
-              </MercuryCardContent>
-              <MercuryCardFooter>
-                <MercuryButton variant="text" size="sm" onClick={() => router.push("/admin/operations")}>
+              </LightCardContent>
+              <LightCardFooter>
+                <LightButton variant="text" size="sm" onClick={() => router.push("/admin/operations")}>
                   Ver todas
-                </MercuryButton>
-              </MercuryCardFooter>
-            </MercuryCard>
+                </LightButton>
+              </LightCardFooter>
+            </LightCard>
 
             {/* Pending Approvals */}
-            <MercuryCard>
-              <MercuryCardHeader>
+            <LightCard>
+              <LightCardHeader>
                 <div className="flex items-center justify-between w-full">
-                  <MercuryCardTitle>Aprobaciones Pendientes</MercuryCardTitle>
+                  <LightCardTitle>Aprobaciones Pendientes</LightCardTitle>
                   {(stats?.pendingApprovals || 0) > 0 && (
                     <Badge variant="warning">{stats?.pendingApprovals} pendientes</Badge>
                   )}
                 </div>
-              </MercuryCardHeader>
-              <MercuryCardContent className="p-0">
+              </LightCardHeader>
+              <LightCardContent className="p-0">
                 <div className="divide-y divide-gray-200">
                   {pendingApprovals.length > 0 ? (
                     pendingApprovals.map((approval) => (
@@ -497,9 +497,9 @@ export default function AdminDashboard() {
                         </div>
                         <div className="flex items-center gap-3">
                           <Badge variant="default">{approval.role}</Badge>
-                          <MercuryButton size="sm" variant="primary">
+                          <LightButton size="sm" variant="primary">
                             Aprobar
-                          </MercuryButton>
+                          </LightButton>
                         </div>
                       </div>
                     ))
@@ -509,19 +509,19 @@ export default function AdminDashboard() {
                     </div>
                   )}
                 </div>
-              </MercuryCardContent>
-              <MercuryCardFooter>
-                <MercuryButton variant="text" size="sm" onClick={() => router.push("/admin/users")}>
+              </LightCardContent>
+              <LightCardFooter>
+                <LightButton variant="text" size="sm" onClick={() => router.push("/admin/users")}>
                   Ver todas
-                </MercuryButton>
-              </MercuryCardFooter>
-            </MercuryCard>
+                </LightButton>
+              </LightCardFooter>
+            </LightCard>
           </div>
 
-          {/* Low Credit Tenants Alert - Estilo Mercury */}
+          {/* Low Credit Tenants Alert */}
           {(stats?.lowCreditTenants || 0) > 0 && (
-            <MercuryCard className="border-red-200 bg-red-50">
-              <MercuryCardContent>
+            <LightCard className="border-red-200 bg-red-50">
+              <LightCardContent>
                 <div className="flex items-center gap-4">
                   <div className="h-12 w-12 rounded-lg bg-red-100 flex items-center justify-center">
                     <CreditCard className="h-6 w-6 text-red-600" />
@@ -535,13 +535,13 @@ export default function AdminDashboard() {
                     </p>
                   </div>
                   <Link href="/admin/tenants?filter=low_credits">
-                    <MercuryButton variant="primary" size="sm">
+                    <LightButton variant="primary" size="sm">
                       Ver tenants
-                    </MercuryButton>
+                    </LightButton>
                   </Link>
                 </div>
-              </MercuryCardContent>
-            </MercuryCard>
+              </LightCardContent>
+            </LightCard>
           )}
         </div>
       )}

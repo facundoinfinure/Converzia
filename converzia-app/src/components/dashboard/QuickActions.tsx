@@ -1,7 +1,7 @@
 "use client";
 
 import { ReactNode } from "react";
-import { MercuryButton } from "@/components/ui/MercuryButton";
+import { LightButton } from "@/components/ui/LightButton";
 import { cn } from "@/lib/utils";
 
 /**
@@ -25,7 +25,7 @@ export function QuickActions({ actions, className }: QuickActionsProps) {
   return (
     <div className={cn("flex items-center gap-3 flex-wrap", className)}>
       {actions.map((action, index) => (
-        <MercuryButton
+        <LightButton
           key={index}
           variant={action.variant || "primary"}
           leftIcon={action.icon}
@@ -33,7 +33,7 @@ export function QuickActions({ actions, className }: QuickActionsProps) {
           disabled={action.disabled}
         >
           {action.label}
-        </MercuryButton>
+        </LightButton>
       ))}
     </div>
   );

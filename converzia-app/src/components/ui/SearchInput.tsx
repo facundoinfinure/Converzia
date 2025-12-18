@@ -258,7 +258,7 @@ export function CommandPalette({
         onClick={onClose}
       />
 
-      {/* Command palette - Estilo Mercury */}
+      {/* Command palette */}
       <div className="relative w-full max-w-2xl bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden">
         {/* Search input */}
         <div className="flex items-center gap-3 px-4 border-b border-gray-200">
@@ -315,7 +315,7 @@ export function CommandPalette({
           </div>
         )}
 
-        {/* Footer hint - Estilo Mercury */}
+        {/* Footer hint */}
         <div className="flex items-center justify-between px-4 py-2.5 border-t border-gray-200 text-xs text-gray-500 bg-gray-50">
           <span className="flex items-center gap-1">
             <kbd className="px-1.5 py-0.5 rounded bg-white border border-gray-200 font-medium">↵</kbd>

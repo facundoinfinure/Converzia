@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { Download, Calendar } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
-import { MercuryCard, MercuryCardHeader, MercuryCardTitle, MercuryCardContent } from "@/components/ui/MercuryCard";
-import { MercuryButton } from "@/components/ui/MercuryButton";
+import { LightCard, LightCardHeader, LightCardTitle, LightCardContent } from "@/components/ui/LightCard";
+import { LightButton } from "@/components/ui/LightButton";
 import { DashboardCard } from "@/components/dashboard/DashboardCard";
 import { AnalyticsCharts } from "@/components/admin/AnalyticsCharts";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -55,11 +55,11 @@ export default function AnalyticsPage() {
     return (
       <PageContainer>
         <PageHeader title="Analytics" description="Métricas y reportes de la plataforma" />
-        <MercuryCard>
+        <LightCard>
           <div className="p-12 text-center text-gray-500">
             No hay datos disponibles para el período seleccionado.
           </div>
-        </MercuryCard>
+        </LightCard>
       </PageContainer>
     );
   }
@@ -74,19 +74,19 @@ export default function AnalyticsPage() {
           { label: "Analytics" },
         ]}
         actions={
-          <MercuryButton
+          <LightButton
             variant="secondary"
             onClick={handleExport}
             leftIcon={<Download className="h-4 w-4" />}
           >
             Exportar Reporte
-          </MercuryButton>
+          </LightButton>
         }
       />
 
       {/* Time Range Selector */}
-      <MercuryCard className="mb-6">
-        <MercuryCardContent>
+      <LightCard className="mb-6">
+        <LightCardContent>
           <div className="flex items-center gap-4">
             <Calendar className="h-5 w-5 text-gray-500" />
             <div className="flex items-center gap-2">
@@ -143,11 +143,11 @@ export default function AnalyticsPage() {
       />
 
       {/* Additional Stats */}
-      <MercuryCard className="mt-6">
-        <MercuryCardHeader>
-          <MercuryCardTitle>Métricas Adicionales</MercuryCardTitle>
-        </MercuryCardHeader>
-        <MercuryCardContent>
+      <LightCard className="mt-6">
+        <LightCardHeader>
+          <LightCardTitle>Métricas Adicionales</LightCardTitle>
+        </LightCardHeader>
+        <LightCardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
               <p className="text-sm text-gray-600 mb-1">Tiempo Promedio de Respuesta</p>

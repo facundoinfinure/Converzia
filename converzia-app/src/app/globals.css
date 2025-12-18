@@ -2,8 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Import Mercury theme */
-@import '../styles/mercury-theme.css';
+/* Import Light theme */
+@import '../styles/light-theme.css';
 
 :root {
   /* Dark theme (default) - mantener compatibilidad */
@@ -12,21 +12,21 @@
   --card-bg: #111118;
   --card-border: #1e1e2e;
   
-  /* Mercury light theme variables */
-  --mercury-bg-primary: #ffffff;
-  --mercury-bg-secondary: #fafafa;
-  --mercury-text-primary: #1a1a1a;
-  --mercury-text-secondary: #6b7280;
-  --mercury-primary: #3b82f6;
-  --mercury-border: #e5e7eb;
+  /* Light theme variables */
+  --light-bg-primary: #ffffff;
+  --light-bg-secondary: #fafafa;
+  --light-text-primary: #1a1a1a;
+  --light-text-secondary: #6b7280;
+  --light-primary: #3b82f6;
+  --light-border: #e5e7eb;
 }
 
 /* Toggle entre dark y light theme */
 [data-theme="light"] {
-  --background: var(--mercury-bg-primary);
-  --foreground: var(--mercury-text-primary);
-  --card-bg: var(--mercury-bg-primary);
-  --card-border: var(--mercury-border);
+  --background: var(--light-bg-primary);
+  --foreground: var(--light-text-primary);
+  --card-bg: var(--light-bg-primary);
+  --card-border: var(--light-border);
 }
 
 body {

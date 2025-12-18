@@ -19,8 +19,8 @@ import {
   Settings,
 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
-import { MercuryCard, MercuryCardHeader, MercuryCardTitle, MercuryCardContent, MercuryCardFooter } from "@/components/ui/MercuryCard";
-import { MercuryButton } from "@/components/ui/MercuryButton";
+import { LightCard, LightCardHeader, LightCardTitle, LightCardContent, LightCardFooter } from "@/components/ui/LightCard";
+import { LightButton } from "@/components/ui/LightButton";
 import { QuickActions } from "@/components/dashboard/QuickActions";
 import { DashboardCard } from "@/components/dashboard/DashboardCard";
 import { SimpleChart } from "@/components/ui/SimpleChart";
@@ -131,7 +131,7 @@ export default function PortalDashboard() {
       {/* Onboarding checklist */}
       {activeTenant && <OnboardingChecklist tenantId={activeTenant.id} />}
 
-      {/* Quick Actions - Estilo Mercury */}
+          {/* Quick Actions */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-sm font-medium text-gray-600 mb-1">Bienvenido</h2>
@@ -144,14 +144,14 @@ export default function PortalDashboard() {
       </div>
       <QuickActions actions={quickActions} />
 
-      {/* Main Metric Card - Créditos (Estilo Mercury) */}
-      <MercuryCard className="border-blue-200 bg-gradient-to-br from-blue-50 to-white">
-        <MercuryCardHeader>
+      {/* Main Metric Card - Créditos */}
+      <LightCard className="border-blue-200 bg-gradient-to-br from-blue-50 to-white">
+        <LightCardHeader>
           <div className="flex items-center justify-between w-full">
             <div>
-              <MercuryCardTitle className="text-gray-600 text-sm font-medium">
+              <LightCardTitle className="text-gray-600 text-sm font-medium">
                 Créditos Disponibles
-              </MercuryCardTitle>
+              </LightCardTitle>
               <div className="flex items-baseline gap-2 mt-2">
                 <span className="text-4xl font-bold text-gray-900">
                   {stats?.creditBalance || 0}
@@ -166,8 +166,8 @@ export default function PortalDashboard() {
               )}
             </div>
           </div>
-        </MercuryCardHeader>
-        <MercuryCardContent>
+        </LightCardHeader>
+        <LightCardContent>
           {leadsTrend.length > 0 && (
             <div className="mt-4">
               <div className="flex items-center justify-between mb-2">
@@ -191,15 +191,15 @@ export default function PortalDashboard() {
               />
             </div>
           )}
-        </MercuryCardContent>
-        <MercuryCardFooter>
-          <MercuryButton variant="primary" size="sm" onClick={() => router.push("/portal/billing")}>
+        </LightCardContent>
+        <LightCardFooter>
+          <LightButton variant="primary" size="sm" onClick={() => router.push("/portal/billing")}>
             Recargar créditos
-          </MercuryButton>
-        </MercuryCardFooter>
-      </MercuryCard>
+          </LightButton>
+        </LightCardFooter>
+      </LightCard>
 
-      {/* Stats Grid - Estilo Mercury */}
+      {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <DashboardCard
           title="Total Leads"
@@ -231,21 +231,21 @@ export default function PortalDashboard() {
         />
       </div>
 
-      {/* Cards Informativos - Estilo Mercury */}
+      {/* Cards Informativos */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent Leads */}
-        <MercuryCard>
-          <MercuryCardHeader>
+        <LightCard>
+          <LightCardHeader>
             <div className="flex items-center justify-between w-full">
-              <MercuryCardTitle>Leads recientes</MercuryCardTitle>
+              <LightCardTitle>Leads recientes</LightCardTitle>
               <Link href="/portal/leads">
-                <MercuryButton size="sm" variant="text" rightIcon={<ArrowRight className="h-4 w-4" />}>
+                <LightButton size="sm" variant="text" rightIcon={<ArrowRight className="h-4 w-4" />}>
                   Ver todos
-                </MercuryButton>
+                </LightButton>
               </Link>
             </div>
-          </MercuryCardHeader>
-          <MercuryCardContent className="p-0">
+          </LightCardHeader>
+          <LightCardContent className="p-0">
             {recentLeads.length > 0 ? (
               <div className="divide-y divide-gray-200">
                 {recentLeads.slice(0, 5).map((lead) => (
@@ -281,15 +281,15 @@ export default function PortalDashboard() {
                 No hay leads todavía. Cuando lleguen leads de tus campañas, aparecerán aquí.
               </div>
             )}
-          </MercuryCardContent>
-        </MercuryCard>
+          </LightCardContent>
+        </LightCard>
 
         {/* Pipeline Summary - Con datos reales */}
-        <MercuryCard>
-          <MercuryCardHeader>
-            <MercuryCardTitle>Pipeline de leads</MercuryCardTitle>
-          </MercuryCardHeader>
-          <MercuryCardContent>
+        <LightCard>
+          <LightCardHeader>
+            <LightCardTitle>Pipeline de leads</LightCardTitle>
+          </LightCardHeader>
+          <LightCardContent>
             <div className="space-y-4">
               {[
                 { label: "Contactados", count: stats?.pipelineStats?.contacted || 0, color: "bg-blue-500" },
@@ -304,13 +304,13 @@ export default function PortalDashboard() {
                 </div>
               ))}
             </div>
-          </MercuryCardContent>
-          <MercuryCardFooter>
-            <MercuryButton variant="text" size="sm" onClick={() => router.push("/portal/leads")}>
+          </LightCardContent>
+          <LightCardFooter>
+            <LightButton variant="text" size="sm" onClick={() => router.push("/portal/leads")}>
               Ver pipeline completo
-            </MercuryButton>
-          </MercuryCardFooter>
-        </MercuryCard>
+            </LightButton>
+          </LightCardFooter>
+        </LightCard>
       </div>
     </PageContainer>
   );

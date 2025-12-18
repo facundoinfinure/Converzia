@@ -128,7 +128,7 @@ export function AdminHeader() {
               )}
             </button>
 
-            {/* Search bar - Estilo Mercury */}
+            {/* Search bar */}
             <button
               onClick={() => setShowSearch(true)}
               className="hidden md:flex items-center gap-3 flex-1 max-w-xl px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-100 transition-colors text-sm"

@@ -3,7 +3,7 @@
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
 
 /**
- * SimpleChart - Gráfico de línea simple estilo Mercury
+ * SimpleChart - Gráfico de línea simple
  * Minimalista, con colores sutiles
  */
 export interface SimpleChartProps {
@@ -16,7 +16,7 @@ export interface SimpleChartProps {
 
 export function SimpleChart({
   data,
-  color = "#3b82f6", // Mercury blue
+  color = "#3b82f6", // Blue
   height = 200,
   showGrid = false,
   showAxis = false,

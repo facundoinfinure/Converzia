@@ -2,7 +2,7 @@
 
 import { useState, ReactNode } from "react";
 import { Filter, X, Calendar, DollarSign, TrendingUp } from "lucide-react";
-import { MercuryButton } from "./MercuryButton";
+import { LightButton } from "./LightButton";
 import { Input } from "./Input";
 import { DatePicker } from "./DatePicker";
 import { cn } from "@/lib/utils";
@@ -52,7 +52,7 @@ export function AdvancedFilters({
 
   return (
     <div className={cn("relative", className)}>
-      <MercuryButton
+      <LightButton
         variant="outline"
         onClick={() => setIsOpen(!isOpen)}
         leftIcon={<Filter className="h-4 w-4" />}
@@ -63,7 +63,7 @@ export function AdvancedFilters({
             {activeFiltersCount}
           </span>
         )}
-      </MercuryButton>
+      </LightButton>
 
       {isOpen && (
         <>
@@ -179,7 +179,7 @@ export function AdvancedFilters({
 
             {/* Actions */}
             <div className="flex items-center justify-between gap-2 mt-4 pt-4 border-t border-gray-200">
-              <MercuryButton
+              <LightButton
                 variant="ghost"
                 size="sm"
                 onClick={() => {
@@ -188,7 +188,7 @@ export function AdvancedFilters({
                 }}
               >
                 Limpiar
-              </MercuryButton>
+              </LightButton>
               {onSaveFilter && (
                 <div className="flex items-center gap-2 flex-1">
                   <Input
@@ -197,14 +197,14 @@ export function AdvancedFilters({
                     placeholder="Nombre del filtro"
                     className="flex-1"
                   />
-                  <MercuryButton
+                  <LightButton
                     size="sm"
                     variant="primary"
                     onClick={handleSaveFilter}
                     disabled={!saveFilterName}
                   >
                     Guardar
-                  </MercuryButton>
+                  </LightButton>
                 </div>
               )}
             </div>

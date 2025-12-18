@@ -13,8 +13,8 @@ import {
   Filter,
 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
-import { MercuryCard, MercuryCardHeader, MercuryCardTitle, MercuryCardContent } from "@/components/ui/MercuryCard";
-import { MercuryButton } from "@/components/ui/MercuryButton";
+import { LightCard, LightCardHeader, LightCardTitle, LightCardContent } from "@/components/ui/LightCard";
+import { LightButton } from "@/components/ui/LightButton";
 import { BillingStats } from "@/components/admin/BillingStats";
 import { DataTable, Column } from "@/components/ui/Table";
 import { SearchInput } from "@/components/ui/SearchInput";
@@ -147,14 +147,14 @@ export default function BillingPage() {
           { label: "Billing" },
         ]}
         actions={
-          <MercuryButton
+          <LightButton
             variant="secondary"
             onClick={handleExport}
             leftIcon={<Download className="h-4 w-4" />}
             disabled={filteredOrders.length === 0}
           >
             Exportar
-          </MercuryButton>
+          </LightButton>
         }
       />
 
@@ -171,11 +171,11 @@ export default function BillingPage() {
       )}
 
       {/* Orders Table */}
-      <MercuryCard>
-        <MercuryCardHeader>
-          <MercuryCardTitle>Historial de Órdenes</MercuryCardTitle>
-        </MercuryCardHeader>
-        <MercuryCardContent className="p-0">
+      <LightCard>
+        <LightCardHeader>
+          <LightCardTitle>Historial de Órdenes</LightCardTitle>
+        </LightCardHeader>
+        <LightCardContent className="p-0">
           {/* Filters */}
           <div className="p-4 border-b border-gray-200">
             <div className="flex flex-col sm:flex-row gap-4">
@@ -220,8 +220,8 @@ export default function BillingPage() {
               </div>
             }
           />
-        </MercuryCardContent>
-      </MercuryCard>
+        </LightCardContent>
+      </LightCard>
     </PageContainer>
   );
 }

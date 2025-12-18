@@ -1,7 +1,7 @@
 "use client";
 
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid, Legend } from "recharts";
-import { MercuryCard, MercuryCardHeader, MercuryCardTitle, MercuryCardContent } from "@/components/ui/MercuryCard";
+import { LightCard, LightCardHeader, LightCardTitle, LightCardContent } from "@/components/ui/LightCard";
 
 interface AnalyticsChartsProps {
   leadsByDay: Array<{ date: string; value: number }>;
@@ -19,11 +19,11 @@ export function AnalyticsCharts({
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Leads by Day */}
-      <MercuryCard>
-        <MercuryCardHeader>
-          <MercuryCardTitle>Leads por Día</MercuryCardTitle>
-        </MercuryCardHeader>
-        <MercuryCardContent>
+      <LightCard>
+        <LightCardHeader>
+          <LightCardTitle>Leads por Día</LightCardTitle>
+        </LightCardHeader>
+        <LightCardContent>
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={leadsByDay} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -46,15 +46,15 @@ export function AnalyticsCharts({
               />
             </LineChart>
           </ResponsiveContainer>
-        </MercuryCardContent>
-      </MercuryCard>
+        </LightCardContent>
+      </LightCard>
 
       {/* Conversion Rate */}
-      <MercuryCard>
-        <MercuryCardHeader>
-          <MercuryCardTitle>Tasa de Conversión</MercuryCardTitle>
-        </MercuryCardHeader>
-        <MercuryCardContent>
+      <LightCard>
+        <LightCardHeader>
+          <LightCardTitle>Tasa de Conversión</LightCardTitle>
+        </LightCardHeader>
+        <LightCardContent>
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={conversionByDay} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -78,15 +78,15 @@ export function AnalyticsCharts({
               />
             </LineChart>
           </ResponsiveContainer>
-        </MercuryCardContent>
-      </MercuryCard>
+        </LightCardContent>
+      </LightCard>
 
       {/* Leads by Status */}
-      <MercuryCard>
-        <MercuryCardHeader>
-          <MercuryCardTitle>Leads por Estado</MercuryCardTitle>
-        </MercuryCardHeader>
-        <MercuryCardContent>
+      <LightCard>
+        <LightCardHeader>
+          <LightCardTitle>Leads por Estado</LightCardTitle>
+        </LightCardHeader>
+        <LightCardContent>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={leadsByStatus} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -102,15 +102,15 @@ export function AnalyticsCharts({
               <Bar dataKey="count" fill="#3b82f6" radius={[8, 8, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
-        </MercuryCardContent>
-      </MercuryCard>
+        </LightCardContent>
+      </LightCard>
 
       {/* Leads by Tenant */}
-      <MercuryCard>
-        <MercuryCardHeader>
-          <MercuryCardTitle>Top Tenants</MercuryCardTitle>
-        </MercuryCardHeader>
-        <MercuryCardContent>
+      <LightCard>
+        <LightCardHeader>
+          <LightCardTitle>Top Tenants</LightCardTitle>
+        </LightCardHeader>
+        <LightCardContent>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={leadsByTenant} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -126,8 +126,8 @@ export function AnalyticsCharts({
               <Bar dataKey="count" fill="#6366f1" radius={[8, 8, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
-        </MercuryCardContent>
-      </MercuryCard>
+        </LightCardContent>
+      </LightCard>
     </div>
   );
 }

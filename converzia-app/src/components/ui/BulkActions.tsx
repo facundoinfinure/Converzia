@@ -2,7 +2,7 @@
 
 import { ReactNode } from "react";
 import { X, Check, Trash2, Edit } from "lucide-react";
-import { MercuryButton } from "./MercuryButton";
+import { LightButton } from "./LightButton";
 import { cn } from "@/lib/utils";
 
 export interface BulkAction {
@@ -49,7 +49,7 @@ export function BulkActions({ selectedCount, selectedIds, actions, onClear, clas
 
       <div className="flex items-center gap-2">
         {actions.map((action, idx) => (
-          <MercuryButton
+          <LightButton
             key={idx}
             size="sm"
             variant={action.variant || "secondary"}
@@ -65,7 +65,7 @@ export function BulkActions({ selectedCount, selectedIds, actions, onClear, clas
             }}
           >
             {action.label}
-          </MercuryButton>
+          </LightButton>
         ))}
       </div>
     </div>

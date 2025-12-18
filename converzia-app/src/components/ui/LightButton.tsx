@@ -3,10 +3,10 @@ import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * MercuryButton - Button component inspirado en el diseño de Mercury
+ * LightButton - Button component con estilo light y minimalista
  * Estilo: Clean, minimalista, con colores azules como acento
  */
-export interface MercuryButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+export interface LightButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: "primary" | "secondary" | "outline" | "ghost" | "text" | "danger";
   size?: "xs" | "sm" | "md" | "lg";
   isLoading?: boolean;
@@ -15,7 +15,7 @@ export interface MercuryButtonProps extends ButtonHTMLAttributes<HTMLButtonEleme
   fullWidth?: boolean;
 }
 
-export const MercuryButton = forwardRef<HTMLButtonElement, MercuryButtonProps>(
+export const LightButton = forwardRef<HTMLButtonElement, LightButtonProps>(
   (
     {
       className,
@@ -109,4 +109,4 @@ export const MercuryButton = forwardRef<HTMLButtonElement, MercuryButtonProps>(
   }
 );
 
-MercuryButton.displayName = "MercuryButton";
+LightButton.displayName = "LightButton";
