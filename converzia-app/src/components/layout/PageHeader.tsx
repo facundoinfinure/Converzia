@@ -137,3 +137,4 @@ export function PageContainer({
     <div className={cn("p-6", maxWidths[maxWidth], className)}>{children}</div>
   );
 }
+

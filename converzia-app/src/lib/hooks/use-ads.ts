@@ -360,3 +360,4 @@ export function useOffersForMapping() {
   return { tenantsWithOffers, isLoading };
 }
 
+

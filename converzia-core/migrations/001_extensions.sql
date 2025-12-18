@@ -12,3 +12,4 @@ CREATE EXTENSION IF NOT EXISTS "vector";  -- pgvector for embeddings
 -- CREATE EXTENSION IF NOT EXISTS "pg_trgm";  -- For fuzzy matching if needed
 
 
+

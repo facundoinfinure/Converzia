@@ -170,3 +170,4 @@ LEFT JOIN credit_ledger cl ON cl.tenant_id = t.id
 GROUP BY t.id, tenant_id;
 
 
+

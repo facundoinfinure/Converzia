@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Sparkles } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardFooter, CardSection } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -42,6 +43,7 @@ export default function NewOfferPage() {
   const { createOffer, isLoading } = useOfferMutations();
   const { options: tenantOptions, isLoading: loadingTenants } = useTenantOptions();
   const [autoSlug, setAutoSlug] = useState(true);
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
 
   const defaultTenantId = searchParams.get("tenant") || "";
 
@@ -65,11 +67,74 @@ export default function NewOfferPage() {
 
   const name = watch("name");
   const selectedTenantId = watch("tenant_id");
+  const offerType = watch("offer_type");
 
   // Auto-generate slug
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (autoSlug) {
       setValue("slug", slugify(e.target.value));
+    }
+  };
+
+  // Generate offer with AI
+  const handleGenerateWithAI = async () => {
+    if (!selectedTenantId || !offerType || !name) {
+      toast.error("Completá tenant, tipo de oferta y nombre antes de generar con AI");
+      return;
+    }
+
+    setIsGeneratingAI(true);
+    try {
+      const response = await fetch("/api/offers/generate-ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenant_id: selectedTenantId,
+          offer_type: offerType,
+          name: name,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || "Error al generar con AI");
+      }
+
+      // Llenar los campos con los datos generados
+      if (result.data.short_description) {
+        setValue("short_description", result.data.short_description);
+      }
+      if (result.data.description) {
+        setValue("description", result.data.description);
+      }
+      if (result.data.city) {
+        setValue("city", result.data.city);
+      }
+      if (result.data.zone) {
+        setValue("zone", result.data.zone);
+      }
+      if (result.data.address) {
+        setValue("address", result.data.address);
+      }
+      if (result.data.price_from) {
+        setValue("price_from", result.data.price_from);
+      }
+      if (result.data.price_to) {
+        setValue("price_to", result.data.price_to);
+      }
+      if (result.data.currency) {
+        setValue("currency", result.data.currency);
+      }
+
+      toast.success(
+        `Oferta generada con AI usando ${result.data.rag_sources_used} fuente(s) del RAG`
+      );
+    } catch (error: any) {
+      console.error("Error generating with AI:", error);
+      toast.error(error?.message || "Error al generar la oferta con AI");
+    } finally {
+      setIsGeneratingAI(false);
     }
   };
 
@@ -138,17 +203,39 @@ export default function NewOfferPage() {
                     required
                   />
 
-                  <Input
-                    label="Nombre"
-                    placeholder="Ej: Torre Central"
-                    {...register("name")}
-                    onChange={(e) => {
-                      register("name").onChange(e);
-                      handleNameChange(e);
-                    }}
-                    error={errors.name?.message}
-                    required
-                  />
+                  <div className="md:col-span-2">
+                    <div className="flex items-end gap-2">
+                      <div className="flex-1">
+                        <Input
+                          label="Nombre"
+                          placeholder="Ej: Torre Central"
+                          {...register("name")}
+                          onChange={(e) => {
+                            register("name").onChange(e);
+                            handleNameChange(e);
+                          }}
+                          error={errors.name?.message}
+                          required
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={handleGenerateWithAI}
+                        isLoading={isGeneratingAI}
+                        disabled={!selectedTenantId || !offerType || !name || isGeneratingAI}
+                        leftIcon={<Sparkles className="h-4 w-4" />}
+                        className="mb-0"
+                      >
+                        Generar con AI
+                      </Button>
+                    </div>
+                    {selectedTenantId && offerType && name && (
+                      <p className="text-xs text-slate-500 mt-1">
+                        El botón de AI buscará información en el RAG del tenant para completar la oferta
+                      </p>
+                    )}
+                  </div>
 
                   <Input
                     label="Slug"
@@ -311,4 +398,5 @@ export default function NewOfferPage() {
     </PageContainer>
   );
 }
+
 

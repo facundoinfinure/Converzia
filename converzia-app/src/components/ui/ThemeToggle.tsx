@@ -131,3 +131,4 @@ export function ThemeSetting({ className }: ThemeSettingProps) {
     </div>
   );
 }
+

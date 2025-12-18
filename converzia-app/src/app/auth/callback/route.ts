@@ -107,3 +107,4 @@ export async function GET(request: NextRequest) {
   // No code provided - redirect to login
   return NextResponse.redirect(`${origin}/login`);
 }
+

@@ -189,3 +189,4 @@ GROUP BY tenant_id, DATE_TRUNC('day', created_at)
 ORDER BY tenant_id, date;
 
 
+

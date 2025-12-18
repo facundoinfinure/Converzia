@@ -200,8 +200,8 @@ export default function AdminDashboard() {
             id,
             role,
             created_at,
-            user_profiles(full_name, email),
-            tenants(name)
+            user:user_profiles(full_name, email),
+            tenant:tenants(name)
           `)
           .eq("status", "PENDING_APPROVAL")
           .order("created_at", { ascending: false })
@@ -213,9 +213,9 @@ export default function AdminDashboard() {
           setPendingApprovals(
             approvals.map((a: any) => ({
               id: a.id,
-              name: a.user_profiles?.full_name || "Usuario",
-              email: a.user_profiles?.email || "",
-              tenant: a.tenants?.name || "Sin tenant",
+              name: (Array.isArray(a.user) ? a.user[0] : a.user)?.full_name || "Usuario",
+              email: (Array.isArray(a.user) ? a.user[0] : a.user)?.email || "",
+              tenant: (Array.isArray(a.tenant) ? a.tenant[0] : a.tenant)?.name || "Sin tenant",
               role: a.role,
               requestedAt: formatRelativeTime(a.created_at),
             }))

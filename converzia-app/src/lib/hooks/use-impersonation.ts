@@ -113,3 +113,4 @@ export function getImpersonatedTenantId(): string | null {
 export function isCurrentlyImpersonating(): boolean {
   return !!getImpersonatedTenantId();
 }
+

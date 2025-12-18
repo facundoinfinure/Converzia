@@ -206,3 +206,4 @@ export const toast = {
   warning: (message: string, title?: string) => toastHandler?.warning(message, title),
   info: (message: string, title?: string) => toastHandler?.info(message, title),
 };
+

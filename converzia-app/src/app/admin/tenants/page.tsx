@@ -166,7 +166,7 @@ export default function TenantsPage() {
           <div>
             <Link
               href={`/admin/tenants/${tenant.id}`}
-              className="font-medium text-white hover:text-primary-400 transition-colors"
+              className="font-medium text-foreground hover:text-primary-400 transition-colors"
             >
               {tenant.name}
             </Link>

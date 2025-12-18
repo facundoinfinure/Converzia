@@ -98,3 +98,4 @@ GRANT EXECUTE ON FUNCTION register_tenant TO authenticated;
 
 -- Comment for documentation
 COMMENT ON FUNCTION register_tenant IS 'Allows authenticated users to register a new tenant. Creates tenant with PENDING status and membership with PENDING_APPROVAL status.';
+

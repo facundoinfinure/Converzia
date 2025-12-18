@@ -155,3 +155,4 @@ export const updateAdMappingSchema = createAdMappingSchema.partial().omit({
 export type CreateAdMappingInput = z.infer<typeof createAdMappingSchema>;
 export type UpdateAdMappingInput = z.infer<typeof updateAdMappingSchema>;
 
+
