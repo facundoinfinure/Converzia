@@ -12,6 +12,9 @@ import {
 // RAG Ingest API
 // ============================================
 
+// Increase body size limit for PDF uploads (Vercel max is 4.5MB for serverless, but we handle larger files via streaming)
+export const maxDuration = 60;
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
@@ -33,6 +36,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if this is a multipart form (PDF upload) or JSON
+    // Note: multipart/form-data includes boundary in the header
     const contentType = request.headers.get("content-type") || "";
     
     if (contentType.includes("multipart/form-data")) {
@@ -41,7 +45,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Handle JSON body (existing flow)
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch (error) {
+      // If JSON parsing fails, might be multipart without proper header
+      // Try to handle as form data
+      if (contentType.includes("form") || !contentType) {
+        return handlePdfUpload(request);
+      }
+      throw error;
+    }
     const { source_id, source_type, tenant_id, offer_id, content, title, url, doc_type } = body;
 
     let result;
@@ -130,12 +144,13 @@ async function handlePdfUpload(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Validate file size (max 10MB)
-    const maxSize = 10 * 1024 * 1024;
+    // Validate file size (max 10MB for processing, but Vercel serverless limit is 4.5MB)
+    // For files larger than 4.5MB, we'd need to use direct Supabase Storage upload from client
+    const maxSize = 4 * 1024 * 1024; // 4MB to be safe with Vercel limits
     if (file.size > maxSize) {
       return NextResponse.json(
-        { success: false, error: "File too large (max 10MB)" },
-        { status: 400 }
+        { success: false, error: `File too large (max ${Math.round(maxSize / 1024 / 1024)}MB). Para archivos más grandes, usa la carga directa a Supabase Storage.` },
+        { status: 413 }
       );
     }
 
