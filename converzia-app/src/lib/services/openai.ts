@@ -113,7 +113,7 @@ async function buildQualificationSystemPrompt(params: {
   return `${base}\n${contextBlock}`.trim();
 }
 
-async function getOpenAI(): Promise<OpenAI> {
+export async function getOpenAI(): Promise<OpenAI> {
   const supabase = createAdminClient();
 
   const { data: setting } = await supabase
@@ -131,7 +131,7 @@ async function getOpenAI(): Promise<OpenAI> {
   return new OpenAI({ apiKey });
 }
 
-async function getModel(type: "extraction" | "response" | "embedding"): Promise<string> {
+export async function getModel(type: "extraction" | "response" | "embedding"): Promise<string> {
   const supabase = createAdminClient();
 
   const keyMap = {
