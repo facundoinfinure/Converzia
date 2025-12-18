@@ -241,7 +241,7 @@ export function usePortalOffers() {
       if (offersData) {
         // Fetch stats for each offer
         const offersWithStats = await Promise.all(
-          offersData.map(async (offer) => {
+          offersData.map(async (offer: Offer) => {
             const [
               { count: leadCount },
               { count: variantCount },
