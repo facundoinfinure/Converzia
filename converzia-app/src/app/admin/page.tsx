@@ -70,12 +70,24 @@ export default function AdminDashboard() {
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<"7d" | "30d" | "90d">("30d");
 
   useEffect(() => {
     async function fetchDashboardData() {
       const supabase = createClient();
       setIsLoading(true);
+      setError(null);
+
+      // Verify authentication first
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError || !user) {
+        console.error("Auth error:", authError);
+        setError("Error de autenticación. Por favor, recargá la página o iniciá sesión nuevamente.");
+        setIsLoading(false);
+        return;
+      }
 
       try {
         // Fetch counts in parallel
@@ -247,8 +259,9 @@ export default function AdminDashboard() {
             }))
           );
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error fetching dashboard data:", error);
+        setError(error?.message || "Error al cargar los datos del dashboard. Intentá recargar la página.");
       } finally {
         setIsLoading(false);
       }
@@ -326,6 +339,40 @@ export default function AdminDashboard() {
         title="Dashboard"
         description="Vista general de la plataforma Converzia"
       />
+
+      {error && (
+        <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400">
+          <p className="font-medium">Error al cargar datos</p>
+          <p className="text-sm mt-1">{error}</p>
+          <div className="flex gap-3 mt-3">
+            <button
+              onClick={() => window.location.reload()}
+              className="px-3 py-1.5 text-sm bg-red-500/20 hover:bg-red-500/30 rounded-lg transition-colors"
+            >
+              Recargar página
+            </button>
+            <button
+              onClick={() => {
+                // Clear localStorage and sessionStorage
+                localStorage.clear();
+                sessionStorage.clear();
+                // Clear cookies related to Supabase
+                document.cookie.split(";").forEach((c) => {
+                  const eqPos = c.indexOf("=");
+                  const name = eqPos > -1 ? c.substr(0, eqPos).trim() : c.trim();
+                  if (name.includes("supabase") || name.includes("sb-")) {
+                    document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+                  }
+                });
+                window.location.href = "/login";
+              }}
+              className="px-3 py-1.5 text-sm bg-red-500/20 hover:bg-red-500/30 rounded-lg transition-colors"
+            >
+              Limpiar cache e iniciar sesión
+            </button>
+          </div>
+        </div>
+      )}
 
       {hasNoData ? (
         <LightCard>
