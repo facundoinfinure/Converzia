@@ -27,6 +27,16 @@ interface BillingOrder {
   tenant?: { name: string };
 }
 
+interface OrderTotal {
+  total: number;
+  currency?: string;
+  created_at?: string;
+}
+
+interface CreditPurchase {
+  amount: number;
+}
+
 export function useBillingAdmin() {
   const [stats, setStats] = useState<BillingStats | null>(null);
   const [orders, setOrders] = useState<BillingOrder[]>([]);
@@ -44,7 +54,7 @@ export function useBillingAdmin() {
         .select("total, currency, created_at")
         .eq("status", "completed");
 
-      const totalRevenue = completedOrders?.reduce((sum: number, o) => sum + Number(o.total), 0) || 0;
+      const totalRevenue = completedOrders?.reduce((sum: number, o: OrderTotal) => sum + Number(o.total), 0) || 0;
 
       // Get credits sold
       const { data: creditPurchases } = await supabase
@@ -52,7 +62,7 @@ export function useBillingAdmin() {
         .select("amount")
         .eq("transaction_type", "CREDIT_PURCHASE");
 
-      const creditsSold = creditPurchases?.reduce((sum: number, c) => sum + c.amount, 0) || 0;
+      const creditsSold = creditPurchases?.reduce((sum: number, c: CreditPurchase) => sum + c.amount, 0) || 0;
 
       // Get active tenants with billing
       const { count: activeTenants } = await supabase
@@ -77,7 +87,7 @@ export function useBillingAdmin() {
         .eq("status", "completed")
         .gte("paid_at", thisMonth.toISOString());
 
-      const revenueThisMonth = thisMonthOrders?.reduce((sum: number, o) => sum + Number(o.total), 0) || 0;
+      const revenueThisMonth = thisMonthOrders?.reduce((sum: number, o: OrderTotal) => sum + Number(o.total), 0) || 0;
 
       // Get revenue last month
       const lastMonth = new Date(thisMonth);
@@ -92,7 +102,7 @@ export function useBillingAdmin() {
         .gte("paid_at", lastMonth.toISOString())
         .lt("paid_at", thisMonth.toISOString());
 
-      const revenueLastMonth = lastMonthOrders?.reduce((sum: number, o) => sum + Number(o.total), 0) || 0;
+      const revenueLastMonth = lastMonthOrders?.reduce((sum: number, o: OrderTotal) => sum + Number(o.total), 0) || 0;
 
       // Get revenue trend (last 30 days)
       const daysAgo = 30;
@@ -112,7 +122,7 @@ export function useBillingAdmin() {
           .gte("paid_at", date.toISOString())
           .lt("paid_at", nextDay.toISOString());
 
-        const dayRevenue = dayOrders?.reduce((sum: number, o) => sum + Number(o.total), 0) || 0;
+        const dayRevenue = dayOrders?.reduce((sum: number, o: OrderTotal) => sum + Number(o.total), 0) || 0;
 
         trendData.push({
           date: date.toLocaleDateString("es-AR", { month: "short", day: "numeric" }),
