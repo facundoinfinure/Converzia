@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   FileText,
   Search,
@@ -55,11 +55,7 @@ export default function KnowledgeDocumentsPage() {
   const supabase = createClient();
   const { options: tenantOptions } = useTenantOptions();
 
-  useEffect(() => {
-    fetchDocuments();
-  }, [tenantFilter, statusFilter]);
-
-  async function fetchDocuments() {
+  const fetchDocuments = useCallback(async () => {
     setIsLoading(true);
 
     try {
@@ -102,7 +98,11 @@ export default function KnowledgeDocumentsPage() {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [supabase, tenantFilter, statusFilter, toast]);
+
+  useEffect(() => {
+    fetchDocuments();
+  }, [fetchDocuments]);
 
   const statusConfig: Record<string, { label: string; variant: "success" | "warning" | "danger" | "secondary"; icon: React.ElementType }> = {
     COMPLETED: { label: "Completado", variant: "success", icon: CheckCircle },

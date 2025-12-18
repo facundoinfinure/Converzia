@@ -195,7 +195,7 @@ export default function OperationsPage() {
     }
 
     fetchData();
-  }, [supabase]);
+  }, [supabase, toast]);
 
   const handleRetryDelivery = async () => {
     if (!retryId) return;

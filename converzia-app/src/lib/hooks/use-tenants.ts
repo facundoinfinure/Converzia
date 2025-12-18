@@ -264,7 +264,7 @@ export function useTenantMutations() {
     }
   };
 
-  const updateTenant = async (id: string, data: Partial<Tenant>) => {
+  const updateTenant = async (id: string, data: Partial<Tenant> | any) => {
     setIsLoading(true);
     try {
       const { data: tenant, error } = await supabase

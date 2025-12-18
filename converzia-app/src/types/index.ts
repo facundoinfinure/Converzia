@@ -78,7 +78,7 @@ export interface AuthUser {
 // Tenant Types
 // ============================================
 
-export type TenantStatus = "ACTIVE" | "PENDING" | "SUSPENDED" | "CHURNED" | "TRIAL";
+export type TenantStatus = "ACTIVE" | "PENDING" | "SUSPENDED" | "ARCHIVED" | "CHURNED" | "TRIAL";
 
 export interface TenantWithStats extends Tenant {
   _count?: {
