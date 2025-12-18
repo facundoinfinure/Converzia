@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
 
     // Buscar información relevante del RAG para este tenant
     const query = `Información sobre ${name}, tipo de oferta ${offer_type}`;
-    const ragResults = await searchKnowledge(query, tenant_id, null, 10);
+    const ragResults = await searchKnowledge(query, tenant_id, undefined, 10);
 
     // Construir contexto del RAG
     let ragContext = "";
