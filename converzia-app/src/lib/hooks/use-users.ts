@@ -155,7 +155,13 @@ export function usePendingApprovals() {
         .eq("status", "PENDING_APPROVAL")
         .order("created_at", { ascending: false });
 
-      if (queryError) throw queryError;
+      if (queryError) {
+        // Silently handle errors in sidebar - don't show errors for badge counts
+        console.warn("Error fetching approvals (non-critical):", queryError);
+        setApprovals([]);
+        setTotal(0);
+        return;
+      }
 
       const formatted = (data || []).map((a: any) => ({
         ...a,
@@ -166,8 +172,10 @@ export function usePendingApprovals() {
       setApprovals(formatted);
       setTotal(count || 0);
     } catch (err) {
-      console.error("Error fetching approvals:", err);
-      setError(err instanceof Error ? err.message : "Error al cargar aprobaciones");
+      // Silently handle errors in sidebar - don't show errors for badge counts
+      console.warn("Error fetching approvals (non-critical):", err);
+      setApprovals([]);
+      setTotal(0);
     } finally {
       setIsLoading(false);
     }

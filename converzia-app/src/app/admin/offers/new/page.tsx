@@ -140,28 +140,35 @@ export default function NewOfferPage() {
 
   const onSubmit = async (data: CreateOfferInput) => {
     try {
-      const offer = await createOffer({
-        ...data,
+      // Prepare data - convert empty strings to null/undefined
+      const offerData: any = {
+        tenant_id: data.tenant_id,
+        name: data.name,
+        slug: data.slug,
         offer_type: data.offer_type || "PROPERTY",
         status: data.status || "DRAFT",
         country: data.country || "AR",
         currency: data.currency || "USD",
         priority: data.priority || 100,
-        description: data.description || null,
-        short_description: data.short_description || null,
-        image_url: data.image_url || null,
-        address: data.address || null,
-        city: data.city || null,
-        zone: data.zone || null,
-        latitude: data.latitude || null,
-        longitude: data.longitude || null,
-        price_from: data.price_from || null,
-        price_to: data.price_to || null,
-      });
+        description: data.description && data.description.trim() ? data.description.trim() : null,
+        short_description: data.short_description && data.short_description.trim() ? data.short_description.trim() : null,
+        image_url: data.image_url && data.image_url.trim() ? data.image_url.trim() : null,
+        address: data.address && data.address.trim() ? data.address.trim() : null,
+        city: data.city && data.city.trim() ? data.city.trim() : null,
+        zone: data.zone && data.zone.trim() ? data.zone.trim() : null,
+        latitude: data.latitude !== undefined && data.latitude !== null ? Number(data.latitude) : null,
+        longitude: data.longitude !== undefined && data.longitude !== null ? Number(data.longitude) : null,
+        price_from: data.price_from !== undefined && data.price_from !== null ? Number(data.price_from) : null,
+        price_to: data.price_to !== undefined && data.price_to !== null ? Number(data.price_to) : null,
+      };
+
+      const offer = await createOffer(offerData);
       toast.success("Oferta creada correctamente");
       router.push(`/admin/offers/${(offer as any).id}`);
-    } catch (error) {
-      toast.error("Error al crear la oferta");
+    } catch (error: any) {
+      console.error("Error creating offer:", error);
+      const errorMessage = error?.message || "Error al crear la oferta";
+      toast.error(errorMessage);
     }
   };
 

@@ -96,12 +96,25 @@ ${ragContext ? `\n\nCONTEXTO DEL RAG:\n${ragContext}` : "\n\nADVERTENCIA: No se 
       })),
     };
 
-    return NextResponse.json({ success: true, data: result });
+    return NextResponse.json(
+      { success: true, data: result },
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
   } catch (error: any) {
     console.error("Error generating offer with AI:", error);
     return NextResponse.json(
-      { error: error?.message || "Error al generar la oferta con AI" },
-      { status: 500 }
+      { success: false, error: error?.message || "Error al generar la oferta con AI" },
+      {
+        status: 500,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
     );
   }
 }

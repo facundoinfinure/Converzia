@@ -270,14 +270,45 @@ export function useOfferMutations() {
   const createOffer = async (data: Partial<Offer>) => {
     setIsLoading(true);
     try {
+      // Clean data - remove undefined values and ensure proper types
+      const cleanData: any = {};
+      Object.keys(data).forEach((key) => {
+        const value = (data as any)[key];
+        if (value !== undefined && value !== null && value !== "") {
+          cleanData[key] = value;
+        }
+      });
+
+      // Ensure required fields
+      if (!cleanData.tenant_id) {
+        throw new Error("tenant_id es requerido");
+      }
+      if (!cleanData.name) {
+        throw new Error("name es requerido");
+      }
+      if (!cleanData.slug) {
+        throw new Error("slug es requerido");
+      }
+
       const { data: offer, error } = await supabase
         .from("offers")
-        .insert(data)
+        .insert(cleanData)
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase error creating offer:", error);
+        throw new Error(error.message || "Error al crear la oferta");
+      }
+
+      if (!offer) {
+        throw new Error("No se recibió respuesta del servidor");
+      }
+
       return offer;
+    } catch (error: any) {
+      console.error("Error in createOffer:", error);
+      throw error instanceof Error ? error : new Error("Error desconocido al crear la oferta");
     } finally {
       setIsLoading(false);
     }
