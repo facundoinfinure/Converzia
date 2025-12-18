@@ -221,6 +221,28 @@ export default function KnowledgePage() {
         }
       }
 
+      // If it's a URL, trigger ingestion via API
+      if (newSource.source_type === "URL" && newSource.url) {
+        const response = await fetch("/api/rag/ingest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            source_id: source.id,
+            url: newSource.url,
+            title: newSource.name,
+            doc_type: "WEBSITE",
+          }),
+        });
+
+        const result = await response.json();
+        if (!result.success) {
+          console.warn("Ingestion warning:", result.error);
+          toast.error(result.error || "Error al procesar URL");
+        } else {
+          toast.success(`URL procesada: ${result.chunkCount || 0} chunks creados`);
+        }
+      }
+
       toast.success("Fuente de conocimiento agregada");
       closeAndResetModal();
       fetchSources();

@@ -30,7 +30,9 @@ import { ActionDropdown } from "@/components/ui/Dropdown";
 import { StatCard, StatsGrid } from "@/components/ui/StatCard";
 import { Skeleton, FormSkeleton } from "@/components/ui/Skeleton";
 import { Alert } from "@/components/ui/Alert";
-import { ConfirmModal } from "@/components/ui/Modal";
+import { Modal, ConfirmModal } from "@/components/ui/Modal";
+import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
 import { useTenant, useTenantMutations } from "@/lib/hooks/use-tenants";
 import { formatDate, formatCurrency } from "@/lib/utils";
@@ -64,6 +66,10 @@ export default function TenantDetailPage({ params }: Props) {
   const { tenant, pricing, isLoading, error, refetch } = useTenant(id);
   const { updateTenantStatus, isLoading: isMutating } = useTenantMutations();
   const [showStatusModal, setShowStatusModal] = useState<"activate" | "suspend" | null>(null);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("VIEWER");
+  const [isInviting, setIsInviting] = useState(false);
 
   // Integration state
   const [integrations, setIntegrations] = useState<TenantIntegration[]>([]);
@@ -130,6 +136,47 @@ export default function TenantDetailPage({ params }: Props) {
       refetch();
     } catch (error) {
       toast.error("Error al actualizar el tenant");
+    }
+  };
+
+  const handleInvite = async () => {
+    if (!inviteEmail || !tenant) return;
+
+    setIsInviting(true);
+
+    try {
+      // Check if user exists
+      const { data: existingUser } = await supabase
+        .from("user_profiles")
+        .select("id")
+        .eq("email", inviteEmail)
+        .single();
+
+      if (existingUser) {
+        // User exists, create membership
+        const { error } = await supabase.from("tenant_members").insert({
+          tenant_id: tenant.id,
+          user_id: existingUser.id,
+          role: inviteRole,
+          status: "PENDING_APPROVAL",
+        });
+
+        if (error) throw error;
+        toast.success("Invitación enviada. El usuario debe ser aprobado por un admin de Converzia.");
+      } else {
+        // User doesn't exist, would need to invite via email
+        toast.info("El usuario no existe. Cuando se registre podrá solicitar acceso.");
+      }
+
+      setShowInviteModal(false);
+      setInviteEmail("");
+      setInviteRole("VIEWER");
+      refetch();
+    } catch (error: any) {
+      console.error("Error inviting user:", error);
+      toast.error(error.message || "Error al enviar invitación");
+    } finally {
+      setIsInviting(false);
     }
   };
 
@@ -417,7 +464,7 @@ export default function TenantDetailPage({ params }: Props) {
         <TabContent value="users">
           <Card>
             <CardHeader action={
-              <Button size="sm">Invitar usuario</Button>
+              <Button size="sm" onClick={() => setShowInviteModal(true)}>Invitar usuario</Button>
             }>
               <CardTitle>Miembros del equipo</CardTitle>
             </CardHeader>
@@ -493,6 +540,56 @@ export default function TenantDetailPage({ params }: Props) {
           existingIntegrationId={integrationModal.existingId}
         />
       )}
+
+      {/* Invite User Modal */}
+      <Modal
+        isOpen={showInviteModal}
+        onClose={() => {
+          setShowInviteModal(false);
+          setInviteEmail("");
+          setInviteRole("VIEWER");
+        }}
+        title="Invitar usuario"
+        description="Ingresá el email del usuario que querés invitar"
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowInviteModal(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleInvite}
+              isLoading={isInviting}
+              disabled={!inviteEmail}
+            >
+              Enviar invitación
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Input
+            label="Email"
+            type="email"
+            placeholder="usuario@empresa.com"
+            value={inviteEmail}
+            onChange={(e) => setInviteEmail(e.target.value)}
+            leftIcon={<Mail className="h-4 w-4" />}
+            required
+          />
+          <Select
+            label="Rol"
+            options={[
+              { value: "VIEWER", label: "Viewer" },
+              { value: "BILLING", label: "Billing" },
+              { value: "ADMIN", label: "Admin" },
+              { value: "OWNER", label: "Owner" },
+            ]}
+            value={inviteRole}
+            onChange={(e) => setInviteRole(e.target.value)}
+          />
+        </div>
+      </Modal>
     </PageContainer>
   );
 }

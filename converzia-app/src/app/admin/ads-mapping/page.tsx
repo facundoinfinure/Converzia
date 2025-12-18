@@ -10,6 +10,7 @@ import {
   Clock,
   RefreshCw,
   Check,
+  Edit,
 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -38,6 +39,7 @@ export default function AdsMappingPage() {
   const [selectedTenantId, setSelectedTenantId] = useState("");
   const [selectedOfferId, setSelectedOfferId] = useState("");
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [editingMapping, setEditingMapping] = useState<typeof mappings[0] | null>(null);
 
   const { unmappedAds, total: unmappedTotal, isLoading: loadingUnmapped, error: unmappedError, refetch: refetchUnmapped } = useUnmappedAds();
   const { mappings, total: mappingsTotal, isLoading: loadingMappings, error: mappingsError, refetch: refetchMappings } = useAdMappings({
@@ -45,7 +47,7 @@ export default function AdsMappingPage() {
     page,
     pageSize: 20,
   });
-  const { createMapping, deleteMapping, reprocessLeads, isLoading: isMutating } = useAdMappingMutations();
+  const { createMapping, updateMapping, deleteMapping, reprocessLeads, isLoading: isMutating } = useAdMappingMutations();
   const { tenantsWithOffers, isLoading: loadingOffers } = useOffersForMapping();
 
   // Get offers for selected tenant
@@ -92,6 +94,34 @@ export default function AdsMappingPage() {
       toast.success("Leads reprocesados correctamente");
     } catch (error) {
       toast.error("Error al reprocesar leads");
+    }
+  };
+
+  const handleEditMapping = (mapping: typeof mappings[0]) => {
+    setEditingMapping(mapping);
+    setSelectedTenantId(mapping.tenant_id);
+    // Find the tenant and set the offer
+    const tenant = tenantsWithOffers.find((t) => t.id === mapping.tenant_id);
+    if (tenant) {
+      setSelectedOfferId(mapping.offer_id);
+    }
+  };
+
+  const handleUpdateMapping = async () => {
+    if (!editingMapping || !selectedTenantId || !selectedOfferId) return;
+
+    try {
+      await updateMapping(editingMapping.id, {
+        tenant_id: selectedTenantId,
+        offer_id: selectedOfferId,
+      });
+      toast.success("Mapeo actualizado correctamente");
+      setEditingMapping(null);
+      setSelectedTenantId("");
+      setSelectedOfferId("");
+      refetchMappings();
+    } catch (error) {
+      toast.error("Error al actualizar el mapeo");
     }
   };
 
@@ -196,6 +226,11 @@ export default function AdsMappingPage() {
       cell: (m) => (
         <ActionDropdown
           items={[
+            {
+              label: "Editar",
+              onClick: () => handleEditMapping(m),
+              icon: <Edit className="h-4 w-4" />,
+            },
             {
               label: "Reprocesar leads",
               onClick: () => handleReprocess(m.ad_id),
@@ -401,6 +436,82 @@ export default function AdsMappingPage() {
           </div>
         )}
       </Modal>
+
+      {/* Edit Mapping Modal */}
+      {editingMapping && (
+        <Modal
+          isOpen={!!editingMapping}
+          onClose={() => {
+            setEditingMapping(null);
+            setSelectedTenantId("");
+            setSelectedOfferId("");
+          }}
+          title="Editar mapeo de Ad"
+          size="md"
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => {
+                setEditingMapping(null);
+                setSelectedTenantId("");
+                setSelectedOfferId("");
+              }}>
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleUpdateMapping}
+                isLoading={isMutating}
+                disabled={!selectedTenantId || !selectedOfferId}
+              >
+                Actualizar
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Ad ID
+              </label>
+              <div className="p-3 bg-slate-800 rounded-lg text-slate-400">
+                {editingMapping.ad_id}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Tenant *
+              </label>
+              <SelectDropdown
+                value={selectedTenantId}
+                onChange={(val) => {
+                  setSelectedTenantId(val);
+                  setSelectedOfferId("");
+                }}
+                options={tenantsWithOffers.map((t) => ({
+                  value: t.id,
+                  label: t.name,
+                  description: `${t.offers.length} ofertas`,
+                }))}
+                placeholder="Seleccionar tenant"
+                disabled={loadingOffers}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Oferta *
+              </label>
+              <SelectDropdown
+                value={selectedOfferId}
+                onChange={setSelectedOfferId}
+                options={offerOptions}
+                placeholder={selectedTenantId ? "Seleccionar oferta" : "Primero seleccioná un tenant"}
+                disabled={!selectedTenantId}
+              />
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {/* Delete Mapping Modal */}
       <ConfirmModal

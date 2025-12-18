@@ -386,7 +386,14 @@ export default function OfferDetailPage({ params }: Props) {
                   </Link>
                 } />
                 <InfoRow label="Tipo" value={offer.offer_type} />
-                <InfoRow label="Prioridad" value={offer.priority} />
+                <InfoRow 
+                  label="Prioridad" 
+                  value={
+                    (offer as any)._priority
+                      ? `${(offer as any)._priority.position} de ${(offer as any)._priority.total}`
+                      : offer.priority
+                  } 
+                />
                 <InfoRow label="Creado" value={formatDate(offer.created_at)} />
               </CardContent>
             </Card>

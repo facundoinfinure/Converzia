@@ -204,6 +204,29 @@ export function useOffer(id: string | null): UseOfferResult {
         .select("id", { count: "exact", head: true })
         .eq("offer_id", id);
 
+      // Calculate priority position (order by priority desc, then by created_at for deterministic order)
+      // Note: Supabase doesn't support multiple order() calls, so we'll sort in JS
+      const { data: allTenantOffers } = await supabase
+        .from("offers")
+        .select("id, priority, created_at")
+        .eq("tenant_id", offerData.tenant_id);
+
+      let priorityPosition = 1;
+      let totalOffers = 0;
+      
+      if (allTenantOffers) {
+        // Sort by priority desc, then by created_at asc for deterministic order
+        const sorted = [...allTenantOffers].sort((a, b) => {
+          if (b.priority !== a.priority) {
+            return b.priority - a.priority;
+          }
+          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        });
+        
+        totalOffers = sorted.length;
+        priorityPosition = sorted.findIndex((o) => o.id === id) + 1;
+      }
+
       setOffer({
         ...offerData,
         tenant: Array.isArray(offerData.tenant) ? offerData.tenant[0] : offerData.tenant,
@@ -212,6 +235,10 @@ export function useOffer(id: string | null): UseOfferResult {
           units: unitsData?.length || 0,
           leads: leadsCount || 0,
           ads: adsData?.length || 0,
+        },
+        _priority: {
+          position: priorityPosition,
+          total: totalOffers,
         },
       });
       setVariants(variantsData || []);
