@@ -41,51 +41,73 @@ export function useBillingAdmin() {
   const [stats, setStats] = useState<BillingStats | null>(null);
   const [orders, setOrders] = useState<BillingOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const supabase = createClient();
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
+    setError(null);
 
     try {
       // Get total revenue (sum of completed orders)
-      const { data: completedOrders } = await supabase
+      const { data: completedOrders, error: completedError } = await supabase
         .from("billing_orders")
         .select("total, currency, created_at")
         .eq("status", "completed");
 
+      if (completedError) {
+        console.error("Error fetching completed orders:", completedError);
+      }
+
       const totalRevenue = completedOrders?.reduce((sum: number, o: OrderTotal) => sum + Number(o.total), 0) || 0;
 
       // Get credits sold
-      const { data: creditPurchases } = await supabase
+      const { data: creditPurchases, error: creditError } = await supabase
         .from("credit_ledger")
         .select("amount")
         .eq("transaction_type", "CREDIT_PURCHASE");
 
+      if (creditError) {
+        console.error("Error fetching credit purchases:", creditError);
+      }
+
       const creditsSold = creditPurchases?.reduce((sum: number, c: CreditPurchase) => sum + c.amount, 0) || 0;
 
       // Get active tenants with billing
-      const { count: activeTenants } = await supabase
+      const { count: activeTenants, error: tenantsError } = await supabase
         .from("tenants")
         .select("id", { count: "exact", head: true })
         .eq("status", "ACTIVE");
 
+      if (tenantsError) {
+        console.error("Error fetching active tenants:", tenantsError);
+      }
+
       // Get pending payments
-      const { count: pendingPayments } = await supabase
+      const { count: pendingPayments, error: pendingError } = await supabase
         .from("billing_orders")
         .select("id", { count: "exact", head: true })
         .eq("status", "pending");
+
+      if (pendingError) {
+        console.error("Error fetching pending payments:", pendingError);
+      }
 
       // Get revenue this month
       const thisMonth = new Date();
       thisMonth.setDate(1);
       thisMonth.setHours(0, 0, 0, 0);
 
-      const { data: thisMonthOrders } = await supabase
+      const { data: thisMonthOrders, error: thisMonthError } = await supabase
         .from("billing_orders")
         .select("total")
         .eq("status", "completed")
         .gte("paid_at", thisMonth.toISOString());
+
+      if (thisMonthError) {
+        console.error("Error fetching this month orders:", thisMonthError);
+      }
 
       const revenueThisMonth = thisMonthOrders?.reduce((sum: number, o: OrderTotal) => sum + Number(o.total), 0) || 0;
 
@@ -95,12 +117,16 @@ export function useBillingAdmin() {
       const lastMonthEnd = new Date(thisMonth);
       lastMonthEnd.setDate(0);
 
-      const { data: lastMonthOrders } = await supabase
+      const { data: lastMonthOrders, error: lastMonthError } = await supabase
         .from("billing_orders")
         .select("total")
         .eq("status", "completed")
         .gte("paid_at", lastMonth.toISOString())
         .lt("paid_at", thisMonth.toISOString());
+
+      if (lastMonthError) {
+        console.error("Error fetching last month orders:", lastMonthError);
+      }
 
       const revenueLastMonth = lastMonthOrders?.reduce((sum: number, o: OrderTotal) => sum + Number(o.total), 0) || 0;
 
@@ -115,12 +141,16 @@ export function useBillingAdmin() {
         const nextDay = new Date(date);
         nextDay.setDate(nextDay.getDate() + 1);
 
-        const { data: dayOrders } = await supabase
+        const { data: dayOrders, error: dayError } = await supabase
           .from("billing_orders")
           .select("total")
           .eq("status", "completed")
           .gte("paid_at", date.toISOString())
           .lt("paid_at", nextDay.toISOString());
+
+        if (dayError) {
+          console.error("Error fetching day orders:", dayError);
+        }
 
         const dayRevenue = dayOrders?.reduce((sum: number, o: OrderTotal) => sum + Number(o.total), 0) || 0;
 
@@ -141,7 +171,7 @@ export function useBillingAdmin() {
       });
 
       // Fetch recent orders
-      const { data: ordersData } = await supabase
+      const { data: ordersData, error: ordersError } = await supabase
         .from("billing_orders")
         .select(`
           *,
@@ -150,7 +180,10 @@ export function useBillingAdmin() {
         .order("created_at", { ascending: false })
         .limit(50);
 
-      if (ordersData) {
+      if (ordersError) {
+        console.error("Error fetching orders:", ordersError);
+        setError(ordersError.message || "Error al cargar órdenes");
+      } else if (ordersData) {
         setOrders(
           ordersData.map((o: any) => ({
             ...o,
@@ -160,6 +193,7 @@ export function useBillingAdmin() {
       }
     } catch (error) {
       console.error("Error fetching billing data:", error);
+      setError(error instanceof Error ? error.message : "Error al cargar datos de facturación");
     } finally {
       setIsLoading(false);
     }
@@ -169,5 +203,5 @@ export function useBillingAdmin() {
     fetchData();
   }, [fetchData]);
 
-  return { stats, orders, isLoading, refetch: fetchData };
+  return { stats, orders, isLoading, error, refetch: fetchData };
 }

@@ -80,10 +80,10 @@ export default function AdminDashboard() {
       try {
         // Fetch counts in parallel
         const [
-          { count: totalLeads },
-          { count: activeTenants },
-          { count: pendingApprovals },
-          { data: unmappedLeads },
+          { count: totalLeads, error: leadsError },
+          { count: activeTenants, error: tenantsError },
+          { count: pendingApprovals, error: approvalsError },
+          { data: unmappedLeads, error: unmappedError },
         ] = await Promise.all([
           supabase.from("lead_offers").select("id", { count: "exact", head: true }),
           supabase.from("tenants").select("id", { count: "exact", head: true }).eq("status", "ACTIVE"),
@@ -91,33 +91,53 @@ export default function AdminDashboard() {
           supabase.from("lead_offers").select("id").eq("status", "PENDING_MAPPING"),
         ]);
 
+        if (leadsError || tenantsError || approvalsError || unmappedError) {
+          console.error("Error fetching dashboard counts:", { leadsError, tenantsError, approvalsError, unmappedError });
+        }
+
         // Get today's leads
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        const { count: leadsToday } = await supabase
+        const { count: leadsToday, error: leadsTodayError } = await supabase
           .from("lead_offers")
           .select("id", { count: "exact", head: true })
           .gte("created_at", today.toISOString());
 
+        if (leadsTodayError) {
+          console.error("Error fetching today's leads:", leadsTodayError);
+        }
+
         // Get lead ready count for rate
-        const { count: leadReadyCount } = await supabase
+        const { count: leadReadyCount, error: leadReadyError } = await supabase
           .from("lead_offers")
           .select("id", { count: "exact", head: true })
           .in("status", ["LEAD_READY", "SENT_TO_DEVELOPER"]);
 
+        if (leadReadyError) {
+          console.error("Error fetching lead ready count:", leadReadyError);
+        }
+
         // Get low credit tenants
-        const { data: creditData } = await supabase
+        const { data: creditData, error: creditError } = await supabase
           .from("tenant_credit_balance")
           .select("tenant_id, current_balance")
           .lt("current_balance", 10);
 
+        if (creditError) {
+          console.error("Error fetching credit data:", creditError);
+        }
+
         // Calculate average response time (real calculation)
-        const { data: responseTimes } = await supabase
+        const { data: responseTimes, error: responseTimesError } = await supabase
           .from("lead_offers")
           .select("created_at, first_response_at")
           .not("first_response_at", "is", null)
           .gte("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
           .limit(100);
+
+        if (responseTimesError) {
+          console.error("Error fetching response times:", responseTimesError);
+        }
 
         let avgResponseTime = "N/A";
         if (responseTimes && responseTimes.length > 0) {
@@ -145,11 +165,15 @@ export default function AdminDashboard() {
           const nextDay = new Date(date);
           nextDay.setDate(nextDay.getDate() + 1);
 
-          const { count } = await supabase
+          const { count, error: trendError } = await supabase
             .from("lead_offers")
             .select("id", { count: "exact", head: true })
             .gte("created_at", date.toISOString())
             .lt("created_at", nextDay.toISOString());
+
+          if (trendError) {
+            console.error("Error fetching trend data:", trendError);
+          }
 
           trendData.push({
             date: date.toLocaleDateString("es-AR", { month: "short", day: "numeric" }),
@@ -170,7 +194,7 @@ export default function AdminDashboard() {
         });
 
         // Fetch pending approvals
-        const { data: approvals } = await supabase
+        const { data: approvals, error: approvalsDataError } = await supabase
           .from("tenant_members")
           .select(`
             id,
@@ -183,7 +207,9 @@ export default function AdminDashboard() {
           .order("created_at", { ascending: false })
           .limit(5);
 
-        if (approvals) {
+        if (approvalsDataError) {
+          console.error("Error fetching approvals:", approvalsDataError);
+        } else if (approvals) {
           setPendingApprovals(
             approvals.map((a: any) => ({
               id: a.id,
@@ -197,7 +223,7 @@ export default function AdminDashboard() {
         }
 
         // Fetch recent activity (simplified - in production would be from activity_logs)
-        const { data: recentLeads } = await supabase
+        const { data: recentLeads, error: recentLeadsError } = await supabase
           .from("lead_offers")
           .select(`
             id,
@@ -208,7 +234,9 @@ export default function AdminDashboard() {
           .order("created_at", { ascending: false })
           .limit(5);
 
-        if (recentLeads) {
+        if (recentLeadsError) {
+          console.error("Error fetching recent leads:", recentLeadsError);
+        } else if (recentLeads) {
           setRecentActivity(
             recentLeads.map((l: any) => ({
               id: l.id,

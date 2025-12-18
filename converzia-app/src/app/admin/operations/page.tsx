@@ -81,10 +81,10 @@ export default function OperationsPage() {
       try {
         // Fetch delivery stats
         const [
-          { count: totalDeliveries },
-          { count: successfulDeliveries },
-          { count: failedDeliveries },
-          { count: pendingDeliveries },
+          { count: totalDeliveries, error: totalError },
+          { count: successfulDeliveries, error: successError },
+          { count: failedDeliveries, error: failedError },
+          { count: pendingDeliveries, error: pendingError },
         ] = await Promise.all([
           supabase.from("deliveries").select("id", { count: "exact", head: true }),
           supabase.from("deliveries").select("id", { count: "exact", head: true }).eq("status", "DELIVERED"),
@@ -92,20 +92,32 @@ export default function OperationsPage() {
           supabase.from("deliveries").select("id", { count: "exact", head: true }).eq("status", "PENDING"),
         ]);
 
+        if (totalError || successError || failedError || pendingError) {
+          console.error("Error fetching delivery stats:", { totalError, successError, failedError, pendingError });
+        }
+
         // Fetch refund stats
-        const { data: refundData } = await supabase
+        const { data: refundData, error: refundError } = await supabase
           .from("credit_ledger")
           .select("amount")
           .eq("transaction_type", "CREDIT_REFUND");
+
+        if (refundError) {
+          console.error("Error fetching refund stats:", refundError);
+        }
 
         const totalRefunds = refundData?.length || 0;
         const refundAmount = refundData?.reduce((sum: number, r: any) => sum + Math.abs(r.amount), 0) || 0;
 
         // Fetch active conversations
-        const { count: activeConversations } = await supabase
+        const { count: activeConversations, error: conversationsError } = await supabase
           .from("lead_offers")
           .select("id", { count: "exact", head: true })
           .in("status", ["CONTACTED", "ENGAGED", "QUALIFYING"]);
+
+        if (conversationsError) {
+          console.error("Error fetching active conversations:", conversationsError);
+        }
 
         setStats({
           totalDeliveries: totalDeliveries || 0,
@@ -119,7 +131,7 @@ export default function OperationsPage() {
         });
 
         // Fetch recent deliveries
-        const { data: deliveriesData } = await supabase
+        const { data: deliveriesData, error: deliveriesError } = await supabase
           .from("deliveries")
           .select(`
             id,
@@ -136,7 +148,9 @@ export default function OperationsPage() {
           .order("created_at", { ascending: false })
           .limit(50);
 
-        if (deliveriesData) {
+        if (deliveriesError) {
+          console.error("Error fetching deliveries:", deliveriesError);
+        } else if (deliveriesData) {
           setDeliveries(
             deliveriesData.map((d: any) => ({
               ...d,
@@ -148,7 +162,7 @@ export default function OperationsPage() {
         }
 
         // Fetch recent refunds
-        const { data: refundsData } = await supabase
+        const { data: refundsData, error: refundsDataError } = await supabase
           .from("credit_ledger")
           .select(`
             id,
@@ -162,7 +176,9 @@ export default function OperationsPage() {
           .order("created_at", { ascending: false })
           .limit(20);
 
-        if (refundsData) {
+        if (refundsDataError) {
+          console.error("Error fetching refunds:", refundsDataError);
+        } else if (refundsData) {
           setRefunds(
             refundsData.map((r: any) => ({
               ...r,
@@ -172,6 +188,7 @@ export default function OperationsPage() {
         }
       } catch (error) {
         console.error("Error fetching operations data:", error);
+        toast.error("Error al cargar datos de operaciones");
       } finally {
         setIsLoading(false);
       }

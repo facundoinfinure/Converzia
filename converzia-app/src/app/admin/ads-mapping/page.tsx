@@ -39,8 +39,8 @@ export default function AdsMappingPage() {
   const [selectedOfferId, setSelectedOfferId] = useState("");
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const { unmappedAds, total: unmappedTotal, isLoading: loadingUnmapped, refetch: refetchUnmapped } = useUnmappedAds();
-  const { mappings, total: mappingsTotal, isLoading: loadingMappings, refetch: refetchMappings } = useAdMappings({
+  const { unmappedAds, total: unmappedTotal, isLoading: loadingUnmapped, error: unmappedError, refetch: refetchUnmapped } = useUnmappedAds();
+  const { mappings, total: mappingsTotal, isLoading: loadingMappings, error: mappingsError, refetch: refetchMappings } = useAdMappings({
     search,
     page,
     pageSize: 20,
@@ -226,6 +226,12 @@ export default function AdsMappingPage() {
           { label: "Mapeo de Ads" },
         ]}
       />
+
+      {(unmappedError || mappingsError) && (
+        <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400">
+          {unmappedError || mappingsError}
+        </div>
+      )}
 
       {/* Alert if unmapped */}
       {unmappedTotal > 0 && (

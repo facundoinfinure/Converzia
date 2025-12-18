@@ -44,7 +44,7 @@ export default function TenantsPage() {
   const [selectedTenants, setSelectedTenants] = useState<string[]>([]);
   const [filterValues, setFilterValues] = useState<Record<string, any>>({});
 
-  const { tenants, total, isLoading, refetch } = useTenants({
+  const { tenants, total, isLoading, error, refetch } = useTenants({
     search,
     status: statusFilter || undefined,
     page,
@@ -323,6 +323,12 @@ export default function TenantsPage() {
           </Button>
         }
       />
+
+      {error && (
+        <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400">
+          {error}
+        </div>
+      )}
 
       <Card>
         {/* Filters */}

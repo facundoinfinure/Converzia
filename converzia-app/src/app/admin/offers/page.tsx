@@ -47,7 +47,7 @@ export default function OffersPage() {
   const [page, setPage] = useState(1);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const { offers, total, isLoading, refetch } = useOffers({
+  const { offers, total, isLoading, error, refetch } = useOffers({
     tenantId: tenantFilter || undefined,
     search,
     status: statusFilter || undefined,
@@ -236,6 +236,12 @@ export default function OffersPage() {
           </Button>
         }
       />
+
+      {error && (
+        <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400">
+          {error}
+        </div>
+      )}
 
       <Card>
         {/* Filters */}

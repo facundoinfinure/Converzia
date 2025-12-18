@@ -25,7 +25,7 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 
 export default function BillingPage() {
   const router = useRouter();
-  const { stats, orders, isLoading, refetch } = useBillingAdmin();
+  const { stats, orders, isLoading, error, refetch } = useBillingAdmin();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
 
@@ -157,6 +157,12 @@ export default function BillingPage() {
           </LightButton>
         }
       />
+
+      {error && (
+        <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400">
+          {error}
+        </div>
+      )}
 
       {stats && (
         <BillingStats
