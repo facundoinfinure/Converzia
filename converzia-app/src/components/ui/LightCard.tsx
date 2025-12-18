@@ -27,10 +27,10 @@ export const LightCard = forwardRef<HTMLDivElement, LightCardProps>(
     ref
   ) => {
     const variants = {
-      default: "bg-white border border-gray-200 shadow-sm",
-      elevated: "bg-white border border-gray-200 shadow-md",
-      outlined: "bg-transparent border border-gray-200",
-      subtle: "bg-gray-50 border border-gray-100",
+      default: "bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 shadow-sm",
+      elevated: "bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 shadow-md",
+      outlined: "bg-transparent border border-gray-200 dark:border-slate-700",
+      subtle: "bg-gray-50 dark:bg-slate-800/50 border border-gray-100 dark:border-slate-700",
     };
 
     const paddings = {
@@ -75,11 +75,11 @@ export function LightCardHeader({ children, className, action }: LightCardHeader
   return (
     <div
       className={cn(
-        "flex items-center justify-between pb-4 border-b border-gray-200",
+        "flex items-center justify-between pb-4 border-b border-gray-200 dark:border-slate-700",
         className
       )}
     >
-      <div className="text-gray-900">{children}</div>
+      <div className="text-gray-900 dark:text-slate-100">{children}</div>
       {action && <div>{action}</div>}
     </div>
   );
@@ -97,7 +97,7 @@ interface LightCardTitleProps {
 
 export function LightCardTitle({ children, className, as: Tag = "h3" }: LightCardTitleProps) {
   return (
-    <Tag className={cn("text-lg font-semibold text-gray-900", className)}>
+    <Tag className={cn("text-lg font-semibold text-gray-900 dark:text-slate-100", className)}>
       {children}
     </Tag>
   );
@@ -114,7 +114,7 @@ interface LightCardDescriptionProps {
 
 export function LightCardDescription({ children, className }: LightCardDescriptionProps) {
   return (
-    <p className={cn("text-sm text-gray-600 mt-1", className)}>{children}</p>
+    <p className={cn("text-sm text-gray-600 dark:text-slate-400 mt-1", className)}>{children}</p>
   );
 }
 
@@ -144,7 +144,7 @@ export function LightCardFooter({ children, className }: LightCardFooterProps) {
   return (
     <div
       className={cn(
-        "flex items-center justify-end gap-3 pt-4 border-t border-gray-200",
+        "flex items-center justify-end gap-3 pt-4 border-t border-gray-200 dark:border-slate-700",
         className
       )}
     >

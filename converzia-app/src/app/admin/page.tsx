@@ -388,8 +388,8 @@ export default function AdminDashboard() {
           {/* Quick Actions */}
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-sm font-medium text-gray-600 mb-1">Bienvenido</h2>
-              <p className="text-2xl font-semibold text-gray-900">Acciones rápidas</p>
+              <h2 className="text-sm font-medium text-gray-600 dark:text-slate-400 mb-1">Bienvenido</h2>
+              <p className="text-2xl font-semibold text-gray-900 dark:text-slate-100">Acciones rápidas</p>
             </div>
             <Link href="#" className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1">
               Personalizar
@@ -399,30 +399,30 @@ export default function AdminDashboard() {
           <QuickActions actions={quickActions} />
 
           {/* Main Metric Card */}
-          <LightCard className="border-blue-200 bg-gradient-to-br from-blue-50 to-white">
+          <LightCard className="border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50 to-white dark:from-slate-800 dark:to-slate-800">
             <LightCardHeader>
               <div className="flex items-center justify-between w-full">
                 <div>
-                  <LightCardTitle className="text-gray-600 text-sm font-medium">
+                  <LightCardTitle className="text-gray-600 dark:text-slate-400 text-sm font-medium">
                     Total Leads
                   </LightCardTitle>
                   <div className="flex items-baseline gap-2 mt-2">
-                    <span className="text-4xl font-bold text-gray-900">
+                    <span className="text-4xl font-bold text-gray-900 dark:text-slate-100">
                       {stats?.totalLeads.toLocaleString() || "0"}
                     </span>
-                    <span className="text-gray-600">leads</span>
+                    <span className="text-gray-600 dark:text-slate-400">leads</span>
                   </div>
                   <div className="flex items-center gap-4 mt-4">
                     <select
                       value={timeRange}
                       onChange={(e) => setTimeRange(e.target.value as any)}
-                      className="text-sm text-gray-600 bg-white border border-gray-200 rounded-md px-2 py-1"
+                      className="text-sm text-gray-600 dark:text-slate-300 bg-white dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-md px-2 py-1"
                     >
                       <option value="7d">Últimos 7 días</option>
                       <option value="30d">Últimos 30 días</option>
                       <option value="90d">Últimos 90 días</option>
                     </select>
-                    <div className="text-sm text-gray-600">
+                    <div className="text-sm text-gray-600 dark:text-slate-400">
                       {stats?.leadsToday || 0} leads hoy
                     </div>
                   </div>
@@ -480,10 +480,10 @@ export default function AdminDashboard() {
                     <AlertTriangle className="h-6 w-6 text-amber-600" />
                   </div>
                   <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-gray-900">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
                       {stats?.unmappedAds} Ads sin mapear
                     </h3>
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm text-gray-600 dark:text-slate-400">
                       Hay leads esperando ser procesados. Mapeá los ads a ofertas para iniciar la calificación.
                     </p>
                   </div>
@@ -513,21 +513,21 @@ export default function AdminDashboard() {
                       return (
                         <div
                           key={activity.id}
-                          className="flex items-center gap-4 px-6 py-4 hover:bg-gray-50 transition-colors"
+                          className="flex items-center gap-4 px-6 py-4 hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
                         >
-                          <div className={`h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center`}>
-                            <Icon className={`h-5 w-5 text-gray-600`} />
+                          <div className={`h-10 w-10 rounded-lg bg-gray-100 dark:bg-slate-700 flex items-center justify-center`}>
+                            <Icon className={`h-5 w-5 text-gray-600 dark:text-slate-400`} />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900 truncate">{activity.message}</p>
-                            <p className="text-sm text-gray-500">{activity.tenant}</p>
+                            <p className="text-sm font-medium text-gray-900 dark:text-slate-100 truncate">{activity.message}</p>
+                            <p className="text-sm text-gray-500 dark:text-slate-400">{activity.tenant}</p>
                           </div>
-                          <span className="text-xs text-gray-500 whitespace-nowrap">{activity.time}</span>
+                          <span className="text-xs text-gray-500 dark:text-slate-500 whitespace-nowrap">{activity.time}</span>
                         </div>
                       );
                     })
                   ) : (
-                    <div className="px-6 py-8 text-center text-gray-500">
+                    <div className="px-6 py-8 text-center text-gray-500 dark:text-slate-400">
                       No hay actividad reciente
                     </div>
                   )}
@@ -551,23 +551,23 @@ export default function AdminDashboard() {
                 </div>
               </LightCardHeader>
               <LightCardContent className="p-0">
-                <div className="divide-y divide-gray-200">
+                <div className="divide-y divide-gray-200 dark:divide-slate-700">
                   {pendingApprovals.length > 0 ? (
                     pendingApprovals.map((approval) => (
                       <div
                         key={approval.id}
-                        className="flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors"
+                        className="flex items-center justify-between px-6 py-4 hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
                       >
                         <div className="flex items-center gap-4">
-                          <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-medium">
+                          <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 font-medium">
                             {approval.name
                               .split(" ")
                               .map((n) => n[0])
                               .join("")}
                           </div>
                           <div>
-                            <p className="text-sm font-medium text-gray-900">{approval.name}</p>
-                            <p className="text-sm text-gray-500">{approval.tenant}</p>
+                            <p className="text-sm font-medium text-gray-900 dark:text-slate-100">{approval.name}</p>
+                            <p className="text-sm text-gray-500 dark:text-slate-400">{approval.tenant}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
@@ -579,7 +579,7 @@ export default function AdminDashboard() {
                       </div>
                     ))
                   ) : (
-                    <div className="px-6 py-8 text-center text-gray-500">
+                    <div className="px-6 py-8 text-center text-gray-500 dark:text-slate-400">
                       No hay aprobaciones pendientes
                     </div>
                   )}
@@ -602,10 +602,10 @@ export default function AdminDashboard() {
                     <CreditCard className="h-6 w-6 text-red-600" />
                   </div>
                   <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-gray-900">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
                       {stats?.lowCreditTenants} Tenants con créditos bajos
                     </h3>
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm text-gray-600 dark:text-slate-400">
                       Estos tenants tienen menos de 10 créditos y podrían dejar de procesar leads pronto.
                     </p>
                   </div>

@@ -39,10 +39,10 @@ export function DashboardCard({
   footer,
 }: DashboardCardProps) {
   const changeColor = change?.trend === "up" 
-    ? "text-green-600" 
+    ? "text-green-600 dark:text-green-400" 
     : change?.trend === "down" 
-    ? "text-red-600" 
-    : "text-gray-600";
+    ? "text-red-600 dark:text-red-400" 
+    : "text-gray-600 dark:text-slate-400";
 
   return (
     <LightCard className={cn("", className)}>
@@ -50,7 +50,7 @@ export function DashboardCard({
         <div>
           <LightCardTitle>{title}</LightCardTitle>
           {description && (
-            <p className="text-sm text-gray-600 mt-1">{description}</p>
+            <p className="text-sm text-gray-600 dark:text-slate-400 mt-1">{description}</p>
           )}
         </div>
       </LightCardHeader>
@@ -58,7 +58,7 @@ export function DashboardCard({
       <LightCardContent>
         {value !== undefined && (
           <div className="mb-4">
-            <div className="text-3xl font-bold text-gray-900">{value}</div>
+            <div className="text-3xl font-bold text-gray-900 dark:text-slate-100">{value}</div>
             {change && (
               <div className={cn("text-sm mt-1", changeColor)}>
                 {change.trend === "up" && "+"}
