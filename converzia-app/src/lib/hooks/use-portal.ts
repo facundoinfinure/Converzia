@@ -56,7 +56,7 @@ export function usePortalDashboard() {
         supabase.from("lead_offers").select("id", { count: "exact", head: true }).eq("tenant_id", activeTenantId),
         supabase.from("lead_offers").select("id", { count: "exact", head: true }).eq("tenant_id", activeTenantId).eq("status", "LEAD_READY"),
         supabase.from("deliveries").select("id", { count: "exact", head: true }).eq("tenant_id", activeTenantId).eq("status", "DELIVERED"),
-        supabase.from("tenant_credit_balance").select("current_balance").eq("tenant_id", activeTenantId).single(),
+        supabase.from("tenant_credit_balance").select("current_balance").eq("tenant_id", activeTenantId).maybeSingle(),
         supabase.from("offers").select("id", { count: "exact", head: true }).eq("tenant_id", activeTenantId).eq("status", "ACTIVE"),
         supabase.from("tenant_members").select("id", { count: "exact", head: true }).eq("tenant_id", activeTenantId).eq("status", "ACTIVE"),
       ]);
@@ -302,7 +302,7 @@ export function usePortalBilling() {
         .from("tenant_credit_balance")
         .select("current_balance")
         .eq("tenant_id", activeTenantId)
-        .single();
+        .maybeSingle();
 
       setBalance(balanceData?.current_balance || 0);
 

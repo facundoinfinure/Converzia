@@ -149,7 +149,7 @@ export function usePendingApprovals() {
           role,
           status,
           created_at,
-          user:user_profiles(id, email, full_name),
+          user:user_profiles!tenant_members_user_id_fkey(id, email, full_name),
           tenant:tenants(id, name)
         `, { count: "exact" })
         .eq("status", "PENDING_APPROVAL")

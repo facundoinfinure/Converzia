@@ -63,11 +63,16 @@ export function useTenants(options: UseTenantsOptions = {}): UseTenantsResult {
       const tenantsWithStats: TenantWithStats[] = await Promise.all(
         (data || []).map(async (tenant: any) => {
           // Get credit balance
-          const { data: balanceData } = await supabase
+          const { data: balanceData, error: balanceError } = await supabase
             .from("tenant_credit_balance")
             .select("current_balance")
             .eq("tenant_id", tenant.id)
-            .single();
+            .maybeSingle();
+          
+          // Silently handle errors for credit balance (view might not exist or have RLS issues)
+          if (balanceError) {
+            console.warn("Error fetching credit balance for tenant:", tenant.id, balanceError);
+          }
 
           // Get counts
           const { count: leadsCount } = await supabase
@@ -162,11 +167,16 @@ export function useTenant(id: string | null): UseTenantResult {
         .single();
 
       // Get credit balance
-      const { data: balanceData } = await supabase
+      const { data: balanceData, error: balanceError } = await supabase
         .from("tenant_credit_balance")
         .select("current_balance")
         .eq("tenant_id", id)
-        .single();
+        .maybeSingle();
+      
+      // Silently handle errors for credit balance (view might not exist or have RLS issues)
+      if (balanceError) {
+        console.warn("Error fetching credit balance for tenant:", id, balanceError);
+      }
 
       // Get counts
       const { count: leadsCount } = await supabase

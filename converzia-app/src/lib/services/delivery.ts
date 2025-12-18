@@ -135,7 +135,7 @@ async function checkBillingEligibility(tenantId: string): Promise<boolean> {
     .from("tenant_credit_balance")
     .select("current_balance")
     .eq("tenant_id", tenantId)
-    .single();
+    .maybeSingle();
 
   return (balance?.current_balance || 0) >= 1;
 }
