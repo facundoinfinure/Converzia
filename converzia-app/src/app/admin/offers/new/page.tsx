@@ -87,13 +87,21 @@ export default function NewOfferPage() {
     try {
       const response = await fetch("/api/offers/generate-ai", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
         body: JSON.stringify({
           tenant_id: selectedTenantId,
           offer_type: offerType,
           name: name,
         }),
       });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: `Error ${response.status}: ${response.statusText}` }));
+        throw new Error(errorData.error || `Error ${response.status}`);
+      }
 
       const result = await response.json();
 
