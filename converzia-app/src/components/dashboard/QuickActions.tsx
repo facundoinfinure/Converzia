@@ -5,7 +5,7 @@ import { LightButton } from "@/components/ui/LightButton";
 import { cn } from "@/lib/utils";
 
 /**
- * QuickActions - Barra de acciones rápidas estilo Mercury
+ * QuickActions - Barra de acciones rápidas
  * Muestra botones de acción principales de forma prominente
  */
 export interface QuickAction {

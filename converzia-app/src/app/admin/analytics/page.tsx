@@ -111,8 +111,8 @@ export default function AnalyticsPage() {
               ))}
             </div>
           </div>
-        </MercuryCardContent>
-      </MercuryCard>
+        </LightCardContent>
+      </LightCard>
 
       {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -174,8 +174,8 @@ export default function AnalyticsPage() {
               </p>
             </div>
           </div>
-        </MercuryCardContent>
-      </MercuryCard>
+        </LightCardContent>
+      </LightCard>
     </PageContainer>
   );
 }
