@@ -308,7 +308,7 @@ export function useOfferMutations() {
         .eq("offer_id", id);
 
       if (variants && variants.length > 0) {
-        const variantsToInsert = variants.map((variant) => {
+        const variantsToInsert = variants.map((variant: OfferVariant) => {
           const { id, offer_id, created_at, updated_at, ...rest } = variant;
           return {
             ...rest,
