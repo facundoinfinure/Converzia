@@ -179,10 +179,17 @@ export default function NewOfferPage() {
       toast.success("Oferta creada correctamente");
       router.push(`/admin/offers/${(offer as any).id}`);
     } catch (error: any) {
-      console.error("Error creating offer:", error);
+      console.error("❌ Error creating offer:", error);
+      console.error("Error type:", typeof error);
+      console.error("Error name:", error?.name);
+      console.error("Error message:", error?.message);
+      console.error("Error stack:", error?.stack);
+      
       const errorMessage = error?.message || "Error al crear la oferta";
       toast.error(errorMessage);
-      throw error; // Re-throw to ensure loading state is reset
+      
+      // Don't re-throw to prevent unhandled promise rejection
+      // The loading state will be reset by the hook's finally block
     }
   };
 

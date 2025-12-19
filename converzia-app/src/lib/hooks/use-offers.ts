@@ -295,16 +295,55 @@ export function useOfferMutations() {
       }
 
       console.log("Inserting offer into Supabase...");
-      const { data: offer, error } = await supabase
+      
+      // Verify user is admin before attempting insert
+      const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
+      if (authError || !currentUser) {
+        console.error("Auth error before insert:", authError);
+        throw new Error("Error de autenticación. Por favor, recargá la página.");
+      }
+
+      // Check if user is Converzia admin
+      const { data: profile, error: profileError } = await supabase
+        .from("user_profiles")
+        .select("is_converzia_admin")
+        .eq("id", currentUser.id)
+        .single();
+
+      if (profileError) {
+        console.error("Error checking admin status:", profileError);
+        throw new Error("Error al verificar permisos de administrador");
+      }
+
+      if (!profile?.is_converzia_admin) {
+        console.error("User is not Converzia admin:", currentUser.id);
+        throw new Error("No tenés permisos de administrador para crear ofertas");
+      }
+
+      console.log("User verified as admin, proceeding with insert...");
+
+      // Create a timeout promise
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("Timeout: La inserción tardó más de 30 segundos")), 30000);
+      });
+
+      // Create the insert promise
+      const insertPromise = supabase
         .from("offers")
         .insert(cleanData)
         .select()
         .single();
 
+      // Race between insert and timeout
+      const result = await Promise.race([insertPromise, timeoutPromise]) as any;
+      const { data: offer, error } = result;
+
       if (error) {
         console.error("Supabase error creating offer:", error);
+        console.error("Error code:", error.code);
         console.error("Error details:", JSON.stringify(error, null, 2));
-        throw new Error(error.message || "Error al crear la oferta");
+        console.error("Error hint:", error.hint);
+        throw new Error(error.message || `Error al crear la oferta (${error.code || "unknown"})`);
       }
 
       if (!offer) {
@@ -314,11 +353,22 @@ export function useOfferMutations() {
       console.log("Offer created successfully:", offer);
       return offer;
     } catch (error: any) {
-      console.error("Error in createOffer:", error);
+      console.error("❌ Error in createOffer:", error);
+      console.error("Error type:", typeof error);
+      console.error("Error name:", error?.name);
+      console.error("Error message:", error?.message);
+      console.error("Error code:", error?.code);
       console.error("Error stack:", error?.stack);
-      throw error instanceof Error ? error : new Error("Error desconocido al crear la oferta");
+      
+      // Ensure we always throw a proper Error object
+      const finalError = error instanceof Error 
+        ? error 
+        : new Error(error?.message || "Error desconocido al crear la oferta");
+      
+      throw finalError;
     } finally {
       setIsLoading(false);
+      console.log("🏁 createOffer completed (finally block)");
     }
   };
 
