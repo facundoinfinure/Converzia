@@ -379,3 +379,4 @@ CREATE POLICY scoring_templates_admin ON scoring_templates
 
 
 
+

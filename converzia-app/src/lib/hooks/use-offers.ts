@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import type { Offer, OfferVariant, Unit, AdOfferMap } from "@/types";
 
 // ============================================
@@ -82,23 +83,43 @@ export function useOffers(options: UseOffersOptions = {}): UseOffersResult {
       const to = from + pageSize - 1;
       query = query.range(from, to).order("created_at", { ascending: false });
 
-      const { data, error: queryError, count } = await query;
+      const { data, error: queryError, count } = await queryWithTimeout(
+        query,
+        10000,
+        "fetch offers"
+      );
 
       if (queryError) throw queryError;
 
       // Fetch counts for each offer
       const offersWithCounts: OfferWithRelations[] = await Promise.all(
-        (data || []).map(async (offer: any) => {
+        (Array.isArray(data) ? data : []).map(async (offer: any) => {
           const [
             { count: variantsCount },
             { count: unitsCount },
             { count: leadsCount },
             { count: adsCount },
           ] = await Promise.all([
-            supabase.from("offer_variants").select("id", { count: "exact", head: true }).eq("offer_id", offer.id),
-            supabase.from("units").select("id", { count: "exact", head: true }).eq("offer_id", offer.id),
-            supabase.from("lead_offers").select("id", { count: "exact", head: true }).eq("offer_id", offer.id),
-            supabase.from("ad_offer_map").select("id", { count: "exact", head: true }).eq("offer_id", offer.id),
+            queryWithTimeout(
+              supabase.from("offer_variants").select("id", { count: "exact", head: true }).eq("offer_id", offer.id),
+              5000,
+              `variants count for offer ${offer.id}`
+            ),
+            queryWithTimeout(
+              supabase.from("units").select("id", { count: "exact", head: true }).eq("offer_id", offer.id),
+              5000,
+              `units count for offer ${offer.id}`
+            ),
+            queryWithTimeout(
+              supabase.from("lead_offers").select("id", { count: "exact", head: true }).eq("offer_id", offer.id),
+              5000,
+              `leads count for offer ${offer.id}`
+            ),
+            queryWithTimeout(
+              supabase.from("ad_offer_map").select("id", { count: "exact", head: true }).eq("offer_id", offer.id),
+              5000,
+              `ads count for offer ${offer.id}`
+            ),
           ]);
 
           return {
@@ -166,55 +187,81 @@ export function useOffer(id: string | null): UseOfferResult {
 
     try {
       // Fetch offer with tenant
-      const { data: offerData, error: offerError } = await supabase
-        .from("offers")
-        .select(`
-          *,
-          tenant:tenants(id, name, slug)
-        `)
-        .eq("id", id)
-        .single();
+      const { data: offerData, error: offerError } = await queryWithTimeout(
+        supabase
+          .from("offers")
+          .select(`
+            *,
+            tenant:tenants(id, name, slug)
+          `)
+          .eq("id", id)
+          .single(),
+        10000,
+        `fetch offer ${id}`
+      );
 
       if (offerError) throw offerError;
+      if (!offerData || typeof offerData !== "object" || !("tenant_id" in offerData)) {
+        throw new Error("Offer not found");
+      }
 
-      // Fetch variants
-      const { data: variantsData } = await supabase
-        .from("offer_variants")
-        .select("*")
-        .eq("offer_id", id)
-        .order("display_order");
-
-      // Fetch units
-      const { data: unitsData } = await supabase
-        .from("units")
-        .select("*")
-        .eq("offer_id", id)
-        .order("unit_number");
-
-      // Fetch ad mappings
-      const { data: adsData } = await supabase
-        .from("ad_offer_map")
-        .select("*")
-        .eq("offer_id", id)
-        .order("created_at", { ascending: false });
-
-      // Get counts
-      const { count: leadsCount } = await supabase
-        .from("lead_offers")
-        .select("id", { count: "exact", head: true })
-        .eq("offer_id", id);
-
-      // Calculate priority position (order by priority desc, then by created_at for deterministic order)
-      // Note: Supabase doesn't support multiple order() calls, so we'll sort in JS
-      const { data: allTenantOffers } = await supabase
-        .from("offers")
-        .select("id, priority, created_at")
-        .eq("tenant_id", offerData.tenant_id);
+      // Fetch variants, units, ad mappings, and counts in parallel
+      const [
+        { data: variantsData },
+        { data: unitsData },
+        { data: adsData },
+        { count: leadsCount },
+        { data: allTenantOffers },
+      ] = await Promise.all([
+        queryWithTimeout(
+          supabase
+            .from("offer_variants")
+            .select("*")
+            .eq("offer_id", id)
+            .order("display_order"),
+          10000,
+          `variants for offer ${id}`
+        ),
+        queryWithTimeout(
+          supabase
+            .from("units")
+            .select("*")
+            .eq("offer_id", id)
+            .order("unit_number"),
+          10000,
+          `units for offer ${id}`
+        ),
+        queryWithTimeout(
+          supabase
+            .from("ad_offer_map")
+            .select("*")
+            .eq("offer_id", id)
+            .order("created_at", { ascending: false }),
+          10000,
+          `ad mappings for offer ${id}`
+        ),
+        queryWithTimeout(
+          supabase
+            .from("lead_offers")
+            .select("id", { count: "exact", head: true })
+            .eq("offer_id", id),
+          10000,
+          `leads count for offer ${id}`
+        ),
+        queryWithTimeout(
+          supabase
+            .from("offers")
+            .select("id, priority, created_at")
+            .eq("tenant_id", offerData.tenant_id),
+          10000,
+          `all tenant offers for priority calculation`
+        ),
+      ]);
 
       let priorityPosition = 1;
       let totalOffers = 0;
       
-      if (allTenantOffers) {
+      if (allTenantOffers && Array.isArray(allTenantOffers)) {
         // Sort by priority desc, then by created_at asc for deterministic order
         const sorted = [...allTenantOffers].sort((a, b) => {
           if (b.priority !== a.priority) {
@@ -229,21 +276,21 @@ export function useOffer(id: string | null): UseOfferResult {
 
       setOffer({
         ...offerData,
-        tenant: Array.isArray(offerData.tenant) ? offerData.tenant[0] : offerData.tenant,
+        tenant: Array.isArray((offerData as any).tenant) ? (offerData as any).tenant[0] : (offerData as any).tenant,
         _count: {
-          variants: variantsData?.length || 0,
-          units: unitsData?.length || 0,
+          variants: Array.isArray(variantsData) ? variantsData.length : 0,
+          units: Array.isArray(unitsData) ? unitsData.length : 0,
           leads: leadsCount || 0,
-          ads: adsData?.length || 0,
+          ads: Array.isArray(adsData) ? adsData.length : 0,
         },
         _priority: {
           position: priorityPosition,
           total: totalOffers,
         },
-      });
-      setVariants(variantsData || []);
-      setUnits(unitsData || []);
-      setAdMappings(adsData || []);
+      } as any);
+      setVariants(Array.isArray(variantsData) ? variantsData : []);
+      setUnits(Array.isArray(unitsData) ? unitsData : []);
+      setAdMappings(Array.isArray(adsData) ? adsData : []);
     } catch (err) {
       console.error("Error fetching offer:", err);
       setError(err instanceof Error ? err.message : "Error al cargar oferta");
@@ -297,46 +344,54 @@ export function useOfferMutations() {
       console.log("Inserting offer into Supabase...");
       
       // Verify user is admin before attempting insert
-      const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
+      const authTimeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("Timeout: La verificación de autenticación tardó más de 5 segundos")), 5000);
+      });
+
+      const { data: { user: currentUser }, error: authError } = await Promise.race([
+        supabase.auth.getUser(),
+        authTimeoutPromise,
+      ]) as any;
+
       if (authError || !currentUser) {
         console.error("Auth error before insert:", authError);
         throw new Error("Error de autenticación. Por favor, recargá la página.");
       }
 
       // Check if user is Converzia admin
-      const { data: profile, error: profileError } = await supabase
-        .from("user_profiles")
-        .select("is_converzia_admin")
-        .eq("id", currentUser.id)
-        .single();
+      const { data: profile, error: profileError } = await queryWithTimeout(
+        supabase
+          .from("user_profiles")
+          .select("is_converzia_admin")
+          .eq("id", currentUser.id)
+          .single(),
+        5000,
+        "admin check",
+        false // Don't retry admin check
+      );
 
       if (profileError) {
         console.error("Error checking admin status:", profileError);
         throw new Error("Error al verificar permisos de administrador");
       }
 
-      if (!profile?.is_converzia_admin) {
-        console.error("User is not Converzia admin:", currentUser.id);
+      if (!profile || !(profile as any)?.is_converzia_admin) {
+        console.error("User is not Converzia admin:", (currentUser as any)?.id);
         throw new Error("No tenés permisos de administrador para crear ofertas");
       }
 
       console.log("User verified as admin, proceeding with insert...");
 
-      // Create a timeout promise
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error("Timeout: La inserción tardó más de 30 segundos")), 30000);
-      });
-
-      // Create the insert promise
-      const insertPromise = supabase
-        .from("offers")
-        .insert(cleanData)
-        .select()
-        .single();
-
-      // Race between insert and timeout
-      const result = await Promise.race([insertPromise, timeoutPromise]) as any;
-      const { data: offer, error } = result;
+      // Insert with timeout and retry
+      const { data: offer, error } = await queryWithTimeout(
+        supabase
+          .from("offers")
+          .insert(cleanData)
+          .select()
+          .single(),
+        30000, // 30 second timeout for inserts
+        "insert offer"
+      );
 
       if (error) {
         console.error("Supabase error creating offer:", error);
@@ -375,14 +430,19 @@ export function useOfferMutations() {
   const updateOffer = async (id: string, data: Partial<Offer>) => {
     setIsLoading(true);
     try {
-      const { data: offer, error } = await supabase
-        .from("offers")
-        .update({ ...data, updated_at: new Date().toISOString() })
-        .eq("id", id)
-        .select()
-        .single();
+      const { data: offer, error } = await queryWithTimeout(
+        supabase
+          .from("offers")
+          .update({ ...data, updated_at: new Date().toISOString() })
+          .eq("id", id)
+          .select()
+          .single(),
+        30000,
+        `update offer ${id}`
+      );
 
       if (error) throw error;
+      if (!offer) throw new Error("Failed to update offer");
       return offer;
     } finally {
       setIsLoading(false);
@@ -393,46 +453,71 @@ export function useOfferMutations() {
     setIsLoading(true);
     try {
       // Fetch original offer
-      const { data: original, error: fetchError } = await supabase
-        .from("offers")
-        .select("*")
-        .eq("id", id)
-        .single();
+      const { data: original, error: fetchError } = await queryWithTimeout(
+        supabase
+          .from("offers")
+          .select("*")
+          .eq("id", id)
+          .single(),
+        10000,
+        `fetch offer ${id} for duplication`
+      );
 
-      if (fetchError || !original) throw fetchError || new Error("Oferta no encontrada");
+      if (fetchError || !original || typeof original !== "object" || !("id" in original)) {
+        throw fetchError || new Error("Oferta no encontrada");
+      }
 
       // Create new offer without id and timestamps
-      const { id: _, created_at, updated_at, ...offerData } = original;
+      const { id: _, created_at, updated_at, ...offerData } = original as any;
       const newName = `${offerData.name} (Copia)`;
 
-      const { data: newOffer, error: createError } = await supabase
-        .from("offers")
-        .insert({
-          ...offerData,
-          name: newName,
-          status: "DRAFT", // Start as draft
-        })
-        .select()
-        .single();
+      const { data: newOffer, error: createError } = await queryWithTimeout(
+        supabase
+          .from("offers")
+          .insert({
+            ...offerData,
+            name: newName,
+            status: "DRAFT", // Start as draft
+          })
+          .select()
+          .single(),
+        30000,
+        "duplicate offer"
+      );
 
-      if (createError || !newOffer) throw createError;
+      if (createError || !newOffer || typeof newOffer !== "object" || !("id" in newOffer)) {
+        throw createError || new Error("Failed to duplicate offer");
+      }
 
       // Duplicate variants
-      const { data: variants } = await supabase
-        .from("offer_variants")
-        .select("*")
-        .eq("offer_id", id);
+      const { data: variants } = await queryWithTimeout(
+        supabase
+          .from("offer_variants")
+          .select("*")
+          .eq("offer_id", id),
+        10000,
+        `fetch variants for offer ${id}`
+      );
 
-      if (variants && variants.length > 0) {
+      if (variants && Array.isArray(variants) && variants.length > 0) {
         const variantsToInsert = variants.map((variant: OfferVariant) => {
           const { id, offer_id, created_at, updated_at, ...rest } = variant;
           return {
             ...rest,
-            offer_id: newOffer.id,
+            offer_id: (newOffer as any).id,
           };
         });
 
-        await supabase.from("offer_variants").insert(variantsToInsert);
+        const { error: insertError } = await queryWithTimeout(
+          supabase.from("offer_variants").insert(variantsToInsert),
+          30000,
+          "insert duplicated variants"
+        );
+
+        if (insertError) {
+          console.error("Error duplicating variants:", insertError);
+          // Don't throw - offer is already created
+        }
       }
 
       return newOffer;
@@ -447,7 +532,11 @@ export function useOfferMutations() {
   const deleteOffer = async (id: string) => {
     setIsLoading(true);
     try {
-      const { error } = await supabase.from("offers").delete().eq("id", id);
+      const { error } = await queryWithTimeout(
+        supabase.from("offers").delete().eq("id", id),
+        30000,
+        `delete offer ${id}`
+      );
       if (error) throw error;
     } finally {
       setIsLoading(false);
@@ -458,13 +547,18 @@ export function useOfferMutations() {
   const createVariant = async (data: Partial<OfferVariant>) => {
     setIsLoading(true);
     try {
-      const { data: variant, error } = await supabase
-        .from("offer_variants")
-        .insert(data)
-        .select()
-        .single();
+      const { data: variant, error } = await queryWithTimeout(
+        supabase
+          .from("offer_variants")
+          .insert(data)
+          .select()
+          .single(),
+        30000,
+        "create variant"
+      );
 
       if (error) throw error;
+      if (!variant) throw new Error("Failed to create variant");
       return variant;
     } finally {
       setIsLoading(false);
@@ -474,14 +568,19 @@ export function useOfferMutations() {
   const updateVariant = async (id: string, data: Partial<OfferVariant>) => {
     setIsLoading(true);
     try {
-      const { data: variant, error } = await supabase
-        .from("offer_variants")
-        .update({ ...data, updated_at: new Date().toISOString() })
-        .eq("id", id)
-        .select()
-        .single();
+      const { data: variant, error } = await queryWithTimeout(
+        supabase
+          .from("offer_variants")
+          .update({ ...data, updated_at: new Date().toISOString() })
+          .eq("id", id)
+          .select()
+          .single(),
+        30000,
+        `update variant ${id}`
+      );
 
       if (error) throw error;
+      if (!variant) throw new Error("Failed to update variant");
       return variant;
     } finally {
       setIsLoading(false);
@@ -491,7 +590,11 @@ export function useOfferMutations() {
   const deleteVariant = async (id: string) => {
     setIsLoading(true);
     try {
-      const { error } = await supabase.from("offer_variants").delete().eq("id", id);
+      const { error } = await queryWithTimeout(
+        supabase.from("offer_variants").delete().eq("id", id),
+        30000,
+        `delete variant ${id}`
+      );
       if (error) throw error;
     } finally {
       setIsLoading(false);
@@ -502,13 +605,18 @@ export function useOfferMutations() {
   const createUnit = async (data: Partial<Unit>) => {
     setIsLoading(true);
     try {
-      const { data: unit, error } = await supabase
-        .from("units")
-        .insert(data)
-        .select()
-        .single();
+      const { data: unit, error } = await queryWithTimeout(
+        supabase
+          .from("units")
+          .insert(data)
+          .select()
+          .single(),
+        30000,
+        "create unit"
+      );
 
       if (error) throw error;
+      if (!unit) throw new Error("Failed to create unit");
       return unit;
     } finally {
       setIsLoading(false);
@@ -518,14 +626,19 @@ export function useOfferMutations() {
   const updateUnit = async (id: string, data: Partial<Unit>) => {
     setIsLoading(true);
     try {
-      const { data: unit, error } = await supabase
-        .from("units")
-        .update({ ...data, updated_at: new Date().toISOString() })
-        .eq("id", id)
-        .select()
-        .single();
+      const { data: unit, error } = await queryWithTimeout(
+        supabase
+          .from("units")
+          .update({ ...data, updated_at: new Date().toISOString() })
+          .eq("id", id)
+          .select()
+          .single(),
+        30000,
+        `update unit ${id}`
+      );
 
       if (error) throw error;
+      if (!unit) throw new Error("Failed to update unit");
       return unit;
     } finally {
       setIsLoading(false);
@@ -535,7 +648,11 @@ export function useOfferMutations() {
   const deleteUnit = async (id: string) => {
     setIsLoading(true);
     try {
-      const { error } = await supabase.from("units").delete().eq("id", id);
+      const { error } = await queryWithTimeout(
+        supabase.from("units").delete().eq("id", id),
+        30000,
+        `delete unit ${id}`
+      );
       if (error) throw error;
     } finally {
       setIsLoading(false);
@@ -545,10 +662,14 @@ export function useOfferMutations() {
   const bulkUpdateUnits = async (unitIds: string[], data: Partial<Unit>) => {
     setIsLoading(true);
     try {
-      const { error } = await supabase
-        .from("units")
-        .update({ ...data, updated_at: new Date().toISOString() })
-        .in("id", unitIds);
+      const { error } = await queryWithTimeout(
+        supabase
+          .from("units")
+          .update({ ...data, updated_at: new Date().toISOString() })
+          .in("id", unitIds),
+        30000,
+        `bulk update ${unitIds.length} units`
+      );
 
       if (error) throw error;
     } finally {
@@ -590,7 +711,7 @@ export function useTenantOptions() {
         .eq("status", "ACTIVE")
         .order("name");
 
-      if (data) {
+      if (data && Array.isArray(data)) {
         setOptions(data.map((t: any) => ({ value: t.id, label: t.name })));
       }
       setIsLoading(false);

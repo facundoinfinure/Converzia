@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import type { AdOfferMap, UnmappedAd } from "@/types";
 
 // ============================================
@@ -42,7 +43,7 @@ export function useUnmappedAds(): UseUnmappedAdsResult {
         .from("ad_offer_map")
         .select("ad_id");
 
-      const mappedAdIds = new Set(mappings?.map((m: any) => m.ad_id) || []);
+      const mappedAdIds = new Set(Array.isArray(mappings) ? mappings.map((m: any) => m.ad_id) : []);
 
       // Group unmapped by ad_id
       const unmappedMap: Record<string, UnmappedAd> = {};
@@ -154,11 +155,15 @@ export function useAdMappings(options: UseAdMappingsOptions = {}): UseAdMappings
       const to = from + pageSize - 1;
       query = query.range(from, to).order("created_at", { ascending: false });
 
-      const { data, error: queryError, count } = await query;
+      const { data, error: queryError, count } = await queryWithTimeout(
+        query,
+        10000,
+        "fetch ad mappings"
+      );
 
       if (queryError) throw queryError;
 
-      const formattedData = (data || []).map((m: any) => ({
+      const formattedData = (Array.isArray(data) ? data : []).map((m: any) => ({
         ...m,
         tenant: Array.isArray(m.tenant) ? m.tenant[0] : m.tenant,
         offer: Array.isArray(m.offer) ? m.offer[0] : m.offer,
@@ -359,6 +364,7 @@ export function useOffersForMapping() {
 
   return { tenantsWithOffers, isLoading };
 }
+
 
 
 

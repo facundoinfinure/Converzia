@@ -27,6 +27,7 @@ import { Select, CustomSelect } from "@/components/ui/Select";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { useTenantOptions } from "@/lib/hooks/use-offers";
 import { formatRelativeTime } from "@/lib/utils";
 
@@ -151,7 +152,11 @@ export default function KnowledgePage() {
       query = query.eq("offer_id", offerFilter);
     }
 
-    const { data, error } = await query;
+    const { data, error } = await queryWithTimeout(
+      query,
+      10000,
+      "fetch rag sources"
+    );
 
     if (error) {
       console.error("Error fetching rag_sources:", error);
@@ -159,7 +164,7 @@ export default function KnowledgePage() {
     }
 
     setSources(
-      (data || []).map((s: any) => ({
+      (Array.isArray(data) ? data : []).map((s: any) => ({
         ...s,
         tenant: Array.isArray(s.tenant) ? s.tenant[0] : s.tenant,
         offer: Array.isArray(s.offer) ? s.offer[0] : s.offer,
@@ -720,6 +725,7 @@ export default function KnowledgePage() {
     </PageContainer>
   );
 }
+
 
 
 

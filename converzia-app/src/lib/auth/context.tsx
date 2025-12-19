@@ -2,6 +2,9 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
+import { sessionManager } from "@/lib/supabase/session-manager";
+import { healthMonitor } from "@/lib/supabase/health-check";
 import type { User } from "@supabase/supabase-js";
 import type { AuthUser, UserProfile, TenantMembership, Permission, UserRole, ROLE_PERMISSIONS } from "@/types";
 
@@ -86,11 +89,15 @@ export function AuthProvider({ children, initialUser = null }: AuthProviderProps
       setError(null);
 
       // Fetch profile
-      const { data: profileData, error: profileError } = await supabase
-        .from("user_profiles")
-        .select("*")
-        .eq("id", userId)
-        .single();
+      const { data: profileData, error: profileError } = await queryWithTimeout(
+        supabase
+          .from("user_profiles")
+          .select("*")
+          .eq("id", userId)
+          .single(),
+        10000,
+        "fetch user profile"
+      );
 
       if (profileError) {
         // Profile might not exist yet, create it
@@ -118,27 +125,31 @@ export function AuthProvider({ children, initialUser = null }: AuthProviderProps
       }
 
       // Fetch memberships with tenant info
-      const { data: membershipsData, error: membershipsError } = await supabase
-        .from("tenant_members")
-        .select(`
-          id,
-          tenant_id,
-          user_id,
-          role,
-          status,
-          tenant:tenants (
+      const { data: membershipsData, error: membershipsError } = await queryWithTimeout(
+        supabase
+          .from("tenant_members")
+          .select(`
             id,
-            name,
-            slug,
-            status
-          )
-        `)
-        .eq("user_id", userId)
-        .eq("status", "ACTIVE");
+            tenant_id,
+            user_id,
+            role,
+            status,
+            tenant:tenants (
+              id,
+              name,
+              slug,
+              status
+            )
+          `)
+          .eq("user_id", userId)
+          .eq("status", "ACTIVE"),
+        10000,
+        "fetch user memberships"
+      );
 
       if (membershipsError) throw membershipsError;
 
-      const formattedMemberships = (membershipsData || []).map((m: any) => ({
+      const formattedMemberships = (Array.isArray(membershipsData) ? membershipsData : []).map((m: any) => ({
         ...m,
         tenant: Array.isArray(m.tenant) ? m.tenant[0] : m.tenant,
       })) as TenantMembership[];
@@ -162,11 +173,20 @@ export function AuthProvider({ children, initialUser = null }: AuthProviderProps
   useEffect(() => {
     const initAuth = async () => {
       try {
+        // Check session health first
+        const sessionValid = await sessionManager.checkSession();
+        if (!sessionValid) {
+          console.log("🔄 Session invalid, attempting refresh...");
+          await sessionManager.refreshSession();
+        }
+
         const { data: { user: currentUser } } = await supabase.auth.getUser();
         setUser(currentUser);
 
         if (currentUser) {
           await fetchUserData(currentUser.id);
+          // Start auto-refresh for authenticated users
+          sessionManager.startAutoRefresh();
         }
       } catch (err) {
         console.error("Auth init error:", err);
@@ -177,6 +197,13 @@ export function AuthProvider({ children, initialUser = null }: AuthProviderProps
 
     initAuth();
 
+    // Start health monitoring
+    healthMonitor.start(30000, (result) => {
+      if (!result.connected && !result.authenticated) {
+        console.warn("⚠️ Supabase health check failed:", result.error);
+      }
+    });
+
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
       const currentUser = session?.user ?? null;
@@ -184,10 +211,14 @@ export function AuthProvider({ children, initialUser = null }: AuthProviderProps
 
       if (currentUser) {
         await fetchUserData(currentUser.id);
+        // Start auto-refresh for authenticated users
+        sessionManager.startAutoRefresh();
       } else {
         setProfile(null);
         setMemberships([]);
         setActiveTenantId(null);
+        // Stop auto-refresh when logged out
+        sessionManager.stopAutoRefresh();
       }
 
       setIsLoading(false);
@@ -195,6 +226,8 @@ export function AuthProvider({ children, initialUser = null }: AuthProviderProps
 
     return () => {
       subscription.unsubscribe();
+      sessionManager.stopAutoRefresh();
+      healthMonitor.stop();
     };
   }, [supabase, fetchUserData]);
 
@@ -327,6 +360,7 @@ export function useRequireTenant() {
 
   return auth;
 }
+
 
 
 

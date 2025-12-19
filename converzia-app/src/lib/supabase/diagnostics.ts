@@ -62,3 +62,4 @@ export async function diagnoseSupabaseConnection() {
     return diagnostics;
   }
 }
+

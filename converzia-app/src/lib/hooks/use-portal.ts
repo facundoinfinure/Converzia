@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { useAuth } from "@/lib/auth/context";
 import type { LeadOffer, Offer, Delivery, CreditLedgerEntry, TenantMembership } from "@/types";
 
@@ -44,7 +45,7 @@ export function usePortalDashboard() {
     setError(null);
 
     try {
-      // Fetch stats in parallel
+      // Fetch stats in parallel with timeouts
       const [
         { count: totalLeads },
         { count: leadReadyCount },
@@ -53,12 +54,37 @@ export function usePortalDashboard() {
         { count: activeOffers },
         { count: teamMembers },
       ] = await Promise.all([
-        supabase.from("lead_offers").select("id", { count: "exact", head: true }).eq("tenant_id", activeTenantId),
-        supabase.from("lead_offers").select("id", { count: "exact", head: true }).eq("tenant_id", activeTenantId).eq("status", "LEAD_READY"),
-        supabase.from("deliveries").select("id", { count: "exact", head: true }).eq("tenant_id", activeTenantId).eq("status", "DELIVERED"),
-        supabase.from("tenant_credit_balance").select("current_balance").eq("tenant_id", activeTenantId).maybeSingle(),
-        supabase.from("offers").select("id", { count: "exact", head: true }).eq("tenant_id", activeTenantId).eq("status", "ACTIVE"),
-        supabase.from("tenant_members").select("id", { count: "exact", head: true }).eq("tenant_id", activeTenantId).eq("status", "ACTIVE"),
+        queryWithTimeout(
+          supabase.from("lead_offers").select("id", { count: "exact", head: true }).eq("tenant_id", activeTenantId),
+          10000,
+          "total leads"
+        ),
+        queryWithTimeout(
+          supabase.from("lead_offers").select("id", { count: "exact", head: true }).eq("tenant_id", activeTenantId).eq("status", "LEAD_READY"),
+          10000,
+          "lead ready count"
+        ),
+        queryWithTimeout(
+          supabase.from("deliveries").select("id", { count: "exact", head: true }).eq("tenant_id", activeTenantId).eq("status", "DELIVERED"),
+          10000,
+          "delivered count"
+        ),
+        queryWithTimeout(
+          supabase.from("tenant_credit_balance").select("current_balance").eq("tenant_id", activeTenantId).maybeSingle(),
+          5000,
+          "credit balance",
+          false // Don't retry credit balance
+        ),
+        queryWithTimeout(
+          supabase.from("offers").select("id", { count: "exact", head: true }).eq("tenant_id", activeTenantId).eq("status", "ACTIVE"),
+          10000,
+          "active offers"
+        ),
+        queryWithTimeout(
+          supabase.from("tenant_members").select("id", { count: "exact", head: true }).eq("tenant_id", activeTenantId).eq("status", "ACTIVE"),
+          10000,
+          "team members"
+        ),
       ]);
 
       const total = totalLeads || 0;
@@ -69,16 +95,24 @@ export function usePortalDashboard() {
         { count: contactedCount },
         { count: qualifyingCount },
       ] = await Promise.all([
-        supabase
-          .from("lead_offers")
-          .select("id", { count: "exact", head: true })
-          .eq("tenant_id", activeTenantId)
-          .in("status", ["CONTACTED", "ENGAGED"]),
-        supabase
-          .from("lead_offers")
-          .select("id", { count: "exact", head: true })
-          .eq("tenant_id", activeTenantId)
-          .eq("status", "QUALIFYING"),
+        queryWithTimeout(
+          supabase
+            .from("lead_offers")
+            .select("id", { count: "exact", head: true })
+            .eq("tenant_id", activeTenantId)
+            .in("status", ["CONTACTED", "ENGAGED"]),
+          10000,
+          "contacted count"
+        ),
+        queryWithTimeout(
+          supabase
+            .from("lead_offers")
+            .select("id", { count: "exact", head: true })
+            .eq("tenant_id", activeTenantId)
+            .eq("status", "QUALIFYING"),
+          10000,
+          "qualifying count"
+        ),
       ]);
 
       setStats({
@@ -86,7 +120,7 @@ export function usePortalDashboard() {
         leadReadyCount: leadReadyCount || 0,
         deliveredCount: delivered,
         conversionRate: total > 0 ? Math.round((delivered / total) * 100) : 0,
-        creditBalance: creditData?.current_balance || 0,
+        creditBalance: (creditData as any)?.current_balance || 0,
         activeOffers: activeOffers || 0,
         teamMembers: teamMembers || 0,
         pipelineStats: {
@@ -98,18 +132,22 @@ export function usePortalDashboard() {
       });
 
       // Fetch recent leads
-      const { data: leadsData } = await supabase
-        .from("lead_offers")
-        .select(`
-          *,
-          lead:leads(phone, full_name, email),
-          offer:offers(name)
-        `)
-        .eq("tenant_id", activeTenantId)
-        .order("created_at", { ascending: false })
-        .limit(10);
+      const { data: leadsData } = await queryWithTimeout(
+        supabase
+          .from("lead_offers")
+          .select(`
+            *,
+            lead:leads(phone, full_name, email),
+            offer:offers(name)
+          `)
+          .eq("tenant_id", activeTenantId)
+          .order("created_at", { ascending: false })
+          .limit(10),
+        10000,
+        "recent leads"
+      );
 
-      if (leadsData) {
+      if (leadsData && Array.isArray(leadsData)) {
         setRecentLeads(
           leadsData.map((l: any) => ({
             ...l,
@@ -186,12 +224,16 @@ export function usePortalLeads(options: UsePortalLeadsOptions = {}) {
       const to = from + pageSize - 1;
       query = query.range(from, to).order("created_at", { ascending: false });
 
-      const { data, error: queryError, count } = await query;
+      const { data, error: queryError, count } = await queryWithTimeout(
+        query,
+        10000,
+        "fetch portal leads"
+      );
 
       if (queryError) throw queryError;
 
       setLeads(
-        (data || []).map((l: any) => ({
+        (Array.isArray(data) ? data : []).map((l: any) => ({
           ...l,
           lead: Array.isArray(l.lead) ? l.lead[0] : l.lead,
           offer: Array.isArray(l.offer) ? l.offer[0] : l.offer,
@@ -232,13 +274,17 @@ export function usePortalOffers() {
       }
 
       // Fetch offers with stats
-      const { data: offersData } = await supabase
-        .from("offers")
-        .select("*")
-        .eq("tenant_id", activeTenantId)
-        .order("priority", { ascending: false });
+      const { data: offersData } = await queryWithTimeout(
+        supabase
+          .from("offers")
+          .select("*")
+          .eq("tenant_id", activeTenantId)
+          .order("priority", { ascending: false }),
+        10000,
+        "fetch portal offers"
+      );
 
-      if (offersData) {
+      if (offersData && Array.isArray(offersData)) {
         // Fetch stats for each offer
         const offersWithStats = await Promise.all(
           offersData.map(async (offer: Offer) => {
@@ -246,14 +292,22 @@ export function usePortalOffers() {
               { count: leadCount },
               { count: variantCount },
             ] = await Promise.all([
-              supabase
-                .from("lead_offers")
-                .select("id", { count: "exact", head: true })
-                .eq("offer_id", offer.id),
-              supabase
-                .from("offer_variants")
-                .select("id", { count: "exact", head: true })
-                .eq("offer_id", offer.id),
+              queryWithTimeout(
+                supabase
+                  .from("lead_offers")
+                  .select("id", { count: "exact", head: true })
+                  .eq("offer_id", offer.id),
+                5000,
+                `lead count for offer ${offer.id}`
+              ),
+              queryWithTimeout(
+                supabase
+                  .from("offer_variants")
+                  .select("id", { count: "exact", head: true })
+                  .eq("offer_id", offer.id),
+                5000,
+                `variant count for offer ${offer.id}`
+              ),
             ]);
 
             return {
@@ -298,23 +352,32 @@ export function usePortalBilling() {
       }
 
       // Get balance
-      const { data: balanceData } = await supabase
-        .from("tenant_credit_balance")
-        .select("current_balance")
-        .eq("tenant_id", activeTenantId)
-        .maybeSingle();
+      const { data: balanceData } = await queryWithTimeout(
+        supabase
+          .from("tenant_credit_balance")
+          .select("current_balance")
+          .eq("tenant_id", activeTenantId)
+          .maybeSingle(),
+        5000,
+        "credit balance",
+        false // Don't retry balance queries
+      );
 
-      setBalance(balanceData?.current_balance || 0);
+      setBalance((balanceData as any)?.current_balance || 0);
 
       // Get transactions
-      const { data: txData } = await supabase
-        .from("credit_ledger")
-        .select("*")
-        .eq("tenant_id", activeTenantId)
-        .order("created_at", { ascending: false })
-        .limit(50);
+      const { data: txData } = await queryWithTimeout(
+        supabase
+          .from("credit_ledger")
+          .select("*")
+          .eq("tenant_id", activeTenantId)
+          .order("created_at", { ascending: false })
+          .limit(50),
+        10000,
+        "credit ledger transactions"
+      );
 
-      setTransactions(txData || []);
+      setTransactions(Array.isArray(txData) ? txData : []);
       setIsLoading(false);
     }
 
@@ -350,20 +413,24 @@ export function usePortalTeam() {
       return;
     }
 
-    const { data } = await supabase
-      .from("tenant_members")
-      .select(`
-        id,
-        user_id,
-        role,
-        status,
-        created_at,
-        user:user_profiles!tenant_members_user_id_fkey(id, email, full_name, avatar_url)
-      `)
-      .eq("tenant_id", activeTenantId)
-      .order("created_at");
+    const { data } = await queryWithTimeout(
+      supabase
+        .from("tenant_members")
+        .select(`
+          id,
+          user_id,
+          role,
+          status,
+          created_at,
+          user:user_profiles!tenant_members_user_id_fkey(id, email, full_name, avatar_url)
+        `)
+        .eq("tenant_id", activeTenantId)
+        .order("created_at"),
+      10000,
+      "fetch team members"
+    );
 
-    if (data) {
+    if (data && Array.isArray(data)) {
       setMembers(
         data.map((m: any) => ({
           ...m,

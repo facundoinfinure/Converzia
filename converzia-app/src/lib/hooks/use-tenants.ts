@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import type { Tenant, TenantWithStats, TenantPricing } from "@/types";
 
 // ============================================
@@ -55,19 +56,28 @@ export function useTenants(options: UseTenantsOptions = {}): UseTenantsResult {
       const to = from + pageSize - 1;
       query = query.range(from, to).order("created_at", { ascending: false });
 
-      const { data, error: queryError, count } = await query;
+      const { data, error: queryError, count } = await queryWithTimeout(
+        query,
+        10000,
+        "fetch tenants"
+      );
 
       if (queryError) throw queryError;
 
       // Fetch additional stats for each tenant
       const tenantsWithStats: TenantWithStats[] = await Promise.all(
-        (data || []).map(async (tenant: any) => {
+        (Array.isArray(data) ? data : []).map(async (tenant: any) => {
           // Get credit balance
-          const { data: balanceData, error: balanceError } = await supabase
-            .from("tenant_credit_balance")
-            .select("current_balance")
-            .eq("tenant_id", tenant.id)
-            .maybeSingle();
+          const { data: balanceData, error: balanceError } = await queryWithTimeout(
+            supabase
+              .from("tenant_credit_balance")
+              .select("current_balance")
+              .eq("tenant_id", tenant.id)
+              .maybeSingle(),
+            5000,
+            `credit balance for tenant ${tenant.id}`,
+            false // Don't retry credit balance queries
+          );
           
           // Silently handle errors for credit balance (view might not exist or have RLS issues)
           if (balanceError) {
@@ -75,31 +85,47 @@ export function useTenants(options: UseTenantsOptions = {}): UseTenantsResult {
           }
 
           // Get counts
-          const { count: leadsCount } = await supabase
-            .from("lead_offers")
-            .select("id", { count: "exact", head: true })
-            .eq("tenant_id", tenant.id);
-
-          const { count: offersCount } = await supabase
-            .from("offers")
-            .select("id", { count: "exact", head: true })
-            .eq("tenant_id", tenant.id);
-
-          const { count: membersCount } = await supabase
-            .from("tenant_members")
-            .select("id", { count: "exact", head: true })
-            .eq("tenant_id", tenant.id)
-            .eq("status", "ACTIVE");
+          const [
+            { count: leadsCount },
+            { count: offersCount },
+            { count: membersCount },
+          ] = await Promise.all([
+            queryWithTimeout(
+              supabase
+                .from("lead_offers")
+                .select("id", { count: "exact", head: true })
+                .eq("tenant_id", tenant.id),
+              5000,
+              `leads count for tenant ${tenant.id}`
+            ),
+            queryWithTimeout(
+              supabase
+                .from("offers")
+                .select("id", { count: "exact", head: true })
+                .eq("tenant_id", tenant.id),
+              5000,
+              `offers count for tenant ${tenant.id}`
+            ),
+            queryWithTimeout(
+              supabase
+                .from("tenant_members")
+                .select("id", { count: "exact", head: true })
+                .eq("tenant_id", tenant.id)
+                .eq("status", "ACTIVE"),
+              5000,
+              `members count for tenant ${tenant.id}`
+            ),
+          ]);
 
           return {
             ...tenant,
-            credit_balance: balanceData?.current_balance || 0,
+            credit_balance: (balanceData as any)?.current_balance || 0,
             _count: {
               leads: leadsCount || 0,
               offers: offersCount || 0,
               members: membersCount || 0,
             },
-          };
+          } as TenantWithStats;
         })
       );
 
@@ -151,27 +177,41 @@ export function useTenant(id: string | null): UseTenantResult {
 
     try {
       // Fetch tenant
-      const { data: tenantData, error: tenantError } = await supabase
-        .from("tenants")
-        .select("*")
-        .eq("id", id)
-        .single();
+      const { data: tenantData, error: tenantError } = await queryWithTimeout(
+        supabase
+          .from("tenants")
+          .select("*")
+          .eq("id", id)
+          .single(),
+        10000,
+        `fetch tenant ${id}`
+      );
 
       if (tenantError) throw tenantError;
+      if (!tenantData) throw new Error("Tenant not found");
 
       // Fetch pricing
-      const { data: pricingData } = await supabase
-        .from("tenant_pricing")
-        .select("*")
-        .eq("tenant_id", id)
-        .single();
+      const { data: pricingData } = await queryWithTimeout(
+        supabase
+          .from("tenant_pricing")
+          .select("*")
+          .eq("tenant_id", id)
+          .single(),
+        10000,
+        `fetch pricing for tenant ${id}`
+      );
 
       // Get credit balance
-      const { data: balanceData, error: balanceError } = await supabase
-        .from("tenant_credit_balance")
-        .select("current_balance")
-        .eq("tenant_id", id)
-        .maybeSingle();
+      const { data: balanceData, error: balanceError } = await queryWithTimeout(
+        supabase
+          .from("tenant_credit_balance")
+          .select("current_balance")
+          .eq("tenant_id", id)
+          .maybeSingle(),
+        5000,
+        `credit balance for tenant ${id}`,
+        false // Don't retry balance queries
+      );
       
       // Silently handle errors for credit balance (view might not exist or have RLS issues)
       if (balanceError) {
@@ -179,31 +219,47 @@ export function useTenant(id: string | null): UseTenantResult {
       }
 
       // Get counts
-      const { count: leadsCount } = await supabase
-        .from("lead_offers")
-        .select("id", { count: "exact", head: true })
-        .eq("tenant_id", id);
-
-      const { count: offersCount } = await supabase
-        .from("offers")
-        .select("id", { count: "exact", head: true })
-        .eq("tenant_id", id);
-
-      const { count: membersCount } = await supabase
-        .from("tenant_members")
-        .select("id", { count: "exact", head: true })
-        .eq("tenant_id", id)
-        .eq("status", "ACTIVE");
+      const [
+        { count: leadsCount },
+        { count: offersCount },
+        { count: membersCount },
+      ] = await Promise.all([
+        queryWithTimeout(
+          supabase
+            .from("lead_offers")
+            .select("id", { count: "exact", head: true })
+            .eq("tenant_id", id),
+          5000,
+          `leads count for tenant ${id}`
+        ),
+        queryWithTimeout(
+          supabase
+            .from("offers")
+            .select("id", { count: "exact", head: true })
+            .eq("tenant_id", id),
+          5000,
+          `offers count for tenant ${id}`
+        ),
+        queryWithTimeout(
+          supabase
+            .from("tenant_members")
+            .select("id", { count: "exact", head: true })
+            .eq("tenant_id", id)
+            .eq("status", "ACTIVE"),
+          5000,
+          `members count for tenant ${id}`
+        ),
+      ]);
 
       setTenant({
         ...tenantData,
-        credit_balance: balanceData?.current_balance || 0,
+        credit_balance: (balanceData as any)?.current_balance || 0,
         _count: {
           leads: leadsCount || 0,
           offers: offersCount || 0,
           members: membersCount || 0,
         },
-      });
+      } as any);
 
       setPricing(pricingData as TenantPricing | null);
     } catch (err) {
@@ -240,25 +296,37 @@ export function useTenantMutations() {
   }) => {
     setIsLoading(true);
     try {
-      const { data: tenant, error } = await supabase
-        .from("tenants")
-        .insert(data)
-        .select()
-        .single();
+      const { data: tenant, error } = await queryWithTimeout(
+        supabase
+          .from("tenants")
+          .insert(data)
+          .select()
+          .single(),
+        30000,
+        "create tenant"
+      );
 
       if (error) throw error;
+      if (!tenant || typeof tenant !== "object" || !("id" in tenant)) {
+        throw new Error("Failed to create tenant");
+      }
 
       // Create default pricing
-      const { error: pricingError } = await supabase.from("tenant_pricing").insert({
-        tenant_id: tenant.id,
-        charge_model: "PER_LEAD",
-        cost_per_lead: 10,
-        packages: [
-          { id: "starter", name: "Starter", credits: 50, price: 400 },
-          { id: "growth", name: "Growth", credits: 100, price: 700, discount_pct: 12.5, is_popular: true },
-          { id: "scale", name: "Scale", credits: 250, price: 1500, discount_pct: 25 },
-        ],
-      });
+      const { error: pricingError } = await queryWithTimeout(
+        supabase.from("tenant_pricing").insert({
+          tenant_id: (tenant as any).id,
+          charge_model: "PER_LEAD",
+          cost_per_lead: 10,
+          packages: [
+            { id: "starter", name: "Starter", credits: 50, price: 400 },
+            { id: "growth", name: "Growth", credits: 100, price: 700, discount_pct: 12.5, is_popular: true },
+            { id: "scale", name: "Scale", credits: 250, price: 1500, discount_pct: 25 },
+          ],
+        }),
+        10000,
+        "create default pricing",
+        false // Don't retry pricing creation
+      );
 
       if (pricingError) {
         console.error("Error creating default pricing:", pricingError);
@@ -277,14 +345,19 @@ export function useTenantMutations() {
   const updateTenant = async (id: string, data: Partial<Tenant> | any) => {
     setIsLoading(true);
     try {
-      const { data: tenant, error } = await supabase
-        .from("tenants")
-        .update({ ...data, updated_at: new Date().toISOString() })
-        .eq("id", id)
-        .select()
-        .single();
+      const { data: tenant, error } = await queryWithTimeout(
+        supabase
+          .from("tenants")
+          .update({ ...data, updated_at: new Date().toISOString() })
+          .eq("id", id)
+          .select()
+          .single(),
+        30000,
+        `update tenant ${id}`
+      );
 
       if (error) throw error;
+      if (!tenant) throw new Error("Failed to update tenant");
       return tenant;
     } finally {
       setIsLoading(false);
@@ -303,14 +376,19 @@ export function useTenantMutations() {
         updateData.activated_at = new Date().toISOString();
       }
 
-      const { data: tenant, error } = await supabase
-        .from("tenants")
-        .update(updateData)
-        .eq("id", id)
-        .select()
-        .single();
+      const { data: tenant, error } = await queryWithTimeout(
+        supabase
+          .from("tenants")
+          .update(updateData)
+          .eq("id", id)
+          .select()
+          .single(),
+        30000,
+        `update tenant status ${id}`
+      );
 
       if (error) throw error;
+      if (!tenant) throw new Error("Failed to update tenant status");
       return tenant;
     } finally {
       setIsLoading(false);
@@ -320,14 +398,19 @@ export function useTenantMutations() {
   const updatePricing = async (tenantId: string, data: Partial<TenantPricing>) => {
     setIsLoading(true);
     try {
-      const { data: pricing, error } = await supabase
-        .from("tenant_pricing")
-        .update({ ...data, updated_at: new Date().toISOString() })
-        .eq("tenant_id", tenantId)
-        .select()
-        .single();
+      const { data: pricing, error } = await queryWithTimeout(
+        supabase
+          .from("tenant_pricing")
+          .update({ ...data, updated_at: new Date().toISOString() })
+          .eq("tenant_id", tenantId)
+          .select()
+          .single(),
+        30000,
+        `update pricing for tenant ${tenantId}`
+      );
 
       if (error) throw error;
+      if (!pricing) throw new Error("Failed to update pricing");
       return pricing;
     } finally {
       setIsLoading(false);
@@ -337,7 +420,11 @@ export function useTenantMutations() {
   const deleteTenant = async (id: string) => {
     setIsLoading(true);
     try {
-      const { error } = await supabase.from("tenants").delete().eq("id", id);
+      const { error } = await queryWithTimeout(
+        supabase.from("tenants").delete().eq("id", id),
+        30000,
+        `delete tenant ${id}`
+      );
       if (error) throw error;
     } finally {
       setIsLoading(false);
@@ -352,49 +439,71 @@ export function useTenantMutations() {
     setIsLoading(true);
     try {
       // Update tenant status to ACTIVE
-      const { error: tenantError } = await supabase
-        .from("tenants")
-        .update({
-          status: "ACTIVE",
-          activated_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", tenantId);
+      const { error: tenantError } = await queryWithTimeout(
+        supabase
+          .from("tenants")
+          .update({
+            status: "ACTIVE",
+            activated_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", tenantId),
+        30000,
+        `approve tenant ${tenantId}`
+      );
 
       if (tenantError) throw tenantError;
 
       // Update all pending memberships to ACTIVE
-      const { error: memberError } = await supabase
-        .from("tenant_members")
-        .update({
-          status: "ACTIVE",
-          approved_by: approvedBy,
-          approved_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("tenant_id", tenantId)
-        .eq("status", "PENDING_APPROVAL");
+      const { error: memberError } = await queryWithTimeout(
+        supabase
+          .from("tenant_members")
+          .update({
+            status: "ACTIVE",
+            approved_by: approvedBy,
+            approved_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("tenant_id", tenantId)
+          .eq("status", "PENDING_APPROVAL"),
+        30000,
+        `approve memberships for tenant ${tenantId}`
+      );
 
       if (memberError) throw memberError;
 
       // Create default pricing if not exists
-      const { data: existingPricing } = await supabase
-        .from("tenant_pricing")
-        .select("id")
-        .eq("tenant_id", tenantId)
-        .single();
+      const { data: existingPricing } = await queryWithTimeout(
+        supabase
+          .from("tenant_pricing")
+          .select("id")
+          .eq("tenant_id", tenantId)
+          .single(),
+        10000,
+        `check existing pricing for tenant ${tenantId}`
+      );
 
       if (!existingPricing) {
-        await supabase.from("tenant_pricing").insert({
-          tenant_id: tenantId,
-          charge_model: "PER_LEAD",
-          cost_per_lead: 10,
-          packages: [
-            { id: "starter", name: "Starter", credits: 50, price: 400 },
-            { id: "growth", name: "Growth", credits: 100, price: 700, discount_pct: 12.5, is_popular: true },
-            { id: "scale", name: "Scale", credits: 250, price: 1500, discount_pct: 25 },
-          ],
-        });
+        const { error: pricingInsertError } = await queryWithTimeout(
+          supabase.from("tenant_pricing").insert({
+            tenant_id: tenantId,
+            charge_model: "PER_LEAD",
+            cost_per_lead: 10,
+            packages: [
+              { id: "starter", name: "Starter", credits: 50, price: 400 },
+              { id: "growth", name: "Growth", credits: 100, price: 700, discount_pct: 12.5, is_popular: true },
+              { id: "scale", name: "Scale", credits: 250, price: 1500, discount_pct: 25 },
+            ],
+          }),
+          10000,
+          `create default pricing for tenant ${tenantId}`,
+          false // Don't retry pricing creation
+        );
+
+        if (pricingInsertError) {
+          console.error("Error creating default pricing:", pricingInsertError);
+          // Don't throw - tenant is already approved
+        }
       }
 
       return { success: true };
@@ -452,6 +561,7 @@ export function useTenantMutations() {
     isLoading,
   };
 }
+
 
 
 

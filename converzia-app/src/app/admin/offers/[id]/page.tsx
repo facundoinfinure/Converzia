@@ -81,7 +81,7 @@ export default function OfferDetailPage({ params }: Props) {
     try {
       const newOffer = await duplicateOffer(offer.id);
       toast.success("Oferta duplicada correctamente");
-      router.push(`/admin/offers/${newOffer.id}`);
+      router.push(`/admin/offers/${(newOffer as any)?.id || offer.id}`);
     } catch (error) {
       toast.error("Error al duplicar la oferta");
     } finally {

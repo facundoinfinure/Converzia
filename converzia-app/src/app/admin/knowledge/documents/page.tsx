@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { useTenantOptions } from "@/lib/hooks/use-offers";
 import { formatRelativeTime } from "@/lib/utils";
 import { CustomSelect } from "@/components/ui/Select";
@@ -82,7 +83,11 @@ export default function KnowledgeDocumentsPage() {
         query = query.eq("status", statusFilter);
       }
 
-      const { data, error } = await query;
+      const { data, error } = await queryWithTimeout(
+        query,
+        10000,
+        "fetch rag documents"
+      );
 
       if (error) {
         console.error("Error fetching rag_documents:", error);
@@ -90,7 +95,7 @@ export default function KnowledgeDocumentsPage() {
       }
 
       setDocuments(
-        (data || []).map((d: any) => ({
+        (Array.isArray(data) ? data : []).map((d: any) => ({
           ...d,
           tenant: Array.isArray(d.tenant) ? d.tenant[0] : d.tenant,
           offer: Array.isArray(d.offer) ? d.offer[0] : d.offer,
@@ -293,5 +298,6 @@ export default function KnowledgeDocumentsPage() {
     </PageContainer>
   );
 }
+
 
 

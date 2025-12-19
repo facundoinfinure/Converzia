@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import type { UserProfile, TenantMembership } from "@/types";
 
 // ============================================
@@ -67,27 +68,35 @@ export function useUsers(options: UseUsersOptions = {}): UseUsersResult {
       const to = from + pageSize - 1;
       query = query.range(from, to).order("created_at", { ascending: false });
 
-      const { data, error: queryError, count } = await query;
+      const { data, error: queryError, count } = await queryWithTimeout(
+        query,
+        10000,
+        "fetch users"
+      );
 
       if (queryError) throw queryError;
 
       // Fetch memberships for each user
       const usersWithMemberships = await Promise.all(
-        (data || []).map(async (user: any) => {
-          const { data: memberships } = await supabase
-            .from("tenant_members")
-            .select(`
-              id,
-              tenant_id,
-              role,
-              status,
-              tenant:tenants(id, name)
-            `)
-            .eq("user_id", user.id);
+        (Array.isArray(data) ? data : []).map(async (user: any) => {
+          const { data: memberships } = await queryWithTimeout(
+            supabase
+              .from("tenant_members")
+              .select(`
+                id,
+                tenant_id,
+                role,
+                status,
+                tenant:tenants(id, name)
+              `)
+              .eq("user_id", user.id),
+            5000,
+            `memberships for user ${user.id}`
+          );
 
           return {
             ...user,
-            memberships: (memberships || []).map((m: any) => ({
+            memberships: (Array.isArray(memberships) ? memberships : []).map((m: any) => ({
               ...m,
               tenant: Array.isArray(m.tenant) ? m.tenant[0] : m.tenant,
             })),
@@ -140,20 +149,24 @@ export function usePendingApprovals() {
     setError(null);
 
     try {
-      const { data, error: queryError, count } = await supabase
-        .from("tenant_members")
-        .select(`
-          id,
-          user_id,
-          tenant_id,
-          role,
-          status,
-          created_at,
-          user:user_profiles!tenant_members_user_id_fkey(id, email, full_name),
-          tenant:tenants(id, name)
-        `, { count: "exact" })
-        .eq("status", "PENDING_APPROVAL")
-        .order("created_at", { ascending: false });
+      const { data, error: queryError, count } = await queryWithTimeout(
+        supabase
+          .from("tenant_members")
+          .select(`
+            id,
+            user_id,
+            tenant_id,
+            role,
+            status,
+            created_at,
+            user:user_profiles!tenant_members_user_id_fkey(id, email, full_name),
+            tenant:tenants(id, name)
+          `, { count: "exact" })
+          .eq("status", "PENDING_APPROVAL")
+          .order("created_at", { ascending: false }),
+        10000,
+        "fetch pending approvals"
+      );
 
       if (queryError) {
         // Silently handle errors in sidebar - don't show errors for badge counts
@@ -163,7 +176,7 @@ export function usePendingApprovals() {
         return;
       }
 
-      const formatted = (data || []).map((a: any) => ({
+      const formatted = (Array.isArray(data) ? data : []).map((a: any) => ({
         ...a,
         user: Array.isArray(a.user) ? a.user[0] : a.user,
         tenant: Array.isArray(a.tenant) ? a.tenant[0] : a.tenant,
@@ -199,10 +212,14 @@ export function useUserMutations() {
   const updateProfile = async (id: string, data: Partial<UserProfile>) => {
     setIsLoading(true);
     try {
-      const { error } = await supabase
-        .from("user_profiles")
-        .update({ ...data, updated_at: new Date().toISOString() })
-        .eq("id", id);
+      const { error } = await queryWithTimeout(
+        supabase
+          .from("user_profiles")
+          .update({ ...data, updated_at: new Date().toISOString() })
+          .eq("id", id),
+        30000,
+        `update profile ${id}`
+      );
 
       if (error) throw error;
     } finally {
@@ -213,10 +230,14 @@ export function useUserMutations() {
   const setConverziaAdmin = async (id: string, isAdmin: boolean) => {
     setIsLoading(true);
     try {
-      const { error } = await supabase
-        .from("user_profiles")
-        .update({ is_converzia_admin: isAdmin, updated_at: new Date().toISOString() })
-        .eq("id", id);
+      const { error } = await queryWithTimeout(
+        supabase
+          .from("user_profiles")
+          .update({ is_converzia_admin: isAdmin, updated_at: new Date().toISOString() })
+          .eq("id", id),
+        30000,
+        `set admin status for user ${id}`
+      );
 
       if (error) throw error;
     } finally {
@@ -227,10 +248,14 @@ export function useUserMutations() {
   const approveMembership = async (membershipId: string) => {
     setIsLoading(true);
     try {
-      const { error } = await supabase
-        .from("tenant_members")
-        .update({ status: "ACTIVE" })
-        .eq("id", membershipId);
+      const { error } = await queryWithTimeout(
+        supabase
+          .from("tenant_members")
+          .update({ status: "ACTIVE" })
+          .eq("id", membershipId),
+        30000,
+        `approve membership ${membershipId}`
+      );
 
       if (error) throw error;
     } finally {
@@ -241,10 +266,14 @@ export function useUserMutations() {
   const rejectMembership = async (membershipId: string) => {
     setIsLoading(true);
     try {
-      const { error } = await supabase
-        .from("tenant_members")
-        .update({ status: "REVOKED" })
-        .eq("id", membershipId);
+      const { error } = await queryWithTimeout(
+        supabase
+          .from("tenant_members")
+          .update({ status: "REVOKED" })
+          .eq("id", membershipId),
+        30000,
+        `reject membership ${membershipId}`
+      );
 
       if (error) throw error;
     } finally {
@@ -255,10 +284,14 @@ export function useUserMutations() {
   const updateMembershipRole = async (membershipId: string, role: string) => {
     setIsLoading(true);
     try {
-      const { error } = await supabase
-        .from("tenant_members")
-        .update({ role })
-        .eq("id", membershipId);
+      const { error } = await queryWithTimeout(
+        supabase
+          .from("tenant_members")
+          .update({ role })
+          .eq("id", membershipId),
+        30000,
+        `update membership role ${membershipId}`
+      );
 
       if (error) throw error;
     } finally {
@@ -269,10 +302,14 @@ export function useUserMutations() {
   const suspendMembership = async (membershipId: string) => {
     setIsLoading(true);
     try {
-      const { error } = await supabase
-        .from("tenant_members")
-        .update({ status: "SUSPENDED" })
-        .eq("id", membershipId);
+      const { error } = await queryWithTimeout(
+        supabase
+          .from("tenant_members")
+          .update({ status: "SUSPENDED" })
+          .eq("id", membershipId),
+        30000,
+        `suspend membership ${membershipId}`
+      );
 
       if (error) throw error;
     } finally {
@@ -290,6 +327,7 @@ export function useUserMutations() {
     isLoading,
   };
 }
+
 
 
 

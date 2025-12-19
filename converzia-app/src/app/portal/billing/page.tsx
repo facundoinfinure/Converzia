@@ -21,6 +21,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/lib/auth/context";
 import { usePortalBilling } from "@/lib/hooks/use-portal";
 import { createClient } from "@/lib/supabase/client";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { formatCurrency, formatDate, formatRelativeTime } from "@/lib/utils";
 import type { CreditLedgerEntry, CreditPackage } from "@/types";
 
@@ -38,11 +39,15 @@ export default function PortalBillingPage() {
     async function fetchPackages() {
       if (!activeTenantId) return;
 
-      const { data } = await supabase
-        .from("tenant_pricing")
-        .select("packages")
-        .eq("tenant_id", activeTenantId)
-        .single();
+      const { data } = await queryWithTimeout(
+        supabase
+          .from("tenant_pricing")
+          .select("packages")
+          .eq("tenant_id", activeTenantId)
+          .single(),
+        10000,
+        "fetch packages"
+      );
 
       if ((data as any)?.packages) {
         setPackages((data as any).packages as CreditPackage[]);
@@ -246,6 +251,7 @@ export default function PortalBillingPage() {
     </PageContainer>
   );
 }
+
 
 
 

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Alert } from "@/components/ui/Alert";
 import { createClient } from "@/lib/supabase/client";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 
 // Google Icon Component
 function GoogleIcon({ className }: { className?: string }) {
@@ -82,10 +83,18 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      // Create timeout for auth
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("Timeout: El login tardó más de 10 segundos")), 10000);
       });
+
+      const { data, error: signInError } = await Promise.race([
+        supabase.auth.signInWithPassword({
+          email,
+          password,
+        }),
+        timeoutPromise,
+      ]) as any;
 
       if (signInError) {
         if (signInError.message.includes("Invalid login credentials")) {
@@ -96,22 +105,32 @@ export default function LoginPage() {
         return;
       }
 
-      if (data.user) {
+      if (data && data.user) {
         // Check if user is admin
-        const { data: profile } = await supabase
-          .from("user_profiles")
-          .select("is_converzia_admin")
-          .eq("id", data.user.id)
-          .single();
+        const { data: profile } = await queryWithTimeout(
+          supabase
+            .from("user_profiles")
+            .select("is_converzia_admin")
+            .eq("id", data.user.id)
+            .single(),
+          10000,
+          "check admin status",
+          false // Don't retry admin check
+        );
 
         if ((profile as any)?.is_converzia_admin) {
           router.push("/admin");
         } else {
           // Check for active memberships
-          const { data: memberships } = await supabase
-            .from("tenant_members")
-            .select("id, status")
-            .eq("user_id", data.user.id) as { data: { id: string; status: string }[] | null };
+          const { data: memberships } = await queryWithTimeout(
+            supabase
+              .from("tenant_members")
+              .select("id, status")
+              .eq("user_id", data.user.id),
+            10000,
+            "check memberships",
+            false // Don't retry membership check
+          ) as { data: { id: string; status: string }[] | null };
 
           if (!memberships || memberships.length === 0) {
             router.push("/register");
@@ -269,5 +288,6 @@ export default function LoginPage() {
     </div>
   );
 }
+
 
 

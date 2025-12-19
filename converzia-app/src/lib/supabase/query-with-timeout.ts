@@ -1,6 +1,7 @@
 "use client";
 
 import type { PostgrestError } from "@supabase/supabase-js";
+import { retryQuery } from "./retry";
 
 type SupabaseResponse<T> = {
   data: T | null;
@@ -9,13 +10,14 @@ type SupabaseResponse<T> = {
 };
 
 /**
- * Helper function to add timeout to Supabase queries
- * Prevents queries from hanging indefinitely
+ * Helper function to add timeout and retry logic to Supabase queries
+ * Prevents queries from hanging indefinitely and retries on failure
  */
 export async function queryWithTimeout<T>(
   queryPromise: Promise<SupabaseResponse<T>>,
   timeoutMs: number = 10000,
-  queryName: string = "query"
+  queryName: string = "query",
+  enableRetry: boolean = true
 ): Promise<SupabaseResponse<T>> {
   const timeoutPromise = new Promise<SupabaseResponse<T>>((resolve) => {
     setTimeout(() => {
@@ -32,18 +34,31 @@ export async function queryWithTimeout<T>(
     }, timeoutMs);
   });
 
-  try {
-    const result = await Promise.race([queryPromise, timeoutPromise]);
-    return result;
-  } catch (error: any) {
-    console.error(`❌ Error in ${queryName}:`, error);
-    return {
-      data: null,
-      count: null,
-      error: {
-        message: error?.message || "Error desconocido",
-        code: error?.code || "UNKNOWN",
-      } as PostgrestError,
-    };
+  const queryWithTimeoutFn = async (): Promise<SupabaseResponse<T>> => {
+    try {
+      const result = await Promise.race([queryPromise, timeoutPromise]);
+      return result;
+    } catch (error: any) {
+      console.error(`❌ Error in ${queryName}:`, error);
+      return {
+        data: null,
+        count: null,
+        error: {
+          message: error?.message || "Error desconocido",
+          code: error?.code || "UNKNOWN",
+        } as PostgrestError,
+      };
+    }
+  };
+
+  // Apply retry logic if enabled
+  if (enableRetry) {
+    return retryQuery(queryWithTimeoutFn, {
+      maxRetries: 2, // Retry up to 2 times (3 total attempts)
+      retryDelay: 500, // Start with 500ms delay
+    });
   }
+
+  return queryWithTimeoutFn();
 }
+

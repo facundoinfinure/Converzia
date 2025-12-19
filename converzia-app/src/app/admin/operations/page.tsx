@@ -25,6 +25,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ConfirmModal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { formatCurrency, formatRelativeTime, formatDate } from "@/lib/utils";
 
 // ============================================
@@ -86,10 +87,26 @@ export default function OperationsPage() {
           { count: failedDeliveries, error: failedError },
           { count: pendingDeliveries, error: pendingError },
         ] = await Promise.all([
-          supabase.from("deliveries").select("id", { count: "exact", head: true }),
-          supabase.from("deliveries").select("id", { count: "exact", head: true }).eq("status", "DELIVERED"),
-          supabase.from("deliveries").select("id", { count: "exact", head: true }).eq("status", "FAILED"),
-          supabase.from("deliveries").select("id", { count: "exact", head: true }).eq("status", "PENDING"),
+          queryWithTimeout(
+            supabase.from("deliveries").select("id", { count: "exact", head: true }),
+            10000,
+            "total deliveries"
+          ),
+          queryWithTimeout(
+            supabase.from("deliveries").select("id", { count: "exact", head: true }).eq("status", "DELIVERED"),
+            10000,
+            "successful deliveries"
+          ),
+          queryWithTimeout(
+            supabase.from("deliveries").select("id", { count: "exact", head: true }).eq("status", "FAILED"),
+            10000,
+            "failed deliveries"
+          ),
+          queryWithTimeout(
+            supabase.from("deliveries").select("id", { count: "exact", head: true }).eq("status", "PENDING"),
+            10000,
+            "pending deliveries"
+          ),
         ]);
 
         if (totalError || successError || failedError || pendingError) {
@@ -97,23 +114,33 @@ export default function OperationsPage() {
         }
 
         // Fetch refund stats
-        const { data: refundData, error: refundError } = await supabase
-          .from("credit_ledger")
-          .select("amount")
-          .eq("transaction_type", "CREDIT_REFUND");
+        const { data: refundData, error: refundError } = await queryWithTimeout(
+          supabase
+            .from("credit_ledger")
+            .select("amount")
+            .eq("transaction_type", "CREDIT_REFUND"),
+          10000,
+          "refund stats"
+        );
 
         if (refundError) {
           console.error("Error fetching refund stats:", refundError);
         }
 
-        const totalRefunds = refundData?.length || 0;
-        const refundAmount = refundData?.reduce((sum: number, r: any) => sum + Math.abs(r.amount), 0) || 0;
+        const totalRefunds = Array.isArray(refundData) ? refundData.length : 0;
+        const refundAmount = Array.isArray(refundData) 
+          ? refundData.reduce((sum: number, r: any) => sum + Math.abs(r.amount), 0) 
+          : 0;
 
         // Fetch active conversations
-        const { count: activeConversations, error: conversationsError } = await supabase
-          .from("lead_offers")
-          .select("id", { count: "exact", head: true })
-          .in("status", ["CONTACTED", "ENGAGED", "QUALIFYING"]);
+        const { count: activeConversations, error: conversationsError } = await queryWithTimeout(
+          supabase
+            .from("lead_offers")
+            .select("id", { count: "exact", head: true })
+            .in("status", ["CONTACTED", "ENGAGED", "QUALIFYING"]),
+          10000,
+          "active conversations"
+        );
 
         if (conversationsError) {
           console.error("Error fetching active conversations:", conversationsError);
@@ -131,26 +158,30 @@ export default function OperationsPage() {
         });
 
         // Fetch recent deliveries
-        const { data: deliveriesData, error: deliveriesError } = await supabase
-          .from("deliveries")
-          .select(`
-            id,
-            lead_id,
-            tenant_id,
-            status,
-            created_at,
-            delivered_at,
-            error_message,
-            lead:leads(phone, full_name),
-            tenant:tenants(name),
-            offer:offers(name)
-          `)
-          .order("created_at", { ascending: false })
-          .limit(50);
+        const { data: deliveriesData, error: deliveriesError } = await queryWithTimeout(
+          supabase
+            .from("deliveries")
+            .select(`
+              id,
+              lead_id,
+              tenant_id,
+              status,
+              created_at,
+              delivered_at,
+              error_message,
+              lead:leads(phone, full_name),
+              tenant:tenants(name),
+              offer:offers(name)
+            `)
+            .order("created_at", { ascending: false })
+            .limit(50),
+          10000,
+          "recent deliveries"
+        );
 
         if (deliveriesError) {
           console.error("Error fetching deliveries:", deliveriesError);
-        } else if (deliveriesData) {
+        } else if (deliveriesData && Array.isArray(deliveriesData)) {
           setDeliveries(
             deliveriesData.map((d: any) => ({
               ...d,
@@ -162,23 +193,27 @@ export default function OperationsPage() {
         }
 
         // Fetch recent refunds
-        const { data: refundsData, error: refundsDataError } = await supabase
-          .from("credit_ledger")
-          .select(`
-            id,
-            tenant_id,
-            amount,
-            description,
-            created_at,
-            tenant:tenants(name)
-          `)
-          .eq("transaction_type", "CREDIT_REFUND")
-          .order("created_at", { ascending: false })
-          .limit(20);
+        const { data: refundsData, error: refundsDataError } = await queryWithTimeout(
+          supabase
+            .from("credit_ledger")
+            .select(`
+              id,
+              tenant_id,
+              amount,
+              description,
+              created_at,
+              tenant:tenants(name)
+            `)
+            .eq("transaction_type", "CREDIT_REFUND")
+            .order("created_at", { ascending: false })
+            .limit(20),
+          10000,
+          "recent refunds"
+        );
 
         if (refundsDataError) {
           console.error("Error fetching refunds:", refundsDataError);
-        } else if (refundsData) {
+        } else if (refundsData && Array.isArray(refundsData)) {
           setRefunds(
             refundsData.map((r: any) => ({
               ...r,
@@ -513,6 +548,7 @@ export default function OperationsPage() {
     </PageContainer>
   );
 }
+
 
 
 

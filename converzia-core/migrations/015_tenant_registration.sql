@@ -30,3 +30,4 @@ COMMENT ON COLUMN tenants.rejected_at IS 'Timestamp when registration was reject
 COMMENT ON COLUMN tenants.rejected_reason IS 'Reason for rejection if applicable';
 
 
+
