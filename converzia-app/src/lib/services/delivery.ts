@@ -187,12 +187,19 @@ async function consumeCredit(
 
   // Atomic credit consumption (locks per-tenant)
   // Wrap RPC call with timeout
-  const rpcPromise = supabase.rpc("consume_credit", {
-    p_tenant_id: tenantId,
-    p_delivery_id: deliveryId,
-    p_lead_offer_id: leadOfferId,
-    p_description: "Lead delivery",
+  const rpcTimeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error("Timeout: La operación RPC tardó más de 10 segundos")), 10000);
   });
+
+  const { data, error } = await Promise.race([
+    supabase.rpc("consume_credit", {
+      p_tenant_id: tenantId,
+      p_delivery_id: deliveryId,
+      p_lead_offer_id: leadOfferId,
+      p_description: "Lead delivery",
+    }),
+    rpcTimeoutPromise,
+  ]) as any;
 
   if (error) {
     throw new Error(error.message);
@@ -205,15 +212,19 @@ async function consumeCredit(
   }
 
   // Backfill delivery.credit_ledger_id for traceability
-  const { data: ledger } = await (supabase as any)
-    .from("credit_ledger")
-    .select("id")
-    .eq("tenant_id", tenantId)
-    .eq("delivery_id", deliveryId)
-    .eq("transaction_type", "CREDIT_CONSUMPTION")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const { data: ledger } = await queryWithTimeout(
+    (supabase as any)
+      .from("credit_ledger")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("delivery_id", deliveryId)
+      .eq("transaction_type", "CREDIT_CONSUMPTION")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    10000,
+    "get credit ledger entry"
+  );
 
   if (ledger?.id) {
     await queryWithTimeout(
@@ -293,9 +304,12 @@ async function deliverToTokko(
       .from("deliveries")
       .update({
         crm_record_id: result.contact_id || null,
-      crm_delivered_at: new Date().toISOString() 
-    })
-    .eq("id", delivery.id);
+        crm_delivered_at: new Date().toISOString(),
+      })
+      .eq("id", delivery.id),
+    10000,
+    "update delivery with Tokko contact info"
+  );
 
   console.log("Successfully delivered to Tokko, contact_id:", result.contact_id);
 }
@@ -377,14 +391,21 @@ export async function refundCredit(
   }
 
   // Atomic refund (and delivery status update) via DB function
-  const { error: refundError } = await queryWithTimeout(
-    supabase.rpc("refund_credit", {
-    p_tenant_id: delivery.tenant_id,
-    p_delivery_id: deliveryId,
-    p_lead_offer_id: delivery.lead_offer_id,
-    p_reason: reason,
-    p_created_by: null,
+  // RPC calls need manual timeout
+  const rpcTimeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error("Timeout: La operación RPC tardó más de 10 segundos")), 10000);
   });
+
+  const { error: refundError } = await Promise.race([
+    supabase.rpc("refund_credit", {
+      p_tenant_id: delivery.tenant_id,
+      p_delivery_id: deliveryId,
+      p_lead_offer_id: delivery.lead_offer_id,
+      p_reason: reason,
+      p_created_by: null,
+    }),
+    rpcTimeoutPromise,
+  ]) as any;
 
   if (refundError) {
     throw new Error(refundError.message);
@@ -396,9 +417,12 @@ export async function refundCredit(
       .from("lead_offers")
       .update({
         billing_eligibility: "PENDING",
-      billing_notes: `Refunded: ${reason}`,
-    })
-    .eq("id", delivery.lead_offer_id);
+        billing_notes: `Refunded: ${reason}`,
+      })
+      .eq("id", delivery.lead_offer_id),
+    10000,
+    "update lead offer after refund"
+  );
 }
 
 // ============================================
