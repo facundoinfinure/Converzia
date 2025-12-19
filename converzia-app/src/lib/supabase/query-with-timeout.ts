@@ -1,20 +1,27 @@
 "use client";
 
-import type { PostgrestSingleResponse, PostgrestError } from "@supabase/supabase-js";
+import type { PostgrestError } from "@supabase/supabase-js";
+
+type SupabaseResponse<T> = {
+  data: T | null;
+  error: PostgrestError | null;
+  count?: number | null;
+};
 
 /**
  * Helper function to add timeout to Supabase queries
  * Prevents queries from hanging indefinitely
  */
 export async function queryWithTimeout<T>(
-  queryPromise: Promise<{ data: T | null; error: PostgrestError | null }>,
+  queryPromise: Promise<SupabaseResponse<T>>,
   timeoutMs: number = 10000,
   queryName: string = "query"
-): Promise<{ data: T | null; error: PostgrestError | null }> {
-  const timeoutPromise = new Promise<{ data: null; error: PostgrestError }>((resolve) => {
+): Promise<SupabaseResponse<T>> {
+  const timeoutPromise = new Promise<SupabaseResponse<T>>((resolve) => {
     setTimeout(() => {
       resolve({
         data: null,
+        count: null,
         error: {
           message: `Timeout: ${queryName} tardó más de ${timeoutMs}ms`,
           details: `La consulta ${queryName} no respondió en el tiempo esperado`,
@@ -32,6 +39,7 @@ export async function queryWithTimeout<T>(
     console.error(`❌ Error in ${queryName}:`, error);
     return {
       data: null,
+      count: null,
       error: {
         message: error?.message || "Error desconocido",
         code: error?.code || "UNKNOWN",

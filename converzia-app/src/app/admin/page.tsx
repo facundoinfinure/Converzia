@@ -203,8 +203,8 @@ export default function AdminDashboard() {
         }
 
         let avgResponseTime = "N/A";
-        if (responseTimes && responseTimes.length > 0) {
-          const times = responseTimes
+        if (responseTimes && Array.isArray(responseTimes) && responseTimes.length > 0) {
+          const times = (responseTimes as any[])
             .map((r: any) => {
               const created = new Date(r.created_at).getTime();
               const responded = new Date(r.first_response_at).getTime();
@@ -255,8 +255,8 @@ export default function AdminDashboard() {
           leadReadyRate: totalLeads ? Math.round((leadReadyCount || 0) / totalLeads * 100) : 0,
           avgResponseTime,
           pendingApprovals: pendingApprovals || 0,
-          unmappedAds: unmappedLeads?.length || 0,
-          lowCreditTenants: creditData?.length || 0,
+          unmappedAds: Array.isArray(unmappedLeads) ? unmappedLeads.length : 0,
+          lowCreditTenants: Array.isArray(creditData) ? creditData.length : 0,
           leadsTrend: trendData,
         });
 
@@ -280,9 +280,9 @@ export default function AdminDashboard() {
 
         if (approvalsDataError) {
           console.error("Error fetching approvals:", approvalsDataError);
-        } else if (approvals) {
+        } else if (approvals && Array.isArray(approvals)) {
           setPendingApprovals(
-            approvals.map((a: any) => ({
+            (approvals as any[]).map((a: any) => ({
               id: a.id,
               name: (Array.isArray(a.user) ? a.user[0] : a.user)?.full_name || "Usuario",
               email: (Array.isArray(a.user) ? a.user[0] : a.user)?.email || "",
@@ -311,9 +311,9 @@ export default function AdminDashboard() {
 
         if (recentLeadsError) {
           console.error("Error fetching recent leads:", recentLeadsError);
-        } else if (recentLeads) {
+        } else if (recentLeads && Array.isArray(recentLeads)) {
           setRecentActivity(
-            recentLeads.map((l: any) => ({
+            (recentLeads as any[]).map((l: any) => ({
               id: l.id,
               type: l.status === "LEAD_READY" ? "lead_ready" : l.status === "PENDING_MAPPING" ? "unmapped" : "conversation",
               tenant: l.tenants?.name || "Sin tenant",
