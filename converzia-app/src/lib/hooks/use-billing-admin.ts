@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 
 interface BillingStats {
   totalRevenue: number;
@@ -63,10 +64,14 @@ export function useBillingAdmin() {
       const totalRevenue = completedOrders?.reduce((sum: number, o: OrderTotal) => sum + Number(o.total), 0) || 0;
 
       // Get credits sold
-      const { data: creditPurchases, error: creditError } = await supabase
-        .from("credit_ledger")
-        .select("amount")
-        .eq("transaction_type", "CREDIT_PURCHASE");
+      const { data: creditPurchases, error: creditError } = await queryWithTimeout(
+        supabase
+          .from("credit_ledger")
+          .select("amount")
+          .eq("transaction_type", "CREDIT_PURCHASE"),
+        10000,
+        "get credit purchases"
+      );
 
       if (creditError) {
         console.error("Error fetching credit purchases:", creditError);
@@ -75,20 +80,28 @@ export function useBillingAdmin() {
       const creditsSold = creditPurchases?.reduce((sum: number, c: CreditPurchase) => sum + c.amount, 0) || 0;
 
       // Get active tenants with billing
-      const { count: activeTenants, error: tenantsError } = await supabase
-        .from("tenants")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "ACTIVE");
+      const { count: activeTenants, error: tenantsError } = await queryWithTimeout(
+        supabase
+          .from("tenants")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "ACTIVE"),
+        10000,
+        "get active tenants count"
+      );
 
       if (tenantsError) {
         console.error("Error fetching active tenants:", tenantsError);
       }
 
       // Get pending payments
-      const { count: pendingPayments, error: pendingError } = await supabase
-        .from("billing_orders")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "pending");
+      const { count: pendingPayments, error: pendingError } = await queryWithTimeout(
+        supabase
+          .from("billing_orders")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "pending"),
+        10000,
+        "get pending payments count"
+      );
 
       if (pendingError) {
         console.error("Error fetching pending payments:", pendingError);
@@ -99,11 +112,15 @@ export function useBillingAdmin() {
       thisMonth.setDate(1);
       thisMonth.setHours(0, 0, 0, 0);
 
-      const { data: thisMonthOrders, error: thisMonthError } = await supabase
-        .from("billing_orders")
-        .select("total")
-        .eq("status", "completed")
-        .gte("paid_at", thisMonth.toISOString());
+      const { data: thisMonthOrders, error: thisMonthError } = await queryWithTimeout(
+        supabase
+          .from("billing_orders")
+          .select("total")
+          .eq("status", "completed")
+          .gte("paid_at", thisMonth.toISOString()),
+        10000,
+        "get this month orders"
+      );
 
       if (thisMonthError) {
         console.error("Error fetching this month orders:", thisMonthError);
@@ -117,12 +134,16 @@ export function useBillingAdmin() {
       const lastMonthEnd = new Date(thisMonth);
       lastMonthEnd.setDate(0);
 
-      const { data: lastMonthOrders, error: lastMonthError } = await supabase
-        .from("billing_orders")
-        .select("total")
-        .eq("status", "completed")
-        .gte("paid_at", lastMonth.toISOString())
-        .lt("paid_at", thisMonth.toISOString());
+      const { data: lastMonthOrders, error: lastMonthError } = await queryWithTimeout(
+        supabase
+          .from("billing_orders")
+          .select("total")
+          .eq("status", "completed")
+          .gte("paid_at", lastMonth.toISOString())
+          .lt("paid_at", thisMonth.toISOString()),
+        10000,
+        "get last month orders"
+      );
 
       if (lastMonthError) {
         console.error("Error fetching last month orders:", lastMonthError);
@@ -141,12 +162,16 @@ export function useBillingAdmin() {
         const nextDay = new Date(date);
         nextDay.setDate(nextDay.getDate() + 1);
 
-        const { data: dayOrders, error: dayError } = await supabase
-          .from("billing_orders")
-          .select("total")
-          .eq("status", "completed")
-          .gte("paid_at", date.toISOString())
-          .lt("paid_at", nextDay.toISOString());
+        const { data: dayOrders, error: dayError } = await queryWithTimeout(
+          supabase
+            .from("billing_orders")
+            .select("total")
+            .eq("status", "completed")
+            .gte("paid_at", date.toISOString())
+            .lt("paid_at", nextDay.toISOString()),
+          10000,
+          `get orders for ${date.toISOString().split("T")[0]}`
+        );
 
         if (dayError) {
           console.error("Error fetching day orders:", dayError);

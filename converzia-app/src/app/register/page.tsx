@@ -11,6 +11,7 @@ import { TextArea } from "@/components/ui/TextArea";
 import { CustomSelect } from "@/components/ui/Select";
 import { Alert } from "@/components/ui/Alert";
 import { createClient } from "@/lib/supabase/client";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { useAuth } from "@/lib/auth/context";
 
 const VERTICAL_OPTIONS = [
@@ -40,10 +41,14 @@ export default function RegisterPage() {
     const checkExistingTenant = async () => {
       if (!user) return;
 
-      const { data: memberships } = await supabase
-        .from("tenant_members")
-        .select("id, status, tenant:tenants(status)")
-        .eq("user_id", user.id);
+      const { data: memberships } = await queryWithTimeout(
+        supabase
+          .from("tenant_members")
+          .select("id, status, tenant:tenants(status)")
+          .eq("user_id", user.id),
+        10000,
+        "check existing tenant memberships"
+      );
 
       if (memberships && memberships.length > 0) {
         // User already has a tenant - redirect appropriately
@@ -112,7 +117,8 @@ export default function RegisterPage() {
       const slug = generateSlug(formData.businessName);
 
       // Use the register_tenant function to create tenant and membership
-      const { data, error: registerError } = await supabase.rpc("register_tenant", {
+      // RPC calls need manual timeout handling
+      const rpcPromise = supabase.rpc("register_tenant", {
         p_name: formData.businessName.trim(),
         p_slug: slug,
         p_contact_email: user.email || profile?.email || "",

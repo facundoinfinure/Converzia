@@ -1,5 +1,6 @@
 import { google } from "googleapis";
 import { createClient } from "@/lib/supabase/server";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import type { Delivery, QualificationFields, ScoreBreakdown } from "@/types";
 
 // ============================================
@@ -220,31 +221,39 @@ async function logSheetsSync(
     const supabase = await createClient();
 
     // Get integration ID
-    const { data: integration } = await supabase
-      .from("tenant_integrations")
-      .select("id")
-      .eq("tenant_id", delivery.tenant_id)
-      .eq("integration_type", "GOOGLE_SHEETS")
-      .eq("is_active", true)
-      .single();
+    const { data: integration } = await queryWithTimeout(
+      supabase
+        .from("tenant_integrations")
+        .select("id")
+        .eq("tenant_id", delivery.tenant_id)
+        .eq("integration_type", "GOOGLE_SHEETS")
+        .eq("is_active", true)
+        .single(),
+      10000,
+      "get Google Sheets integration"
+    );
 
     if (!integration) return;
 
     const startedAt = new Date();
     const completedAt = new Date();
 
-    await supabase.from("integration_sync_logs").insert({
-      integration_id: integration.id,
-      delivery_id: delivery.id,
-      sync_type: "LEAD_DELIVERY",
-      status: errorMessage ? "FAILED" : "SUCCESS",
-      request_payload: rowData ? { row_data: rowData } : null,
-      response_payload: response ? { updates: response.updates } : null,
-      error_message: errorMessage,
-      started_at: startedAt.toISOString(),
-      completed_at: completedAt.toISOString(),
-      duration_ms: completedAt.getTime() - startedAt.getTime(),
-    });
+    await queryWithTimeout(
+      supabase.from("integration_sync_logs").insert({
+        integration_id: integration.id,
+        delivery_id: delivery.id,
+        sync_type: "LEAD_DELIVERY",
+        status: errorMessage ? "FAILED" : "SUCCESS",
+        request_payload: rowData ? { row_data: rowData } : null,
+        response_payload: response ? { updates: response.updates } : null,
+        error_message: errorMessage,
+        started_at: startedAt.toISOString(),
+        completed_at: completedAt.toISOString(),
+        duration_ms: completedAt.getTime() - startedAt.getTime(),
+      }),
+      10000,
+      "log Sheets sync"
+    );
   } catch (error) {
     console.error("Error logging Sheets sync:", error);
   }

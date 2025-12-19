@@ -25,6 +25,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/lib/auth/context";
 import { usePortalTeam } from "@/lib/hooks/use-portal";
 import { createClient } from "@/lib/supabase/client";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { formatDate } from "@/lib/utils";
 
 // Role options
@@ -54,20 +55,28 @@ export default function PortalTeamPage() {
 
     try {
       // Check if user exists
-      const { data: existingUser } = await supabase
-        .from("user_profiles")
-        .select("id")
-        .eq("email", inviteEmail)
-        .single();
+      const { data: existingUser } = await queryWithTimeout(
+        supabase
+          .from("user_profiles")
+          .select("id")
+          .eq("email", inviteEmail)
+          .single(),
+        10000,
+        "check existing user"
+      );
 
       if (existingUser) {
         // User exists, create membership
-        const { error } = await (supabase as any).from("tenant_members").insert({
-          tenant_id: activeTenantId,
-          user_id: (existingUser as any).id,
-          role: inviteRole,
-          status: "PENDING_APPROVAL",
-        });
+        const { error } = await queryWithTimeout(
+          (supabase as any).from("tenant_members").insert({
+            tenant_id: activeTenantId,
+            user_id: (existingUser as any).id,
+            role: inviteRole,
+            status: "PENDING_APPROVAL",
+          }),
+          10000,
+          "create tenant membership"
+        );
 
         if (error) throw error;
         toast.success("Invitación enviada. El usuario debe ser aprobado por un admin de Converzia.");
@@ -92,10 +101,14 @@ export default function PortalTeamPage() {
     if (!removeId) return;
 
     try {
-      const { error } = await (supabase as any)
-        .from("tenant_members")
-        .update({ status: "REVOKED" })
-        .eq("id", removeId);
+      const { error } = await queryWithTimeout(
+        (supabase as any)
+          .from("tenant_members")
+          .update({ status: "REVOKED" })
+          .eq("id", removeId),
+        10000,
+        "revoke tenant membership"
+      );
 
       if (error) throw error;
       toast.success("Miembro removido del equipo");

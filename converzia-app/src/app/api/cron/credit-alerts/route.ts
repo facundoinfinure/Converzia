@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 
 // ============================================
 // Cron Job: Credit Alerts
@@ -22,17 +23,22 @@ export async function GET(request: NextRequest) {
     const supabase = createAdminClient();
 
     // Get tenants with low credits
-    const { data: lowCreditTenants, error } = await supabase
-      .from("tenant_credit_balance")
-      .select(`
-        tenant_id,
-        current_balance,
-        tenants:tenant_id (
-          name,
-          contact_email
-        )
-      `)
-      .lt("current_balance", 10);
+    const { data: lowCreditTenants, error } = await queryWithTimeout(
+      supabase
+        .from("tenant_credit_balance")
+        .select(`
+          tenant_id,
+          current_balance,
+          tenants:tenant_id (
+            name,
+            contact_email
+          )
+        `)
+        .lt("current_balance", 10),
+      10000,
+      "fetch tenants with low credits",
+      false // Don't retry credit balance queries
+    );
 
     if (error) {
       console.error("Error fetching low credit tenants:", error);
@@ -53,17 +59,21 @@ export async function GET(request: NextRequest) {
       const tenantInfo = tenant.tenants as any;
 
       // Log event
-      await supabase.from("lead_events").insert({
-        tenant_id: tenant.tenant_id,
-        event_type: "MANUAL_ACTION",
-        details: {
-          current_balance: tenant.current_balance,
-          tenant_name: tenantInfo?.name,
-          action: "CREDIT_ALERT",
-          alert_type: tenant.current_balance === 0 ? "ZERO_CREDITS" : "LOW_CREDITS",
-        },
-        actor_type: "SYSTEM",
-      });
+      await queryWithTimeout(
+        supabase.from("lead_events").insert({
+          tenant_id: tenant.tenant_id,
+          event_type: "MANUAL_ACTION",
+          details: {
+            current_balance: tenant.current_balance,
+            tenant_name: tenantInfo?.name,
+            action: "CREDIT_ALERT",
+            alert_type: tenant.current_balance === 0 ? "ZERO_CREDITS" : "LOW_CREDITS",
+          },
+          actor_type: "SYSTEM",
+        }),
+        10000,
+        "insert credit alert event"
+      );
 
       // TODO: Send email notification
       // await sendLowCreditEmail(tenantInfo.contact_email, {

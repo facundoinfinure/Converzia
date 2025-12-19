@@ -1,4 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/server";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
+import { fetchWithTimeout } from "@/lib/utils/fetch-with-timeout";
 import { generateEmbedding } from "./openai";
 import { extractTextFromPdf, cleanPdfText } from "./pdf";
 
@@ -72,15 +74,19 @@ export async function searchKnowledge(
     const embedding = await generateEmbedding(query);
 
     // Use hybrid search function from database
-    const { data: results, error } = await supabase.rpc("search_rag_chunks", {
-      p_tenant_id: tenantId,
-      p_offer_id: offerId || null,
-      p_query_embedding: embedding,
-      p_query_text: query,
-      p_limit: limit,
-      p_vector_weight: 0.7,
-      p_text_weight: 0.3,
-    });
+    const { data: results, error } = await queryWithTimeout(
+      supabase.rpc("search_rag_chunks", {
+        p_tenant_id: tenantId,
+        p_offer_id: offerId || null,
+        p_query_embedding: embedding,
+        p_query_text: query,
+        p_limit: limit,
+        p_vector_weight: 0.7,
+        p_text_weight: 0.3,
+      }),
+      15000, // 15 seconds for RAG search
+      "RAG hybrid search"
+    );
 
     if (error) {
       console.error("RAG search error:", error);
@@ -112,12 +118,16 @@ async function vectorOnlySearch(
 ): Promise<RagSearchResult[]> {
   const supabase = createAdminClient();
 
-  const { data: results, error } = await supabase.rpc("search_rag_chunks_vector", {
-    p_tenant_id: tenantId,
-    p_offer_id: offerId || null,
-    p_query_embedding: embedding,
-    p_limit: limit,
-  });
+  const { data: results, error } = await queryWithTimeout(
+    supabase.rpc("search_rag_chunks_vector", {
+      p_tenant_id: tenantId,
+      p_offer_id: offerId || null,
+      p_query_embedding: embedding,
+      p_limit: limit,
+    }),
+    15000, // 15 seconds for vector search
+    "RAG vector search"
+  );
 
   if (error) {
     console.error("Vector search error:", error);
@@ -176,11 +186,15 @@ export async function ingestDocument(
 
   try {
     // Get source info
-    const { data: source, error: sourceError } = await supabase
-      .from("rag_sources")
-      .select("*")
-      .eq("id", sourceId)
-      .single();
+    const { data: source, error: sourceError } = await queryWithTimeout(
+      supabase
+        .from("rag_sources")
+        .select("*")
+        .eq("id", sourceId)
+        .single(),
+      10000,
+      `fetch RAG source ${sourceId}`
+    );
 
     if (sourceError || !source) {
       return { success: false, chunkCount: 0, error: "Source not found" };
@@ -190,41 +204,53 @@ export async function ingestDocument(
     const contentHash = await generateHash(content);
 
     // Check for existing document with same hash
-    const { data: existingDoc } = await supabase
-      .from("rag_documents")
-      .select("id")
-      .eq("source_id", sourceId)
-      .eq("content_hash", contentHash)
-      .single();
+    const { data: existingDoc } = await queryWithTimeout(
+      supabase
+        .from("rag_documents")
+        .select("id")
+        .eq("source_id", sourceId)
+        .eq("content_hash", contentHash)
+        .single(),
+      10000,
+      "check existing document"
+    );
 
     if (existingDoc) {
       return { success: true, chunkCount: 0, error: "Document already exists (same content)" };
     }
 
     // Mark previous versions as not current
-    await supabase
-      .from("rag_documents")
-      .update({ is_current: false })
-      .eq("source_id", sourceId);
+    await queryWithTimeout(
+      supabase
+        .from("rag_documents")
+        .update({ is_current: false })
+        .eq("source_id", sourceId),
+      10000,
+      "mark previous documents not current"
+    );
 
     // Create document record
-    const { data: doc, error: docError } = await supabase
-      .from("rag_documents")
-      .insert({
-        source_id: sourceId,
-        tenant_id: source.tenant_id,
-        offer_id: source.offer_id,
-        title: metadata.title,
-        url: metadata.url,
-        raw_content: content,
-        cleaned_content: cleanContent(content),
-        content_hash: contentHash,
-        status: "PROCESSING",
-        doc_type: metadata.doc_type,
-        word_count: content.split(/\s+/).length,
-      })
-      .select()
-      .single();
+    const { data: doc, error: docError } = await queryWithTimeout(
+      supabase
+        .from("rag_documents")
+        .insert({
+          source_id: sourceId,
+          tenant_id: source.tenant_id,
+          offer_id: source.offer_id,
+          title: metadata.title,
+          url: metadata.url,
+          raw_content: content,
+          cleaned_content: cleanContent(content),
+          content_hash: contentHash,
+          status: "PROCESSING",
+          doc_type: metadata.doc_type,
+          word_count: content.split(/\s+/).length,
+        })
+        .select()
+        .single(),
+      30000,
+      "create RAG document"
+    );
 
     if (docError || !doc) {
       return { success: false, chunkCount: 0, error: docError?.message || "Failed to create document" };
@@ -244,17 +270,18 @@ export async function ingestDocument(
       try {
         const embedding = await generateEmbedding(chunk);
 
-        await supabase.from("rag_chunks").insert({
-          document_id: doc.id,
-          source_id: sourceId,
-          tenant_id: source.tenant_id,
-          offer_id: source.offer_id,
-          content: chunk,
-          embedding: embedding,
-          chunk_index: i,
-          metadata: {
-            doc_type: metadata.doc_type,
-            title: metadata.title,
+        await queryWithTimeout(
+          supabase.from("rag_chunks").insert({
+            document_id: doc.id,
+            source_id: sourceId,
+            tenant_id: source.tenant_id,
+            offer_id: source.offer_id,
+            content: chunk,
+            embedding: embedding,
+            chunk_index: i,
+            metadata: {
+              doc_type: metadata.doc_type,
+              title: metadata.title,
           },
           token_count: estimateTokens(chunk),
         });
@@ -266,20 +293,28 @@ export async function ingestDocument(
     }
 
     // Update document status
-    await supabase
-      .from("rag_documents")
-      .update({
-        status: "COMPLETED",
-        chunk_count: chunkCount,
-        processed_at: new Date().toISOString(),
-      })
-      .eq("id", doc.id);
+    await queryWithTimeout(
+      supabase
+        .from("rag_documents")
+        .update({
+          status: "COMPLETED",
+          chunk_count: chunkCount,
+          processed_at: new Date().toISOString(),
+        })
+        .eq("id", doc.id),
+      10000,
+      "update document status to COMPLETED"
+    );
 
     // Update source last processed
-    await supabase
-      .from("rag_sources")
-      .update({ last_processed_at: new Date().toISOString() })
-      .eq("id", sourceId);
+    await queryWithTimeout(
+      supabase
+        .from("rag_sources")
+        .update({ last_processed_at: new Date().toISOString() })
+        .eq("id", sourceId),
+      10000,
+      "update source last processed"
+    );
 
     return { success: true, chunkCount };
   } catch (error) {
@@ -301,11 +336,15 @@ export async function ingestFromUrl(
 ): Promise<{ success: boolean; chunkCount: number; error?: string }> {
   try {
     // Fetch URL content
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent": "Converzia-Bot/1.0 (+https://converzia.com)",
+    const response = await fetchWithTimeout(
+      url,
+      {
+        headers: {
+          "User-Agent": "Converzia-Bot/1.0 (+https://converzia.com)",
+        },
       },
-    });
+      30000 // 30 seconds for URL fetching
+    );
 
     if (!response.ok) {
       return { success: false, chunkCount: 0, error: `HTTP ${response.status}` };
@@ -345,17 +384,21 @@ export async function ingestManualContent(
 
   try {
     // Create source
-    const { data: source, error: sourceError } = await supabase
-      .from("rag_sources")
-      .insert({
-        tenant_id: tenantId,
-        offer_id: offerId,
-        source_type: "MANUAL",
-        name: title,
-        is_active: true,
-      })
-      .select()
-      .single();
+    const { data: source, error: sourceError } = await queryWithTimeout(
+      supabase
+        .from("rag_sources")
+        .insert({
+          tenant_id: tenantId,
+          offer_id: offerId,
+          source_type: "MANUAL",
+          name: title,
+          is_active: true,
+        })
+        .select()
+        .single(),
+      30000,
+      "create RAG source"
+    );
 
     if (sourceError || !source) {
       return { success: false, chunkCount: 0, error: sourceError?.message || "Failed to create source" };
@@ -504,10 +547,14 @@ export async function deleteRagSource(sourceId: string): Promise<boolean> {
 
   try {
     // Cascade delete will handle documents and chunks
-    const { error } = await supabase
-      .from("rag_sources")
-      .delete()
-      .eq("id", sourceId);
+    const { error } = await queryWithTimeout(
+      supabase
+        .from("rag_sources")
+        .delete()
+        .eq("id", sourceId),
+      10000,
+      `delete RAG source ${sourceId}`
+    );
 
     return !error;
   } catch (error) {
@@ -564,6 +611,7 @@ export async function ingestFromStoragePdf(
 
   try {
     // Download file from storage
+    // Storage operations don't need queryWithTimeout, but we can add error handling
     const { data, error } = await supabase.storage
       .from("rag-documents")
       .download(storagePath);
@@ -598,21 +646,29 @@ export async function reindexSource(sourceId: string): Promise<{ success: boolea
 
   try {
     // Get source
-    const { data: source } = await supabase
-      .from("rag_sources")
-      .select("*")
-      .eq("id", sourceId)
-      .single();
+    const { data: source } = await queryWithTimeout(
+      supabase
+        .from("rag_sources")
+        .select("*")
+        .eq("id", sourceId)
+        .single(),
+      10000,
+      `fetch RAG source ${sourceId} for reindex`
+    );
 
     if (!source) {
       return { success: false, error: "Source not found" };
     }
 
     // Delete existing chunks
-    await supabase
-      .from("rag_chunks")
-      .delete()
-      .eq("source_id", sourceId);
+    await queryWithTimeout(
+      supabase
+        .from("rag_chunks")
+        .delete()
+        .eq("source_id", sourceId),
+      10000,
+      "delete existing chunks for reindex"
+    );
 
     // Re-process based on source type
     if (source.source_type === "URL" && source.source_url) {
@@ -624,12 +680,16 @@ export async function reindexSource(sourceId: string): Promise<{ success: boolea
     }
 
     // For manual content, get from existing document
-    const { data: doc } = await supabase
-      .from("rag_documents")
-      .select("raw_content, title, doc_type")
-      .eq("source_id", sourceId)
-      .eq("is_current", true)
-      .single();
+    const { data: doc } = await queryWithTimeout(
+      supabase
+        .from("rag_documents")
+        .select("raw_content, title, doc_type")
+        .eq("source_id", sourceId)
+        .eq("is_current", true)
+        .single(),
+      10000,
+      "get document for reindex"
+    );
 
     if (doc) {
       return await ingestDocument(sourceId, doc.raw_content, {

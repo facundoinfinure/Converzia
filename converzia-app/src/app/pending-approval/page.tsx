@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/lib/auth/context";
 import { createClient } from "@/lib/supabase/client";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 
 export default function PendingApprovalPage() {
   const router = useRouter();
@@ -21,10 +22,14 @@ export default function PendingApprovalPage() {
       if (!user) return;
 
       try {
-        const { data: memberships, error } = await supabase
-          .from("tenant_members")
-          .select("id, status, tenant:tenants(status)")
-          .eq("user_id", user.id);
+        const { data: memberships, error } = await queryWithTimeout(
+          supabase
+            .from("tenant_members")
+            .select("id, status, tenant:tenants(status)")
+            .eq("user_id", user.id),
+          10000,
+          "check approval status"
+        );
 
         if (error) {
           console.error("Error checking approval status:", error);
@@ -77,10 +82,14 @@ export default function PendingApprovalPage() {
       
       // Re-check status after refresh
       if (user) {
-        const { data: memberships, error } = await supabase
-          .from("tenant_members")
-          .select("id, status, tenant:tenants(status)")
-          .eq("user_id", user.id);
+        const { data: memberships, error } = await queryWithTimeout(
+          supabase
+            .from("tenant_members")
+            .select("id, status, tenant:tenants(status)")
+            .eq("user_id", user.id),
+          10000,
+          "check approval status"
+        );
 
         if (error) {
           console.error("Error checking approval status:", error);

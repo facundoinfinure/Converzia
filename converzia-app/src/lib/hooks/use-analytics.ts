@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 
 export type TimeRange = "today" | "7d" | "30d" | "90d" | "custom";
 
@@ -59,23 +60,35 @@ export function useAnalytics(timeRange: TimeRange = "30d", customStart?: Date, c
           { count: readyLeads },
           { count: deliveredLeads },
         ] = await Promise.all([
-          supabase
-            .from("lead_offers")
-            .select("id", { count: "exact", head: true })
-            .gte("created_at", date.toISOString())
-            .lt("created_at", nextDay.toISOString()),
-          supabase
-            .from("lead_offers")
-            .select("id", { count: "exact", head: true })
-            .eq("status", "LEAD_READY")
-            .gte("created_at", date.toISOString())
-            .lt("created_at", nextDay.toISOString()),
-          supabase
-            .from("deliveries")
-            .select("id", { count: "exact", head: true })
-            .eq("status", "DELIVERED")
-            .gte("delivered_at", date.toISOString())
-            .lt("delivered_at", nextDay.toISOString()),
+          queryWithTimeout(
+            supabase
+              .from("lead_offers")
+              .select("id", { count: "exact", head: true })
+              .gte("created_at", date.toISOString())
+              .lt("created_at", nextDay.toISOString()),
+            10000,
+            `get total leads for ${dateLabel}`
+          ),
+          queryWithTimeout(
+            supabase
+              .from("lead_offers")
+              .select("id", { count: "exact", head: true })
+              .eq("status", "LEAD_READY")
+              .gte("created_at", date.toISOString())
+              .lt("created_at", nextDay.toISOString()),
+            10000,
+            `get ready leads for ${dateLabel}`
+          ),
+          queryWithTimeout(
+            supabase
+              .from("deliveries")
+              .select("id", { count: "exact", head: true })
+              .eq("status", "DELIVERED")
+              .gte("delivered_at", date.toISOString())
+              .lt("delivered_at", nextDay.toISOString()),
+            10000,
+            `get delivered leads for ${dateLabel}`
+          ),
         ]);
 
         const dateLabel = date.toLocaleDateString("es-AR", { month: "short", day: "numeric" });
@@ -87,11 +100,15 @@ export function useAnalytics(timeRange: TimeRange = "30d", customStart?: Date, c
       }
 
       // Fetch leads by status
-      const { data: statusData } = await supabase
-        .from("lead_offers")
-        .select("status")
-        .gte("created_at", startDate.toISOString())
-        .lte("created_at", endDate.toISOString());
+      const { data: statusData } = await queryWithTimeout(
+        supabase
+          .from("lead_offers")
+          .select("status")
+          .gte("created_at", startDate.toISOString())
+          .lte("created_at", endDate.toISOString()),
+        10000,
+        "get leads by status"
+      );
 
       const statusCounts: Record<string, number> = {};
       statusData?.forEach((l: any) => {
@@ -104,14 +121,18 @@ export function useAnalytics(timeRange: TimeRange = "30d", customStart?: Date, c
       }));
 
       // Fetch leads by tenant
-      const { data: tenantData } = await supabase
-        .from("lead_offers")
-        .select(`
-          tenant_id,
-          tenant:tenants(name)
-        `)
-        .gte("created_at", startDate.toISOString())
-        .lte("created_at", endDate.toISOString());
+      const { data: tenantData } = await queryWithTimeout(
+        supabase
+          .from("lead_offers")
+          .select(`
+            tenant_id,
+            tenant:tenants(name)
+          `)
+          .gte("created_at", startDate.toISOString())
+          .lte("created_at", endDate.toISOString()),
+        10000,
+        "get leads by tenant"
+      );
 
       const tenantCounts: Record<string, { tenant: string; count: number }> = {};
       tenantData?.forEach((l: any) => {
@@ -128,13 +149,17 @@ export function useAnalytics(timeRange: TimeRange = "30d", customStart?: Date, c
         .slice(0, 10);
 
       // Calculate average response time
-      const { data: responseTimes } = await supabase
-        .from("lead_offers")
-        .select("created_at, first_response_at")
-        .not("first_response_at", "is", null)
-        .gte("created_at", startDate.toISOString())
-        .lte("created_at", endDate.toISOString())
-        .limit(100);
+      const { data: responseTimes } = await queryWithTimeout(
+        supabase
+          .from("lead_offers")
+          .select("created_at, first_response_at")
+          .not("first_response_at", "is", null)
+          .gte("created_at", startDate.toISOString())
+          .lte("created_at", endDate.toISOString())
+          .limit(100),
+        10000,
+        "get response times"
+      );
 
       let avgResponseTime = 0;
       if (responseTimes && responseTimes.length > 0) {

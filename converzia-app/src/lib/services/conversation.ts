@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/server";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { sendMessage, sendTemplateMessage, findOrCreateContact } from "./chatwoot";
 import { extractQualificationFields, generateQualificationResponse, generateConversationSummary } from "./openai";
 import { calculateLeadScore, checkMinimumFieldsForScoring } from "./scoring";
@@ -27,16 +28,20 @@ export async function startInitialConversation(leadOfferId: string): Promise<voi
   const supabase = createAdminClient();
 
   // Get lead offer with related data
-  const { data: leadOffer, error } = await supabase
-    .from("lead_offers")
-    .select(`
-      *,
-      lead:leads(*),
-      offer:offers(*),
-      tenant:tenants(*)
-    `)
-    .eq("id", leadOfferId)
-    .single();
+  const { data: leadOffer, error } = await queryWithTimeout(
+    supabase
+      .from("lead_offers")
+      .select(`
+        *,
+        lead:leads(*),
+        offer:offers(*),
+        tenant:tenants(*)
+      `)
+      .eq("id", leadOfferId)
+      .single(),
+    10000,
+    `fetch lead offer ${leadOfferId}`
+  );
 
   if (error || !leadOffer) {
     throw new Error(`Lead offer not found: ${leadOfferId}`);
@@ -55,18 +60,22 @@ export async function startInitialConversation(leadOfferId: string): Promise<voi
   const chatwootConversationId = String(contact.conversation_id || contact.id);
 
   // Ensure conversation is stored in DB (mapped to Chatwoot conversation)
-  await supabase
-    .from("conversations")
-    .upsert(
-      {
-        lead_id: lead.id,
-        tenant_id: leadOffer.tenant_id,
-        chatwoot_conversation_id: chatwootConversationId,
-        chatwoot_contact_id: String(contact.id),
-        is_active: true,
-      },
-      { onConflict: "chatwoot_conversation_id" }
-    );
+  await queryWithTimeout(
+    supabase
+      .from("conversations")
+      .upsert(
+        {
+          lead_id: lead.id,
+          tenant_id: leadOffer.tenant_id,
+          chatwoot_conversation_id: chatwootConversationId,
+          chatwoot_contact_id: String(contact.id),
+          is_active: true,
+        },
+        { onConflict: "chatwoot_conversation_id" }
+      ),
+    10000,
+    "upsert conversation"
+  );
 
   // Prepare template parameters
   const leadName = lead.first_name || lead.full_name?.split(" ")[0] || "cliente";
@@ -101,24 +110,32 @@ export async function startInitialConversation(leadOfferId: string): Promise<voi
   const initialMessage = `[Template: lead_bienvenida] Hola ${leadName}, gracias por tu interés en ${offerName}.`;
 
   // Update lead offer status
-  await supabase
-    .from("lead_offers")
-    .update({
-      status: "CONTACTED",
-      contact_attempts: (leadOffer.contact_attempts || 0) + 1,
-      last_attempt_at: new Date().toISOString(),
-      status_changed_at: new Date().toISOString(),
-    })
-    .eq("id", leadOfferId);
+  await queryWithTimeout(
+    supabase
+      .from("lead_offers")
+      .update({
+        status: "CONTACTED",
+        contact_attempts: (leadOffer.contact_attempts || 0) + 1,
+        last_attempt_at: new Date().toISOString(),
+        status_changed_at: new Date().toISOString(),
+      })
+      .eq("id", leadOfferId),
+    10000,
+    "update lead offer status"
+  );
 
   // Log event
-  await supabase.from("lead_events").insert({
-    lead_id: lead.id,
-    lead_offer_id: leadOfferId,
-    event_type: "MESSAGE_SENT",
-    details: { message: initialMessage, type: "initial" },
-    actor_type: "BOT",
-  });
+  await queryWithTimeout(
+    supabase.from("lead_events").insert({
+      lead_id: lead.id,
+      lead_offer_id: leadOfferId,
+      event_type: "MESSAGE_SENT",
+      details: { message: initialMessage, type: "initial" },
+      actor_type: "BOT",
+    }),
+    10000,
+    "insert lead event"
+  );
 }
 
 // ============================================
@@ -133,11 +150,15 @@ export async function processIncomingMessage(
   const supabase = createAdminClient();
 
   // Find lead by phone
-  const { data: lead } = await supabase
-    .from("leads")
-    .select("id")
-    .eq("phone_normalized", normalizePhoneForDb(senderPhone))
-    .single();
+  const { data: lead } = await queryWithTimeout(
+    supabase
+      .from("leads")
+      .select("id")
+      .eq("phone_normalized", normalizePhoneForDb(senderPhone))
+      .single(),
+    10000,
+    "find lead by phone"
+  );
 
   if (!lead) {
     console.log("No lead found for phone:", senderPhone);
@@ -145,17 +166,21 @@ export async function processIncomingMessage(
   }
 
   // Get active lead offer
-  const { data: leadOffer } = await supabase
-    .from("lead_offers")
-    .select(`
-      *,
-      offer:offers(*)
-    `)
-    .eq("lead_id", lead.id)
-    .in("status", ["CONTACTED", "ENGAGED", "QUALIFYING"])
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .single();
+  const { data: leadOffer } = await queryWithTimeout(
+    supabase
+      .from("lead_offers")
+      .select(`
+        *,
+        offer:offers(*)
+      `)
+      .eq("lead_id", lead.id)
+      .in("status", ["CONTACTED", "ENGAGED", "QUALIFYING"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single(),
+    10000,
+    "get active lead offer"
+  );
 
   if (!leadOffer) {
     console.log("No active lead offer for lead:", lead.id);
@@ -166,16 +191,20 @@ export async function processIncomingMessage(
 
   // Store incoming message
   // Ensure we have a Converzia conversation record mapped to Chatwoot conversation ID
-  const { data: convo } = await supabase
-    .from("conversations")
-    .select("id")
-    .eq("chatwoot_conversation_id", conversationId)
-    .single();
+  const { data: convo } = await queryWithTimeout(
+    supabase
+      .from("conversations")
+      .select("id")
+      .eq("chatwoot_conversation_id", conversationId)
+      .single(),
+    10000,
+    "find conversation"
+  );
 
-  const conversationRow =
-    convo ||
-    (
-      await supabase
+  let conversationRow = convo;
+  if (!conversationRow) {
+    const { data: newConvo } = await queryWithTimeout(
+      supabase
         .from("conversations")
         .insert({
           lead_id: lead.id,
@@ -184,36 +213,56 @@ export async function processIncomingMessage(
           is_active: true,
         })
         .select("id")
-        .single()
-    ).data;
+        .single(),
+      10000,
+      "create conversation"
+    );
+    conversationRow = newConvo;
+  }
 
-  await supabase.from("messages").insert({
-    conversation_id: conversationRow.id,
-    lead_id: lead.id,
-    direction: "INBOUND",
-    sender: "LEAD",
-    content: message,
-  });
+  if (!conversationRow) {
+    throw new Error("Failed to get or create conversation");
+  }
+
+  await queryWithTimeout(
+    supabase.from("messages").insert({
+      conversation_id: conversationRow.id,
+      lead_id: lead.id,
+      direction: "INBOUND",
+      sender: "LEAD",
+      content: message,
+    }),
+    10000,
+    "insert message"
+  );
 
   // Update lead offer status to ENGAGED if still CONTACTED
   if (leadOffer.status === "CONTACTED") {
-    await supabase
-      .from("lead_offers")
-      .update({
-        status: "ENGAGED",
-        first_response_at: new Date().toISOString(),
-        status_changed_at: new Date().toISOString(),
-      })
-      .eq("id", leadOffer.id);
+    await queryWithTimeout(
+      supabase
+        .from("lead_offers")
+        .update({
+          status: "ENGAGED",
+          first_response_at: new Date().toISOString(),
+          status_changed_at: new Date().toISOString(),
+        })
+        .eq("id", leadOffer.id),
+      10000,
+      "update lead offer to ENGAGED"
+    );
   }
 
   // Get conversation history
-  const { data: history } = await supabase
-    .from("messages")
-    .select("direction, sender, content")
-    .eq("conversation_id", conversationRow.id)
-    .order("created_at", { ascending: true })
-    .limit(20);
+  const { data: history } = await queryWithTimeout(
+    supabase
+      .from("messages")
+      .select("direction, sender, content")
+      .eq("conversation_id", conversationRow.id)
+      .order("created_at", { ascending: true })
+      .limit(20),
+    10000,
+    "get conversation history"
+  );
 
   const messageHistory = (history || []).map((m: any) => ({
     role: m.sender === "LEAD" ? "user" as const : "assistant" as const,
@@ -226,14 +275,18 @@ export async function processIncomingMessage(
   const mergedFields = { ...currentFields, ...newFields };
 
   // Update qualification fields
-  await supabase
-    .from("lead_offers")
-    .update({
-      qualification_fields: mergedFields,
-      status: "QUALIFYING",
-      status_changed_at: new Date().toISOString(),
-    })
-    .eq("id", leadOffer.id);
+  await queryWithTimeout(
+    supabase
+      .from("lead_offers")
+      .update({
+        qualification_fields: mergedFields,
+        status: "QUALIFYING",
+        status_changed_at: new Date().toISOString(),
+      })
+      .eq("id", leadOffer.id),
+    10000,
+    "update qualification fields"
+  );
 
   // Check if we have enough information to score
   const fieldCheck = checkMinimumFieldsForScoring(mergedFields);
@@ -247,17 +300,21 @@ export async function processIncomingMessage(
       { messageCount: (history?.length || 0) + 1, responseTime: 30 }
     );
 
-    await supabase
-      .from("lead_offers")
-      .update({
-        score_total: scoreResult.score,
-        score_breakdown: scoreResult.breakdown,
-        scored_at: new Date().toISOString(),
-        status: scoreResult.isReady ? "LEAD_READY" : "SCORED",
-        qualified_at: scoreResult.isReady ? new Date().toISOString() : null,
-        status_changed_at: new Date().toISOString(),
-      })
-      .eq("id", leadOffer.id);
+    await queryWithTimeout(
+      supabase
+        .from("lead_offers")
+        .update({
+          score_total: scoreResult.score,
+          score_breakdown: scoreResult.breakdown,
+          scored_at: new Date().toISOString(),
+          status: scoreResult.isReady ? "LEAD_READY" : "SCORED",
+          qualified_at: scoreResult.isReady ? new Date().toISOString() : null,
+          status_changed_at: new Date().toISOString(),
+        })
+        .eq("id", leadOffer.id),
+      10000,
+      "update lead offer score"
+    );
 
     // If lead ready, trigger delivery
     if (scoreResult.isReady) {
@@ -274,22 +331,30 @@ export async function processIncomingMessage(
   );
 
   // Store outgoing message
-  await supabase.from("messages").insert({
-    conversation_id: conversationRow.id,
-    lead_id: lead.id,
-    direction: "OUTBOUND",
-    sender: "BOT",
-    content: response,
-  });
+  await queryWithTimeout(
+    supabase.from("messages").insert({
+      conversation_id: conversationRow.id,
+      lead_id: lead.id,
+      direction: "OUTBOUND",
+      sender: "BOT",
+      content: response,
+    }),
+    10000,
+    "insert outbound message"
+  );
 
   // Log event
-  await supabase.from("lead_events").insert({
-    lead_id: lead.id,
-    lead_offer_id: leadOffer.id,
-    event_type: "MESSAGE_RECEIVED",
-    details: { message, extracted_fields: newFields },
-    actor_type: "LEAD",
-  });
+  await queryWithTimeout(
+    supabase.from("lead_events").insert({
+      lead_id: lead.id,
+      lead_offer_id: leadOffer.id,
+      event_type: "MESSAGE_RECEIVED",
+      details: { message, extracted_fields: newFields },
+      actor_type: "LEAD",
+    }),
+    10000,
+    "insert lead event MESSAGE_RECEIVED"
+  );
 
   return response;
 }
@@ -301,16 +366,20 @@ export async function processIncomingMessage(
 export async function retryContact(leadOfferId: string): Promise<void> {
   const supabase = createAdminClient();
 
-  const { data: leadOffer } = await supabase
-    .from("lead_offers")
-    .select(`
-      *,
-      lead:leads(*),
-      offer:offers(*),
-      tenant:tenants(*)
-    `)
-    .eq("id", leadOfferId)
-    .single();
+  const { data: leadOffer } = await queryWithTimeout(
+    supabase
+      .from("lead_offers")
+      .select(`
+        *,
+        lead:leads(*),
+        offer:offers(*),
+        tenant:tenants(*)
+      `)
+      .eq("id", leadOfferId)
+      .single(),
+    10000,
+    `fetch lead offer ${leadOfferId} for retry`
+  );
 
   if (!leadOffer) {
     throw new Error("Lead offer not found");
@@ -322,13 +391,17 @@ export async function retryContact(leadOfferId: string): Promise<void> {
   // Check max attempts
   const maxAttempts = 3;
   if ((leadOffer.contact_attempts || 0) >= maxAttempts) {
-    await supabase
-      .from("lead_offers")
-      .update({
-        status: "COOLING",
-        status_changed_at: new Date().toISOString(),
-      })
-      .eq("id", leadOfferId);
+    await queryWithTimeout(
+      supabase
+        .from("lead_offers")
+        .update({
+          status: "COOLING",
+          status_changed_at: new Date().toISOString(),
+        })
+        .eq("id", leadOfferId),
+      10000,
+      "update lead offer to COOLING"
+    );
     return;
   }
 
@@ -343,14 +416,18 @@ export async function retryContact(leadOfferId: string): Promise<void> {
   await sendMessage(contact.conversation_id || contact.id, followUpMessage);
 
   // Update lead offer
-  await supabase
-    .from("lead_offers")
-    .update({
-      contact_attempts: (leadOffer.contact_attempts || 0) + 1,
-      last_attempt_at: new Date().toISOString(),
-      next_attempt_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Next day
-    })
-    .eq("id", leadOfferId);
+  await queryWithTimeout(
+    supabase
+      .from("lead_offers")
+      .update({
+        contact_attempts: (leadOffer.contact_attempts || 0) + 1,
+        last_attempt_at: new Date().toISOString(),
+        next_attempt_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Next day
+      })
+      .eq("id", leadOfferId),
+    10000,
+    "update lead offer retry"
+  );
 }
 
 // ============================================
@@ -360,16 +437,20 @@ export async function retryContact(leadOfferId: string): Promise<void> {
 export async function sendReactivation(leadOfferId: string): Promise<void> {
   const supabase = createAdminClient();
 
-  const { data: leadOffer } = await supabase
-    .from("lead_offers")
-    .select(`
-      *,
-      lead:leads(*),
-      offer:offers(*),
-      tenant:tenants(*)
-    `)
-    .eq("id", leadOfferId)
-    .single();
+  const { data: leadOffer } = await queryWithTimeout(
+    supabase
+      .from("lead_offers")
+      .select(`
+        *,
+        lead:leads(*),
+        offer:offers(*),
+        tenant:tenants(*)
+      `)
+      .eq("id", leadOfferId)
+      .single(),
+    10000,
+    `fetch lead offer ${leadOfferId} for reactivation`
+  );
 
   if (!leadOffer) {
     throw new Error("Lead offer not found");
@@ -388,14 +469,18 @@ export async function sendReactivation(leadOfferId: string): Promise<void> {
   const contact = await findOrCreateContact(lead.phone, lead.full_name || undefined);
   await sendMessage(contact.conversation_id || contact.id, reactivationMessage);
 
-  await supabase
-    .from("lead_offers")
-    .update({
-      status: "REACTIVATION",
-      reactivation_count: (leadOffer.reactivation_count || 0) + 1,
-      status_changed_at: new Date().toISOString(),
-    })
-    .eq("id", leadOfferId);
+  await queryWithTimeout(
+    supabase
+      .from("lead_offers")
+      .update({
+        status: "REACTIVATION",
+        reactivation_count: (leadOffer.reactivation_count || 0) + 1,
+        status_changed_at: new Date().toISOString(),
+      })
+      .eq("id", leadOfferId),
+    10000,
+    "update lead offer reactivation"
+  );
 }
 
 // ============================================
@@ -405,16 +490,20 @@ export async function sendReactivation(leadOfferId: string): Promise<void> {
 async function triggerDelivery(leadOfferId: string, scoreSummary?: string): Promise<void> {
   const supabase = createAdminClient();
 
-  const { data: leadOffer } = await supabase
-    .from("lead_offers")
-    .select(`
-      *,
-      lead:leads(*),
-      offer:offers(*),
-      lead_source:lead_sources(*)
-    `)
-    .eq("id", leadOfferId)
-    .single();
+  const { data: leadOffer } = await queryWithTimeout(
+    supabase
+      .from("lead_offers")
+      .select(`
+        *,
+        lead:leads(*),
+        offer:offers(*),
+        lead_source:lead_sources(*)
+      `)
+      .eq("id", leadOfferId)
+      .single(),
+    10000,
+    `fetch lead offer ${leadOfferId} for delivery`
+  );
 
   if (!leadOffer) return;
 
@@ -423,12 +512,16 @@ async function triggerDelivery(leadOfferId: string, scoreSummary?: string): Prom
   const source = Array.isArray(leadOffer.lead_source) ? leadOffer.lead_source[0] : leadOffer.lead_source;
 
   // Get conversation history for summary
-  const { data: messages } = await supabase
-    .from("messages")
-    .select("direction, sender, content")
-    .eq("lead_id", lead.id)
-    .order("created_at", { ascending: true })
-    .limit(50);
+  const { data: messages } = await queryWithTimeout(
+    supabase
+      .from("messages")
+      .select("direction, sender, content")
+      .eq("lead_id", lead.id)
+      .order("created_at", { ascending: true })
+      .limit(50),
+    10000,
+    "get messages for delivery summary"
+  );
 
   // Generate conversation summary
   let conversationSummary = null;
@@ -447,13 +540,14 @@ async function triggerDelivery(leadOfferId: string, scoreSummary?: string): Prom
   }
 
   // Create delivery record with complete data
-  await supabase.from("deliveries").insert({
-    lead_offer_id: leadOfferId,
-    lead_id: lead.id,
-    tenant_id: leadOffer.tenant_id,
-    offer_id: offer?.id,
-    status: "PENDING",
-    payload: {
+  await queryWithTimeout(
+    supabase.from("deliveries").insert({
+      lead_offer_id: leadOfferId,
+      lead_id: lead.id,
+      tenant_id: leadOffer.tenant_id,
+      offer_id: offer?.id,
+      status: "PENDING",
+      payload: {
       lead: {
         name: lead.full_name || lead.first_name || "Sin nombre",
         phone: lead.phone,
@@ -474,21 +568,28 @@ async function triggerDelivery(leadOfferId: string, scoreSummary?: string): Prom
         campaign_id: source.campaign_id,
         form_id: source.form_id,
       } : null,
-    },
-  });
+      },
+    }),
+    30000,
+    "create delivery record"
+  );
 
   // Log delivery event
-  await supabase.from("lead_events").insert({
-    lead_id: lead.id,
-    lead_offer_id: leadOfferId,
-    tenant_id: leadOffer.tenant_id,
-    event_type: "DELIVERY_ATTEMPTED",
-    details: {
-      score: leadOffer.score_total,
-      offer_name: offer?.name,
-    },
-    actor_type: "SYSTEM",
-  });
+  await queryWithTimeout(
+    supabase.from("lead_events").insert({
+      lead_id: lead.id,
+      lead_offer_id: leadOfferId,
+      tenant_id: leadOffer.tenant_id,
+      event_type: "DELIVERY_ATTEMPTED",
+      details: {
+        score: leadOffer.score_total,
+        offer_name: offer?.name,
+      },
+      actor_type: "SYSTEM",
+    }),
+    10000,
+    "insert delivery event"
+  );
 
   console.log(`Delivery created for lead ${lead.id}, score: ${leadOffer.score_total}`);
 }

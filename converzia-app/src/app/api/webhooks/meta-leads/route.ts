@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { startInitialConversation } from "@/lib/services/conversation";
 import { validateMetaSignature } from "@/lib/security/webhook-validation";
 import { withRateLimit, RATE_LIMITS } from "@/lib/security/rate-limit";
+import { fetchWithTimeout } from "@/lib/utils/fetch-with-timeout";
 import { normalizePhone } from "@/lib/utils";
 
 // ============================================
@@ -288,11 +290,16 @@ export async function POST(request: NextRequest) {
 async function fetchLeadDetails(leadgenId: string): Promise<any> {
   // Get access token from settings
   const supabase = createAdminClient();
-  const { data: setting } = await supabase
-    .from("app_settings")
-    .select("value")
-    .eq("key", "meta_page_access_token")
-    .single();
+  const { data: setting } = await queryWithTimeout(
+    supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", "meta_page_access_token")
+      .single(),
+    10000,
+    "get Meta access token",
+    false // Don't retry settings
+  );
 
   const accessToken = (setting as any)?.value || process.env.META_PAGE_ACCESS_TOKEN;
 
@@ -302,8 +309,10 @@ async function fetchLeadDetails(leadgenId: string): Promise<any> {
   }
 
   try {
-    const response = await fetch(
-      `https://graph.facebook.com/v18.0/${leadgenId}?access_token=${accessToken}`
+    const response = await fetchWithTimeout(
+      `https://graph.facebook.com/v18.0/${leadgenId}?access_token=${accessToken}`,
+      {},
+      10000 // 10 seconds for Facebook API
     );
 
     if (!response.ok) {

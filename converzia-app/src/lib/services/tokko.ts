@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { fetchWithTimeout } from "@/lib/utils/fetch-with-timeout";
 import type { Delivery, TenantIntegration, QualificationFields, ScoreBreakdown } from "@/types";
 
 // ============================================
@@ -48,13 +49,17 @@ export async function createTokkoLead(
   const payload = buildTokkoPayload(delivery, config);
 
   try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+    const response = await fetchWithTimeout(
+      endpoint,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
       },
-      body: JSON.stringify(payload),
-    });
+      15000 // 15 seconds for Tokko API
+    );
 
     // Tokko returns 200 even on some errors, need to check response body
     const responseText = await response.text();
@@ -279,9 +284,10 @@ export async function testTokkoConnection(config: TokkoConfig): Promise<{
   
   try {
     // Try to fetch a simple endpoint to verify the API key
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${apiUrl}/?key=${config.api_key}&format=json`,
-      { method: "GET" }
+      { method: "GET" },
+      10000 // 10 seconds for connection test
     );
 
     if (response.status === 401) {

@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/server";
+import { fetchWithTimeout } from "@/lib/utils/fetch-with-timeout";
 
 // ============================================
 // Chatwoot API Service
@@ -56,14 +57,15 @@ export async function findOrCreateContact(
   const config = await getConfig();
 
   // First, try to find existing contact
-  const searchResponse = await fetch(
+  const searchResponse = await fetchWithTimeout(
     `${config.baseUrl}/api/v1/accounts/${config.accountId}/contacts/search?q=${encodeURIComponent(phone)}`,
     {
       headers: {
         "Content-Type": "application/json",
         "api_access_token": config.apiToken,
       },
-    }
+    },
+    10000 // 10 second timeout
   );
 
   if (searchResponse.ok) {
@@ -85,7 +87,7 @@ export async function findOrCreateContact(
   }
 
   // Create new contact
-  const createResponse = await fetch(
+  const createResponse = await fetchWithTimeout(
     `${config.baseUrl}/api/v1/accounts/${config.accountId}/contacts`,
     {
       method: "POST",
@@ -98,7 +100,8 @@ export async function findOrCreateContact(
         name: name || phone,
         phone_number: phone,
       }),
-    }
+    },
+    10000 // 10 second timeout
   );
 
   if (!createResponse.ok) {
@@ -127,14 +130,15 @@ async function getOrCreateConversation(contactId: number) {
   const config = await getConfig();
 
   // Get contact's conversations
-  const response = await fetch(
+  const response = await fetchWithTimeout(
     `${config.baseUrl}/api/v1/accounts/${config.accountId}/contacts/${contactId}/conversations`,
     {
       headers: {
         "Content-Type": "application/json",
         "api_access_token": config.apiToken,
       },
-    }
+    },
+    10000
   );
 
   if (response.ok) {
@@ -153,7 +157,7 @@ async function getOrCreateConversation(contactId: number) {
   }
 
   // Create new conversation
-  const createResponse = await fetch(
+  const createResponse = await fetchWithTimeout(
     `${config.baseUrl}/api/v1/accounts/${config.accountId}/conversations`,
     {
       method: "POST",
@@ -165,7 +169,8 @@ async function getOrCreateConversation(contactId: number) {
         inbox_id: config.inboxId,
         contact_id: contactId,
       }),
-    }
+    },
+    10000
   );
 
   if (!createResponse.ok) {
@@ -196,7 +201,7 @@ export async function sendMessage(
     }
   }
 
-  const response = await fetch(
+  const response = await fetchWithTimeout(
     `${config.baseUrl}/api/v1/accounts/${config.accountId}/conversations/${conversationId}/messages`,
     {
       method: "POST",
@@ -209,7 +214,8 @@ export async function sendMessage(
         message_type: privateNote ? "activity" : "outgoing",
         private: privateNote,
       }),
-    }
+    },
+    15000 // 15 seconds for sending messages
   );
 
   if (!response.ok) {
@@ -247,7 +253,7 @@ export async function sendTemplateMessage(
     processedParams[String(i + 1)] = param;
   });
 
-  const response = await fetch(
+  const response = await fetchWithTimeout(
     `${config.baseUrl}/api/v1/accounts/${config.accountId}/conversations/${conversationId}/messages`,
     {
       method: "POST",
@@ -264,7 +270,8 @@ export async function sendTemplateMessage(
           processed_params: processedParams,
         },
       }),
-    }
+    },
+    15000 // 15 seconds for template messages
   );
 
   if (!response.ok) {
@@ -285,14 +292,15 @@ export async function getConversationHistory(
 ): Promise<Array<{ sender: string; content: string; created_at: string }>> {
   const config = await getConfig();
 
-  const response = await fetch(
+  const response = await fetchWithTimeout(
     `${config.baseUrl}/api/v1/accounts/${config.accountId}/conversations/${conversationId}/messages`,
     {
       headers: {
         "Content-Type": "application/json",
         "api_access_token": config.apiToken,
       },
-    }
+    },
+    10000 // 10 seconds for getting history
   );
 
   if (!response.ok) {
@@ -318,7 +326,7 @@ export async function updateContact(
 ): Promise<void> {
   const config = await getConfig();
 
-  const response = await fetch(
+  const response = await fetchWithTimeout(
     `${config.baseUrl}/api/v1/accounts/${config.accountId}/contacts/${contactId}`,
     {
       method: "PATCH",
@@ -327,7 +335,8 @@ export async function updateContact(
         "api_access_token": config.apiToken,
       },
       body: JSON.stringify(data),
-    }
+    },
+    10000 // 10 seconds for updating contact
   );
 
   if (!response.ok) {

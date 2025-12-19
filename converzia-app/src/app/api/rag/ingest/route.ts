@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/server";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { 
   ingestFromUrl, 
   ingestManualContent, 
@@ -25,11 +26,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { data: profile } = await supabase
-      .from("user_profiles")
-      .select("is_converzia_admin")
-      .eq("id", user.id)
-      .single();
+    const { data: profile } = await queryWithTimeout(
+      supabase
+        .from("user_profiles")
+        .select("is_converzia_admin")
+        .eq("id", user.id)
+        .single(),
+      10000,
+      "get user profile for RAG ingest"
+    );
 
     if (!profile?.is_converzia_admin) {
       return NextResponse.json({ error: "Admin access required" }, { status: 403 });
@@ -157,17 +162,21 @@ async function handlePdfUpload(request: NextRequest): Promise<NextResponse> {
     const supabase = createAdminClient();
 
     // Create RAG source record
-    const { data: source, error: sourceError } = await supabase
-      .from("rag_sources")
-      .insert({
-        tenant_id: tenantId,
-        offer_id: offerId || null,
-        source_type: "PDF",
-        name: title || file.name.replace(".pdf", ""),
-        is_active: true,
-      })
-      .select()
-      .single();
+    const { data: source, error: sourceError } = await queryWithTimeout(
+      supabase
+        .from("rag_sources")
+        .insert({
+          tenant_id: tenantId,
+          offer_id: offerId || null,
+          source_type: "PDF",
+          name: title || file.name.replace(".pdf", ""),
+          is_active: true,
+        })
+        .select()
+        .single(),
+      30000,
+      "create RAG source for PDF"
+    );
 
     if (sourceError || !source) {
       return NextResponse.json(
@@ -191,7 +200,11 @@ async function handlePdfUpload(request: NextRequest): Promise<NextResponse> {
 
     if (uploadError) {
       // Clean up the source if upload fails
-      await supabase.from("rag_sources").delete().eq("id", source.id);
+      await queryWithTimeout(
+        supabase.from("rag_sources").delete().eq("id", source.id),
+        10000,
+        "cleanup failed RAG source"
+      );
       return NextResponse.json(
         { success: false, error: `Upload failed: ${uploadError.message}` },
         { status: 500 }
@@ -199,10 +212,14 @@ async function handlePdfUpload(request: NextRequest): Promise<NextResponse> {
     }
 
     // Update source with storage path
-    await supabase
-      .from("rag_sources")
-      .update({ storage_path: storagePath })
-      .eq("id", source.id);
+    await queryWithTimeout(
+      supabase
+        .from("rag_sources")
+        .update({ storage_path: storagePath })
+        .eq("id", source.id),
+      10000,
+      "update RAG source storage path"
+    );
 
     // Ingest the PDF content
     const result = await ingestFromPdf(

@@ -27,6 +27,8 @@ import { Alert } from "@/components/ui/Alert";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useAuth } from "@/lib/auth/context";
 import { createClient } from "@/lib/supabase/client";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
+import { fetchWithTimeout } from "@/lib/utils/fetch-with-timeout";
 import { formatRelativeTime } from "@/lib/utils";
 
 interface Integration {
@@ -111,11 +113,15 @@ export default function PortalIntegrationsPage() {
     setIsLoading(true);
     const supabase = createClient();
 
-    const { data, error } = await supabase
-      .from("tenant_integrations")
-      .select("*")
-      .eq("tenant_id", activeTenant.id)
-      .order("created_at", { ascending: false });
+    const { data, error } = await queryWithTimeout(
+      supabase
+        .from("tenant_integrations")
+        .select("*")
+        .eq("tenant_id", activeTenant.id)
+        .order("created_at", { ascending: false }),
+      10000,
+      "load tenant integrations"
+    );
 
     if (!error && data) {
       setIntegrations(data as Integration[]);
@@ -231,7 +237,9 @@ export default function PortalIntegrationsPage() {
     setTestResult(null);
 
     try {
-      const response = await fetch("/api/integrations/test", {
+      const response = await fetchWithTimeout(
+        "/api/integrations/test",
+        {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -261,10 +269,14 @@ export default function PortalIntegrationsPage() {
   async function handleToggle(integration: Integration) {
     const supabase = createClient();
 
-    await supabase
-      .from("tenant_integrations")
-      .update({ is_active: !integration.is_active })
-      .eq("id", integration.id);
+    await queryWithTimeout(
+      supabase
+        .from("tenant_integrations")
+        .update({ is_active: !integration.is_active })
+        .eq("id", integration.id),
+      10000,
+      "toggle integration active"
+    );
 
     loadIntegrations();
   }

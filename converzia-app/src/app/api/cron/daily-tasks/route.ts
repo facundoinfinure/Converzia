@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { processDelivery } from "@/lib/services/delivery";
 import { retryContact, sendReactivation } from "@/lib/services/conversation";
 
@@ -35,13 +36,17 @@ export async function GET(request: NextRequest) {
     // 1. Process Pending Deliveries
     // ==========================================
 
-    const { data: pendingDeliveries } = await supabase
-      .from("deliveries")
-      .select("id, tenant_id, lead_id, retry_count")
-      .eq("status", "PENDING")
-      .lt("retry_count", 3)
-      .order("created_at", { ascending: true })
-      .limit(50);
+    const { data: pendingDeliveries } = await queryWithTimeout(
+      supabase
+        .from("deliveries")
+        .select("id, tenant_id, lead_id, retry_count")
+        .eq("status", "PENDING")
+        .lt("retry_count", 3)
+        .order("created_at", { ascending: true })
+        .limit(50),
+      10000,
+      "fetch pending deliveries for daily tasks"
+    );
 
     if (pendingDeliveries && pendingDeliveries.length > 0) {
       console.log(`Processing ${pendingDeliveries.length} pending deliveries`);
@@ -55,13 +60,17 @@ export async function GET(request: NextRequest) {
           console.error(`Error processing delivery ${delivery.id}:`, err);
           results.deliveries.errors++;
 
-          await supabase
-            .from("deliveries")
-            .update({
-              retry_count: delivery.retry_count + 1,
-              error_message: err instanceof Error ? err.message : "Unknown error",
-            })
-            .eq("id", delivery.id);
+          await queryWithTimeout(
+            supabase
+              .from("deliveries")
+              .update({
+                retry_count: delivery.retry_count + 1,
+                error_message: err instanceof Error ? err.message : "Unknown error",
+              })
+              .eq("id", delivery.id),
+            10000,
+            "increment delivery retry count"
+          );
         }
       }
     }
@@ -70,14 +79,18 @@ export async function GET(request: NextRequest) {
     // 2. Retry Contacts
     // ==========================================
 
-    const { data: contactsToRetry } = await supabase
-      .from("lead_offers")
-      .select("id, contact_attempts")
-      .in("status", ["CONTACTED", "TO_BE_CONTACTED"])
-      .lt("contact_attempts", 3)
-      .lte("next_attempt_at", now.toISOString())
-      .order("created_at", { ascending: true })
-      .limit(30);
+    const { data: contactsToRetry } = await queryWithTimeout(
+      supabase
+        .from("lead_offers")
+        .select("id, contact_attempts")
+        .in("status", ["CONTACTED", "TO_BE_CONTACTED"])
+        .lt("contact_attempts", 3)
+        .lte("next_attempt_at", now.toISOString())
+        .order("created_at", { ascending: true })
+        .limit(30),
+      10000,
+      "fetch contacts to retry for daily tasks"
+    );
 
     if (contactsToRetry && contactsToRetry.length > 0) {
       console.log(`Retrying ${contactsToRetry.length} contacts`);
@@ -101,14 +114,18 @@ export async function GET(request: NextRequest) {
     const coolingDate = new Date();
     coolingDate.setDate(coolingDate.getDate() - 3);
 
-    const { data: leadsToReactivate } = await supabase
-      .from("lead_offers")
-      .select("id, reactivation_count")
-      .eq("status", "COOLING")
-      .lt("reactivation_count", 3)
-      .lte("status_changed_at", coolingDate.toISOString())
-      .order("status_changed_at", { ascending: true })
-      .limit(20);
+    const { data: leadsToReactivate } = await queryWithTimeout(
+      supabase
+        .from("lead_offers")
+        .select("id, reactivation_count")
+        .eq("status", "COOLING")
+        .lt("reactivation_count", 3)
+        .lte("status_changed_at", coolingDate.toISOString())
+        .order("status_changed_at", { ascending: true })
+        .limit(20),
+      10000,
+      "fetch leads to reactivate for daily tasks"
+    );
 
     if (leadsToReactivate && leadsToReactivate.length > 0) {
       console.log(`Reactivating ${leadsToReactivate.length} leads`);
@@ -132,18 +149,22 @@ export async function GET(request: NextRequest) {
     const staleDate = new Date();
     staleDate.setHours(staleDate.getHours() - 48);
 
-    const { data: staleLeads } = await supabase
-      .from("lead_offers")
-      .update({
-        status: "COOLING",
-        status_changed_at: now.toISOString(),
-        billing_eligibility: "NOT_CHARGEABLE_INCOMPLETE",
-        billing_notes: "No response after 48 hours",
-      })
-      .in("status", ["CONTACTED", "TO_BE_CONTACTED"])
-      .gte("contact_attempts", 3)
-      .lte("created_at", staleDate.toISOString())
-      .select("id");
+    const { data: staleLeads } = await queryWithTimeout(
+      supabase
+        .from("lead_offers")
+        .update({
+          status: "COOLING",
+          status_changed_at: now.toISOString(),
+          billing_eligibility: "NOT_CHARGEABLE_INCOMPLETE",
+          billing_notes: "No response after 48 hours",
+        })
+        .in("status", ["CONTACTED", "TO_BE_CONTACTED"])
+        .gte("contact_attempts", 3)
+        .lte("created_at", staleDate.toISOString())
+        .select("id"),
+      10000,
+      "move stale leads to COOLING for daily tasks"
+    );
 
     results.movedToCooling = staleLeads?.length || 0;
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { processDelivery } from "@/lib/services/delivery";
 
 // ============================================
@@ -23,13 +24,17 @@ export async function GET(request: NextRequest) {
     const supabase = createAdminClient();
 
     // Get pending deliveries
-    const { data: pendingDeliveries, error } = await supabase
-      .from("deliveries")
-      .select("id, tenant_id, lead_id, retry_count")
-      .eq("status", "PENDING")
-      .lt("retry_count", 3) // Max 3 retries
-      .order("created_at", { ascending: true })
-      .limit(20); // Process in batches
+    const { data: pendingDeliveries, error } = await queryWithTimeout(
+      supabase
+        .from("deliveries")
+        .select("id, tenant_id, lead_id, retry_count")
+        .eq("status", "PENDING")
+        .lt("retry_count", 3) // Max 3 retries
+        .order("created_at", { ascending: true })
+        .limit(20), // Process in batches
+      10000,
+      "fetch pending deliveries"
+    );
 
     if (error) {
       console.error("Error fetching pending deliveries:", error);
@@ -55,13 +60,17 @@ export async function GET(request: NextRequest) {
         errorCount++;
 
         // Increment retry count
-        await supabase
-          .from("deliveries")
-          .update({
-            retry_count: delivery.retry_count + 1,
-            error_message: err instanceof Error ? err.message : "Unknown error",
-          })
-          .eq("id", delivery.id);
+        await queryWithTimeout(
+          supabase
+            .from("deliveries")
+            .update({
+              retry_count: delivery.retry_count + 1,
+              error_message: err instanceof Error ? err.message : "Unknown error",
+            })
+            .eq("id", delivery.id),
+          10000,
+          "increment delivery retry count"
+        );
       }
     }
 

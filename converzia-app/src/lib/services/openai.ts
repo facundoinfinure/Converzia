@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { createAdminClient } from "@/lib/supabase/server";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import type { QualificationFields, Offer, ScoreBreakdown } from "@/types";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -65,7 +66,11 @@ async function getTenantName(tenantId: string): Promise<string> {
   if (cached && now - cached.at < TENANT_NAME_CACHE_TTL_MS) return cached.value;
 
   const supabase = createAdminClient();
-  const { data } = await supabase.from("tenants").select("name").eq("id", tenantId).single();
+  const { data } = await queryWithTimeout(
+    supabase.from("tenants").select("name").eq("id", tenantId).single(),
+    10000,
+    `get tenant name ${tenantId}`
+  );
   const name = data?.name || "la desarrolladora";
 
   tenantNameCache.set(tenantId, { value: name, at: now });
@@ -116,11 +121,16 @@ async function buildQualificationSystemPrompt(params: {
 export async function getOpenAI(): Promise<OpenAI> {
   const supabase = createAdminClient();
 
-  const { data: setting } = await supabase
-    .from("app_settings")
-    .select("value")
-    .eq("key", "openai_api_key")
-    .single();
+  const { data: setting } = await queryWithTimeout(
+    supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", "openai_api_key")
+      .single(),
+    10000,
+    "get OpenAI API key",
+    false // Don't retry settings
+  );
 
   const apiKey = setting?.value || process.env.OPENAI_API_KEY;
 
@@ -146,11 +156,16 @@ export async function getModel(type: "extraction" | "response" | "embedding"): P
     embedding: "text-embedding-ada-002",
   };
 
-  const { data: setting } = await supabase
-    .from("app_settings")
-    .select("value")
-    .eq("key", keyMap[type])
-    .single();
+  const { data: setting } = await queryWithTimeout(
+    supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", keyMap[type])
+      .single(),
+    10000,
+    `get OpenAI model for ${type}`,
+    false // Don't retry settings
+  );
 
   return setting?.value || defaultMap[type];
 }
@@ -432,13 +447,17 @@ export async function ragSearch(
   const embedding = await generateEmbedding(query);
 
   // Search knowledge chunks using vector similarity
-  const { data: chunks } = await supabase.rpc("match_knowledge_chunks", {
-    query_embedding: embedding,
-    match_threshold: 0.7,
-    match_count: limit,
-    p_tenant_id: tenantId,
-    p_offer_id: offerId || null,
-  });
+  const { data: chunks } = await queryWithTimeout(
+    supabase.rpc("match_knowledge_chunks", {
+      query_embedding: embedding,
+      match_threshold: 0.7,
+      match_count: limit,
+      p_tenant_id: tenantId,
+      p_offer_id: offerId || null,
+    }),
+    15000, // 15 seconds for RAG search
+    "match knowledge chunks RPC"
+  );
 
   return (chunks || []).map((chunk: any) => ({
     content: chunk.content,

@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/server";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import type { QualificationFields, Offer, ScoreBreakdown, OfferType } from "@/types";
 
 // ============================================
@@ -484,26 +485,34 @@ async function loadScoringTemplate(
   const supabase = createAdminClient();
 
   // Try to find tenant-specific template first
-  const { data: tenantTemplate } = await supabase
-    .from("scoring_templates")
-    .select("*")
-    .eq("offer_type", offerType)
-    .eq("tenant_id", tenantId)
-    .eq("is_active", true)
-    .single();
+  const { data: tenantTemplate } = await queryWithTimeout(
+    supabase
+      .from("scoring_templates")
+      .select("*")
+      .eq("offer_type", offerType)
+      .eq("tenant_id", tenantId)
+      .eq("is_active", true)
+      .single(),
+    10000,
+    "get tenant scoring template"
+  );
 
   if (tenantTemplate) {
     return tenantTemplate as ScoringTemplate;
   }
 
   // Fall back to global default template
-  const { data: defaultTemplate } = await supabase
-    .from("scoring_templates")
-    .select("*")
-    .eq("offer_type", offerType)
-    .is("tenant_id", null)
-    .eq("is_default", true)
-    .single();
+  const { data: defaultTemplate } = await queryWithTimeout(
+    supabase
+      .from("scoring_templates")
+      .select("*")
+      .eq("offer_type", offerType)
+      .is("tenant_id", null)
+      .eq("is_default", true)
+      .single(),
+    10000,
+    "get default scoring template"
+  );
 
   if (defaultTemplate) {
     return defaultTemplate as ScoringTemplate;

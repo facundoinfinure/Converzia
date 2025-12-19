@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 
 // Publishable key - supports both new and legacy formats
 const getPublishableKey = () =>
@@ -45,22 +46,30 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if user profile exists
-    const { data: profile } = await supabase
-      .from("user_profiles")
-      .select("id, is_converzia_admin")
-      .eq("id", user.id)
-      .single();
+    const { data: profile } = await queryWithTimeout(
+      supabase
+        .from("user_profiles")
+        .select("id, is_converzia_admin")
+        .eq("id", user.id)
+        .single(),
+      10000,
+      "get user profile in callback"
+    );
 
     // If profile doesn't exist, create it
     if (!profile) {
-      const { error: profileError } = await supabase
-        .from("user_profiles")
-        .insert({
-          id: user.id,
-          email: user.email || "",
-          full_name: user.user_metadata?.full_name || user.user_metadata?.name || null,
-          avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
-        });
+      const { error: profileError } = await queryWithTimeout(
+        supabase
+          .from("user_profiles")
+          .insert({
+            id: user.id,
+            email: user.email || "",
+            full_name: user.user_metadata?.full_name || user.user_metadata?.name || null,
+            avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
+          }),
+        10000,
+        "create user profile in callback"
+      );
 
       if (profileError) {
         console.error("Error creating profile:", profileError);
@@ -76,10 +85,14 @@ export async function GET(request: NextRequest) {
     }
 
     // Check for active tenant memberships
-    const { data: memberships } = await supabase
-      .from("tenant_members")
-      .select("id, status")
-      .eq("user_id", user.id) as { data: { id: string; status: string }[] | null };
+    const { data: memberships } = await queryWithTimeout(
+      supabase
+        .from("tenant_members")
+        .select("id, status")
+        .eq("user_id", user.id),
+      10000,
+      "get tenant memberships in callback"
+    ) as { data: { id: string; status: string }[] | null };
 
     if (!memberships || memberships.length === 0) {
       // No memberships - redirect to register to create tenant

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { reindexSource, ingestFromUrl, ingestManualContent } from "@/lib/services/rag";
 
 // ============================================
@@ -16,11 +17,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { data: profile } = await supabase
-      .from("user_profiles")
-      .select("is_converzia_admin")
-      .eq("id", user.id)
-      .single();
+    const { data: profile } = await queryWithTimeout(
+      supabase
+        .from("user_profiles")
+        .select("is_converzia_admin")
+        .eq("id", user.id)
+        .single(),
+      10000,
+      "get user profile for RAG reindex"
+    );
 
     if (!profile?.is_converzia_admin) {
       return NextResponse.json({ error: "Admin access required" }, { status: 403 });

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
+import { fetchWithTimeout } from "@/lib/utils/fetch-with-timeout";
 import { testTokkoConnection, TokkoConfig } from "@/lib/services/tokko";
 import { testGoogleSheetsConnection, GoogleSheetsConfig } from "@/lib/services/google-sheets";
 
@@ -26,22 +28,30 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify membership or Converzia admin
-    const { data: profile } = await supabase
-      .from("user_profiles")
-      .select("is_converzia_admin")
-      .eq("id", user.id)
-      .single();
+    const { data: profile } = await queryWithTimeout(
+      supabase
+        .from("user_profiles")
+        .select("is_converzia_admin")
+        .eq("id", user.id)
+        .single(),
+      10000,
+      "get user profile for integration test"
+    );
 
     const isAdmin = !!(profile as any)?.is_converzia_admin;
 
     if (!isAdmin) {
-      const { data: membership } = await supabase
-        .from("tenant_members")
-        .select("role")
-        .eq("tenant_id", tenant_id)
-        .eq("user_id", user.id)
-        .eq("status", "ACTIVE")
-        .single();
+      const { data: membership } = await queryWithTimeout(
+        supabase
+          .from("tenant_members")
+          .select("role")
+          .eq("tenant_id", tenant_id)
+          .eq("user_id", user.id)
+          .eq("status", "ACTIVE")
+          .single(),
+        10000,
+        "get tenant membership for integration test"
+      );
 
       if (!membership || !["OWNER", "ADMIN"].includes((membership as any).role)) {
         return NextResponse.json({ success: false, message: "No access" }, { status: 403 });
@@ -120,14 +130,18 @@ async function testWebhookConnection(url: string): Promise<{ success: boolean; m
     const timeout = setTimeout(() => controller.abort(), 5000);
 
     // Try to reach the webhook endpoint with a HEAD request
-    const response = await fetch(url, {
-      method: "HEAD",
-      redirect: "manual",
-      signal: controller.signal,
-      headers: {
-        "User-Agent": "Converzia-Test/1.0",
+    const response = await fetchWithTimeout(
+      url,
+      {
+        method: "HEAD",
+        redirect: "manual",
+        signal: controller.signal,
+        headers: {
+          "User-Agent": "Converzia-Test/1.0",
+        },
       },
-    }).finally(() => clearTimeout(timeout));
+      5000 // 5 seconds for webhook test
+    ).finally(() => clearTimeout(timeout));
 
     if (response.ok || response.status === 405) {
       // 405 Method Not Allowed is acceptable (endpoint exists but doesn't accept HEAD)

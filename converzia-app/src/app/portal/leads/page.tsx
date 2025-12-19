@@ -68,14 +68,18 @@ export default function PortalLeadsPage() {
     if (selectedLeads.length === 0 || !activeTenantId) return;
 
     try {
-      await supabase
-        .from("lead_offers")
-        .update({
-          status: newStatus,
-          status_changed_at: new Date().toISOString(),
-        })
-        .in("id", selectedLeads)
-        .eq("tenant_id", activeTenantId);
+      await queryWithTimeout(
+        supabase
+          .from("lead_offers")
+          .update({
+            status: newStatus,
+            status_changed_at: new Date().toISOString(),
+          })
+          .in("id", selectedLeads)
+          .eq("tenant_id", activeTenantId),
+        30000,
+        "bulk update lead status"
+      );
 
       toast.success(`${selectedLeads.length} lead(s) actualizado(s)`);
       setSelectedLeads([]);

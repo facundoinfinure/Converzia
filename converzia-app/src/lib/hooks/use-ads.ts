@@ -208,31 +208,43 @@ export function useAdMappingMutations() {
   }) => {
     setIsLoading(true);
     try {
-      const { data: mapping, error } = await (supabase as any)
-        .from("ad_offer_map")
-        .insert(data)
-        .select()
-        .single();
+      const { data: mapping, error } = await queryWithTimeout(
+        (supabase as any)
+          .from("ad_offer_map")
+          .insert(data)
+          .select()
+          .single(),
+        30000,
+        "create ad mapping"
+      );
 
       if (error) throw error;
 
       // Update pending leads to TO_BE_CONTACTED
-      const { data: sourceIds } = await (supabase as any)
-        .from("lead_sources")
-        .select("id")
-        .eq("ad_id", data.ad_id);
+      const { data: sourceIds } = await queryWithTimeout(
+        (supabase as any)
+          .from("lead_sources")
+          .select("id")
+          .eq("ad_id", data.ad_id),
+        10000,
+        "get lead sources for ad"
+      );
       
-      if (sourceIds && sourceIds.length > 0) {
-        await (supabase as any)
-          .from("lead_offers")
-          .update({
-            status: "TO_BE_CONTACTED",
-            offer_id: data.offer_id,
-            tenant_id: data.tenant_id,
-            status_changed_at: new Date().toISOString(),
-          })
-          .eq("status", "PENDING_MAPPING")
-          .in("lead_source_id", sourceIds.map((s: any) => s.id));
+      if (sourceIds && Array.isArray(sourceIds) && sourceIds.length > 0) {
+        await queryWithTimeout(
+          (supabase as any)
+            .from("lead_offers")
+            .update({
+              status: "TO_BE_CONTACTED",
+              offer_id: data.offer_id,
+              tenant_id: data.tenant_id,
+              status_changed_at: new Date().toISOString(),
+            })
+            .eq("status", "PENDING_MAPPING")
+            .in("lead_source_id", sourceIds.map((s: any) => s.id)),
+          30000,
+          "update pending leads to TO_BE_CONTACTED"
+        );
       }
 
       return mapping;
@@ -244,12 +256,16 @@ export function useAdMappingMutations() {
   const updateMapping = async (id: string, data: Partial<AdOfferMap>) => {
     setIsLoading(true);
     try {
-      const { data: mapping, error } = await (supabase as any)
-        .from("ad_offer_map")
-        .update(data)
-        .eq("id", id)
-        .select()
-        .single();
+      const { data: mapping, error } = await queryWithTimeout(
+        (supabase as any)
+          .from("ad_offer_map")
+          .update(data)
+          .eq("id", id)
+          .select()
+          .single(),
+        10000,
+        "update ad mapping"
+      );
 
       if (error) throw error;
       return mapping;
@@ -261,7 +277,11 @@ export function useAdMappingMutations() {
   const deleteMapping = async (id: string) => {
     setIsLoading(true);
     try {
-      const { error } = await (supabase as any).from("ad_offer_map").delete().eq("id", id);
+      const { error } = await queryWithTimeout(
+        (supabase as any).from("ad_offer_map").delete().eq("id", id),
+        10000,
+        "delete ad mapping"
+      );
       if (error) throw error;
     } finally {
       setIsLoading(false);
@@ -272,30 +292,42 @@ export function useAdMappingMutations() {
     setIsLoading(true);
     try {
       // Get the mapping for this ad
-      const { data: mapping } = await (supabase as any)
-        .from("ad_offer_map")
-        .select("*")
-        .eq("ad_id", adId)
-        .single();
+      const { data: mapping } = await queryWithTimeout(
+        (supabase as any)
+          .from("ad_offer_map")
+          .select("*")
+          .eq("ad_id", adId)
+          .single(),
+        10000,
+        "get ad mapping for reprocess"
+      );
 
       if (!mapping) throw new Error("No mapping found for this ad");
 
       // Update all leads with this ad to TO_BE_CONTACTED
-      const { data: sources } = await (supabase as any)
-        .from("lead_sources")
-        .select("id")
-        .eq("ad_id", adId);
+      const { data: sources } = await queryWithTimeout(
+        (supabase as any)
+          .from("lead_sources")
+          .select("id")
+          .eq("ad_id", adId),
+        10000,
+        "get lead sources for reprocess"
+      );
 
-      if (sources && sources.length > 0) {
-        await (supabase as any)
-          .from("lead_offers")
-          .update({
-            status: "TO_BE_CONTACTED",
-            offer_id: mapping.offer_id,
-            tenant_id: mapping.tenant_id,
-            status_changed_at: new Date().toISOString(),
-          })
-          .in("lead_source_id", sources.map((s: any) => s.id));
+      if (sources && Array.isArray(sources) && sources.length > 0) {
+        await queryWithTimeout(
+          (supabase as any)
+            .from("lead_offers")
+            .update({
+              status: "TO_BE_CONTACTED",
+              offer_id: mapping.offer_id,
+              tenant_id: mapping.tenant_id,
+              status_changed_at: new Date().toISOString(),
+            })
+            .in("lead_source_id", sources.map((s: any) => s.id)),
+          30000,
+          "reprocess leads for ad"
+        );
       }
     } finally {
       setIsLoading(false);
@@ -329,21 +361,29 @@ export function useOffersForMapping() {
 
   useEffect(() => {
     async function fetchData() {
-      const { data: tenants } = await (supabase as any)
-        .from("tenants")
-        .select("id, name")
-        .eq("status", "ACTIVE")
-        .order("name");
+      const { data: tenants } = await queryWithTimeout(
+        (supabase as any)
+          .from("tenants")
+          .select("id, name")
+          .eq("status", "ACTIVE")
+          .order("name"),
+        10000,
+        "get tenants for mapping"
+      );
 
-      if (tenants) {
+      if (tenants && Array.isArray(tenants)) {
         const results = await Promise.all(
           tenants.map(async (tenant: any) => {
-            const { data: offers } = await (supabase as any)
-              .from("offers")
-              .select("id, name")
-              .eq("tenant_id", tenant.id)
-              .in("status", ["ACTIVE", "DRAFT"])
-              .order("name");
+            const { data: offers } = await queryWithTimeout(
+              (supabase as any)
+                .from("offers")
+                .select("id, name")
+                .eq("tenant_id", tenant.id)
+                .in("status", ["ACTIVE", "DRAFT"])
+                .order("name"),
+              10000,
+              `get offers for tenant ${tenant.id}`
+            );
 
             return {
               id: tenant.id,

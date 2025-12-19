@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import Stripe from "stripe";
 
 // ============================================
@@ -48,11 +49,15 @@ export async function POST(request: NextRequest) {
       const billingOrderId = metadata.billing_order_id;
 
       // Idempotency: if order already completed, do nothing
-      const { data: existingOrder } = await (supabase as any)
-        .from("billing_orders")
-        .select("id, status")
-        .eq("id", billingOrderId)
-        .maybeSingle();
+      const { data: existingOrder } = await queryWithTimeout(
+        (supabase as any)
+          .from("billing_orders")
+          .select("id, status")
+          .eq("id", billingOrderId)
+          .maybeSingle(),
+        10000,
+        "check existing billing order"
+      );
 
       if (!existingOrder) {
         console.error("Billing order not found for session:", session.id);
@@ -65,23 +70,35 @@ export async function POST(request: NextRequest) {
       }
 
       // Mark order completed
-      await (supabase as any)
-        .from("billing_orders")
-        .update({
-          status: "completed",
-          paid_at: new Date().toISOString(),
-          stripe_payment_intent_id: session.payment_intent as string,
-          stripe_checkout_session_id: session.id,
-        })
-        .eq("id", billingOrderId);
+      await queryWithTimeout(
+        (supabase as any)
+          .from("billing_orders")
+          .update({
+            status: "completed",
+            paid_at: new Date().toISOString(),
+            stripe_payment_intent_id: session.payment_intent as string,
+            stripe_checkout_session_id: session.id,
+          })
+          .eq("id", billingOrderId),
+        10000,
+        "mark billing order completed"
+      );
 
       // Add credits atomically (ledger trigger calculates balance_after)
-      const { error: addError } = await (supabase as any).rpc("add_credits", {
-        p_tenant_id: tenantId,
-        p_amount: credits,
-        p_billing_order_id: billingOrderId,
-        p_description: `Compra de ${credits} créditos`,
+      // RPC calls need manual timeout
+      const rpcTimeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("Timeout: La operación RPC tardó más de 10 segundos")), 10000);
       });
+
+      const { error: addError } = await Promise.race([
+        (supabase as any).rpc("add_credits", {
+          p_tenant_id: tenantId,
+          p_amount: credits,
+          p_billing_order_id: billingOrderId,
+          p_description: `Compra de ${credits} créditos`,
+        }),
+        rpcTimeoutPromise,
+      ]) as any;
 
       if (addError) {
         console.error("Error adding credits:", addError);

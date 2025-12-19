@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/server";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import type { Delivery, TenantIntegration } from "@/types";
 import { createTokkoLead, TokkoConfig } from "./tokko";
 import { appendToGoogleSheets, GoogleSheetsConfig } from "./google-sheets";
@@ -11,16 +12,20 @@ export async function processDelivery(deliveryId: string): Promise<void> {
   const supabase = createAdminClient();
 
   // Get delivery with related data
-  const { data: delivery, error } = await supabase
-    .from("deliveries")
-    .select(`
-      *,
-      lead:leads(*),
-      tenant:tenants(*),
-      offer:offers(*)
-    `)
-    .eq("id", deliveryId)
-    .single();
+  const { data: delivery, error } = await queryWithTimeout(
+    supabase
+      .from("deliveries")
+      .select(`
+        *,
+        lead:leads(*),
+        tenant:tenants(*),
+        offer:offers(*)
+      `)
+      .eq("id", deliveryId)
+      .single(),
+    10000,
+    `fetch delivery ${deliveryId}`
+  );
 
   if (error || !delivery) {
     throw new Error(`Delivery not found: ${deliveryId}`);
@@ -30,32 +35,44 @@ export async function processDelivery(deliveryId: string): Promise<void> {
   const canDeliver = await checkBillingEligibility(delivery.tenant_id);
 
   if (!canDeliver) {
-    await supabase
-      .from("deliveries")
-      .update({
-        status: "FAILED",
-        error_message: "Insufficient credits",
-      })
-      .eq("id", deliveryId);
+    await queryWithTimeout(
+      supabase
+        .from("deliveries")
+        .update({
+          status: "FAILED",
+          error_message: "Insufficient credits",
+        })
+        .eq("id", deliveryId),
+      10000,
+      "update delivery to FAILED"
+    );
 
     // Update lead offer
-    await supabase
-      .from("lead_offers")
-      .update({
-        billing_eligibility: "PENDING",
-        billing_notes: "Insufficient credits for delivery",
-      })
-      .eq("id", delivery.lead_offer_id);
+    await queryWithTimeout(
+      supabase
+        .from("lead_offers")
+        .update({
+          billing_eligibility: "PENDING",
+          billing_notes: "Insufficient credits for delivery",
+        })
+        .eq("id", delivery.lead_offer_id),
+      10000,
+      "update lead offer billing"
+    );
 
     return;
   }
 
   // Get tenant integrations
-  const { data: integrations } = await supabase
-    .from("tenant_integrations")
-    .select("*")
-    .eq("tenant_id", delivery.tenant_id)
-    .eq("is_active", true);
+  const { data: integrations } = await queryWithTimeout(
+    supabase
+      .from("tenant_integrations")
+      .select("*")
+      .eq("tenant_id", delivery.tenant_id)
+      .eq("is_active", true),
+    10000,
+    "get tenant integrations"
+  );
 
   const errors: string[] = [];
   let sheetsDelivered = false;
@@ -85,42 +102,54 @@ export async function processDelivery(deliveryId: string): Promise<void> {
   // Update delivery status
   const allSucceeded = errors.length === 0 && (sheetsDelivered || crmDelivered || (integrations || []).length === 0);
 
-  await supabase
-    .from("deliveries")
-    .update({
-      status: allSucceeded ? "DELIVERED" : errors.length > 0 ? "FAILED" : "DELIVERED",
-      delivered_at: allSucceeded ? new Date().toISOString() : null,
-      sheets_delivered_at: sheetsDelivered ? new Date().toISOString() : null,
-      crm_delivered_at: crmDelivered ? new Date().toISOString() : null,
-      error_message: errors.length > 0 ? errors.join("; ") : null,
-    })
-    .eq("id", deliveryId);
+  await queryWithTimeout(
+    supabase
+      .from("deliveries")
+      .update({
+        status: allSucceeded ? "DELIVERED" : errors.length > 0 ? "FAILED" : "DELIVERED",
+        delivered_at: allSucceeded ? new Date().toISOString() : null,
+        sheets_delivered_at: sheetsDelivered ? new Date().toISOString() : null,
+        crm_delivered_at: crmDelivered ? new Date().toISOString() : null,
+        error_message: errors.length > 0 ? errors.join("; ") : null,
+      })
+      .eq("id", deliveryId),
+    10000,
+    "update delivery status"
+  );
 
   // If delivered, consume credit
   if (allSucceeded) {
     await consumeCredit(delivery.tenant_id, delivery.lead_offer_id, deliveryId);
 
     // Update lead offer status
-    await supabase
-      .from("lead_offers")
-      .update({
-        status: "SENT_TO_DEVELOPER",
-        billing_eligibility: "CHARGEABLE",
-        status_changed_at: new Date().toISOString(),
-      })
-      .eq("id", delivery.lead_offer_id);
+    await queryWithTimeout(
+      supabase
+        .from("lead_offers")
+        .update({
+          status: "SENT_TO_DEVELOPER",
+          billing_eligibility: "CHARGEABLE",
+          status_changed_at: new Date().toISOString(),
+        })
+        .eq("id", delivery.lead_offer_id),
+      10000,
+      "update lead offer to SENT_TO_DEVELOPER"
+    );
 
     // Log event
-    await supabase.from("lead_events").insert({
-      lead_id: delivery.lead_id,
-      lead_offer_id: delivery.lead_offer_id,
-      event_type: "DELIVERY_COMPLETED",
-      details: {
-        delivery_id: deliveryId,
-        integrations: (integrations || []).map((i: any) => i.integration_type),
-      },
-      actor_type: "SYSTEM",
-    });
+    await queryWithTimeout(
+      supabase.from("lead_events").insert({
+        lead_id: delivery.lead_id,
+        lead_offer_id: delivery.lead_offer_id,
+        event_type: "DELIVERY_COMPLETED",
+        details: {
+          delivery_id: deliveryId,
+          integrations: (integrations || []).map((i: any) => i.integration_type),
+        },
+        actor_type: "SYSTEM",
+      }),
+      10000,
+      "insert delivery completed event"
+    );
   }
 }
 
@@ -131,11 +160,16 @@ export async function processDelivery(deliveryId: string): Promise<void> {
 async function checkBillingEligibility(tenantId: string): Promise<boolean> {
   const supabase = createAdminClient();
 
-  const { data: balance } = await supabase
-    .from("tenant_credit_balance")
-    .select("current_balance")
-    .eq("tenant_id", tenantId)
-    .maybeSingle();
+  const { data: balance } = await queryWithTimeout(
+    supabase
+      .from("tenant_credit_balance")
+      .select("current_balance")
+      .eq("tenant_id", tenantId)
+      .maybeSingle(),
+    5000,
+    "check billing eligibility",
+    false // Don't retry balance checks
+  );
 
   return (balance?.current_balance || 0) >= 1;
 }
@@ -152,7 +186,8 @@ async function consumeCredit(
   const supabase = createAdminClient();
 
   // Atomic credit consumption (locks per-tenant)
-  const { data, error } = await supabase.rpc("consume_credit", {
+  // Wrap RPC call with timeout
+  const rpcPromise = supabase.rpc("consume_credit", {
     p_tenant_id: tenantId,
     p_delivery_id: deliveryId,
     p_lead_offer_id: leadOfferId,
@@ -181,10 +216,14 @@ async function consumeCredit(
     .maybeSingle();
 
   if (ledger?.id) {
-    await (supabase as any)
-      .from("deliveries")
-      .update({ credit_ledger_id: ledger.id })
-      .eq("id", deliveryId);
+    await queryWithTimeout(
+      (supabase as any)
+        .from("deliveries")
+        .update({ credit_ledger_id: ledger.id })
+        .eq("id", deliveryId),
+      10000,
+      "update delivery credit ledger"
+    );
   }
 }
 
@@ -211,10 +250,11 @@ async function deliverToGoogleSheets(
 
   // Update delivery with Sheets row info
   const supabase = createAdminClient();
-  await supabase
-    .from("deliveries")
-    .update({ 
-      sheets_row_id: result.row_number ? String(result.row_number) : null,
+  await queryWithTimeout(
+    supabase
+      .from("deliveries")
+      .update({
+        sheets_row_id: result.row_number ? String(result.row_number) : null,
       sheets_delivered_at: new Date().toISOString() 
     })
     .eq("id", delivery.id);
@@ -245,10 +285,11 @@ async function deliverToTokko(
 
   // Update delivery with CRM record info
   const supabase = createAdminClient();
-  await supabase
-    .from("deliveries")
-    .update({ 
-      crm_record_id: result.contact_id || null,
+  await queryWithTimeout(
+    supabase
+      .from("deliveries")
+      .update({
+        crm_record_id: result.contact_id || null,
       crm_delivered_at: new Date().toISOString() 
     })
     .eq("id", delivery.id);
@@ -298,10 +339,14 @@ async function deliverToWebhook(
   // await fetch(config.url, { method: config.method, headers, body: JSON.stringify(delivery.payload) });
 
   const supabase = createAdminClient();
-  await supabase
-    .from("tenant_integrations")
-    .update({ last_sync_at: new Date().toISOString() })
-    .eq("id", integration.id);
+  await queryWithTimeout(
+    supabase
+      .from("tenant_integrations")
+      .update({ last_sync_at: new Date().toISOString() })
+      .eq("id", integration.id),
+    10000,
+    "update integration last sync"
+  );
 }
 
 // ============================================
@@ -314,18 +359,23 @@ export async function refundCredit(
 ): Promise<void> {
   const supabase = createAdminClient();
 
-  const { data: delivery } = await supabase
-    .from("deliveries")
-    .select("*, credit_ledger_id")
-    .eq("id", deliveryId)
-    .single();
+  const { data: delivery } = await queryWithTimeout(
+    supabase
+      .from("deliveries")
+      .select("*, credit_ledger_id")
+      .eq("id", deliveryId)
+      .single(),
+    10000,
+    `fetch delivery ${deliveryId} for refund`
+  );
 
   if (!delivery || delivery.status === "REFUNDED") {
     throw new Error("Cannot refund this delivery");
   }
 
   // Atomic refund (and delivery status update) via DB function
-  const { error: refundError } = await supabase.rpc("refund_credit", {
+  const { error: refundError } = await queryWithTimeout(
+    supabase.rpc("refund_credit", {
     p_tenant_id: delivery.tenant_id,
     p_delivery_id: deliveryId,
     p_lead_offer_id: delivery.lead_offer_id,
@@ -338,10 +388,11 @@ export async function refundCredit(
   }
 
   // Update lead offer
-  await supabase
-    .from("lead_offers")
-    .update({
-      billing_eligibility: "PENDING",
+  await queryWithTimeout(
+    supabase
+      .from("lead_offers")
+      .update({
+        billing_eligibility: "PENDING",
       billing_notes: `Refunded: ${reason}`,
     })
     .eq("id", delivery.lead_offer_id);
