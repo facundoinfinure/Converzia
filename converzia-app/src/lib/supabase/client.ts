@@ -16,17 +16,18 @@ const getPublishableKey = () =>
 
 let clientInstance: ReturnType<typeof createBrowserClient> | null = null;
 
-export function createClient() {
+export function createClient(): ReturnType<typeof createBrowserClient> {
   // Reuse the same client instance to avoid creating multiple clients
   if (clientInstance) {
     return clientInstance;
   }
 
-  clientInstance = createBrowserClient(
+  const newClient = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     getPublishableKey()!
   ) as any;
 
-  return clientInstance;
+  clientInstance = newClient;
+  return newClient;
 }
 

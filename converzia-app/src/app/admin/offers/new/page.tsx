@@ -166,10 +166,10 @@ export default function NewOfferPage() {
         address: data.address && data.address.trim() ? data.address.trim() : null,
         city: data.city && data.city.trim() ? data.city.trim() : null,
         zone: data.zone && data.zone.trim() ? data.zone.trim() : null,
-        latitude: data.latitude !== undefined && data.latitude !== null ? Number(data.latitude) : null,
-        longitude: data.longitude !== undefined && data.longitude !== null ? Number(data.longitude) : null,
-        price_from: data.price_from !== undefined && data.price_from !== null ? Number(data.price_from) : null,
-        price_to: data.price_to !== undefined && data.price_to !== null ? Number(data.price_to) : null,
+        latitude: data.latitude !== undefined && data.latitude !== null && !isNaN(Number(data.latitude)) ? Number(data.latitude) : null,
+        longitude: data.longitude !== undefined && data.longitude !== null && !isNaN(Number(data.longitude)) ? Number(data.longitude) : null,
+        price_from: data.price_from !== undefined && data.price_from !== null && !isNaN(Number(data.price_from)) ? Number(data.price_from) : null,
+        price_to: data.price_to !== undefined && data.price_to !== null && !isNaN(Number(data.price_to)) ? Number(data.price_to) : null,
       };
 
       console.log("Sending offer data:", offerData);

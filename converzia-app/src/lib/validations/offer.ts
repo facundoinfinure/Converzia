@@ -35,29 +35,14 @@ export const createOfferSchema = z.object({
   city: z.string().max(100).optional().nullable(),
   zone: z.string().max(100).optional().nullable(),
   country: z.string().optional(),
-  latitude: z.preprocess(
-    (val) => (typeof val === "number" && isNaN(val) ? null : val),
-    z.number().min(-90).max(90).optional().nullable()
-  ),
-  longitude: z.preprocess(
-    (val) => (typeof val === "number" && isNaN(val) ? null : val),
-    z.number().min(-180).max(180).optional().nullable()
-  ),
+  latitude: z.number().min(-90).max(90).optional().nullable(),
+  longitude: z.number().min(-180).max(180).optional().nullable(),
   // Pricing
-  price_from: z.preprocess(
-    (val) => (typeof val === "number" && isNaN(val) ? null : val),
-    z.number().min(0).optional().nullable()
-  ),
-  price_to: z.preprocess(
-    (val) => (typeof val === "number" && isNaN(val) ? null : val),
-    z.number().min(0).optional().nullable()
-  ),
+  price_from: z.number().min(0).optional().nullable(),
+  price_to: z.number().min(0).optional().nullable(),
   currency: z.string().optional(),
   // Priority
-  priority: z.preprocess(
-    (val) => (typeof val === "number" && isNaN(val) ? undefined : val),
-    z.number().min(0).max(1000).optional()
-  ),
+  priority: z.number().min(0).max(1000).optional(),
   // Settings
   settings: z.record(z.unknown()).optional(),
 });

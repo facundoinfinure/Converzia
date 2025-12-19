@@ -9,7 +9,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
  */
 export class RealtimeService {
   private channels: Map<string, RealtimeChannel> = new Map();
-  private supabase = createClient();
+  private supabase: ReturnType<typeof createClient> = createClient();
 
   /**
    * Subscribe to lead_offers changes
@@ -24,7 +24,7 @@ export class RealtimeService {
       this.channels.get(channelName)?.unsubscribe();
     }
 
-    let query = this.supabase
+    const channel = this.supabase
       .channel(channelName)
       .on(
         "postgres_changes",
@@ -32,15 +32,11 @@ export class RealtimeService {
           event: "*",
           schema: "public",
           table: "lead_offers",
+          ...(tenantId ? { filter: `tenant_id=eq.${tenantId}` } : {}),
         },
         callback
-      );
-
-    if (tenantId) {
-      query = query.filter(`tenant_id=eq.${tenantId}`);
-    }
-
-    const channel = query.subscribe();
+      )
+      .subscribe();
     this.channels.set(channelName, channel);
 
     return () => {
@@ -94,7 +90,7 @@ export class RealtimeService {
       this.channels.get(channelName)?.unsubscribe();
     }
 
-    let query = this.supabase
+    const channel = this.supabase
       .channel(channelName)
       .on(
         "postgres_changes",
@@ -102,15 +98,11 @@ export class RealtimeService {
           event: "*",
           schema: "public",
           table: "deliveries",
+          ...(tenantId ? { filter: `tenant_id=eq.${tenantId}` } : {}),
         },
         callback
-      );
-
-    if (tenantId) {
-      query = query.filter(`tenant_id=eq.${tenantId}`);
-    }
-
-    const channel = query.subscribe();
+      )
+      .subscribe();
     this.channels.set(channelName, channel);
 
     return () => {

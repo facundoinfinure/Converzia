@@ -59,6 +59,11 @@ export default function KnowledgeDocumentsPage() {
     setIsLoading(true);
 
     try {
+      if (!supabase) {
+        toast.error("Error de conexión con Supabase");
+        return;
+      }
+
       let query = supabase
         .from("rag_documents")
         .select(`
