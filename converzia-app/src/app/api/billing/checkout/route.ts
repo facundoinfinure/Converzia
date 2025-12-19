@@ -77,8 +77,8 @@ export async function POST(request: NextRequest) {
       "get existing Stripe customer"
     );
 
-    if (existingCustomer?.stripe_customer_id) {
-      customerId = existingCustomer.stripe_customer_id;
+    if ((existingCustomer as any)?.stripe_customer_id) {
+      customerId = (existingCustomer as any).stripe_customer_id;
     } else {
       const customer = await stripe.customers.create({
         name: (tenant as any).name,
