@@ -282,9 +282,12 @@ export async function ingestDocument(
             metadata: {
               doc_type: metadata.doc_type,
               title: metadata.title,
-          },
-          token_count: estimateTokens(chunk),
-        });
+            },
+            token_count: estimateTokens(chunk),
+          }),
+          10000,
+          `insert RAG chunk ${i}`
+        );
 
         chunkCount++;
       } catch (error) {

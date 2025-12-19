@@ -255,9 +255,12 @@ async function deliverToGoogleSheets(
       .from("deliveries")
       .update({
         sheets_row_id: result.row_number ? String(result.row_number) : null,
-      sheets_delivered_at: new Date().toISOString() 
-    })
-    .eq("id", delivery.id);
+        sheets_delivered_at: new Date().toISOString(),
+      })
+      .eq("id", delivery.id),
+    10000,
+    "update delivery with Sheets row info"
+  );
 
   console.log("Successfully delivered to Google Sheets, row:", result.row_number);
 }
