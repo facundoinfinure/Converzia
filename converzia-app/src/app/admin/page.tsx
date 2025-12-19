@@ -33,6 +33,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { createClient } from "@/lib/supabase/client";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { formatRelativeTime } from "@/lib/utils";
 
 interface DashboardStats {
@@ -95,17 +96,34 @@ export default function AdminDashboard() {
       console.log("✅ User authenticated:", user.id);
 
       try {
-        // Fetch counts in parallel
+        // Fetch counts in parallel with timeout
+        console.log("Fetching dashboard counts with 10s timeout...");
         const [
           { count: totalLeads, error: leadsError },
           { count: activeTenants, error: tenantsError },
           { count: pendingApprovals, error: approvalsError },
           { data: unmappedLeads, error: unmappedError },
         ] = await Promise.all([
-          supabase.from("lead_offers").select("id", { count: "exact", head: true }),
-          supabase.from("tenants").select("id", { count: "exact", head: true }).eq("status", "ACTIVE"),
-          supabase.from("tenant_members").select("id", { count: "exact", head: true }).eq("status", "PENDING_APPROVAL"),
-          supabase.from("lead_offers").select("id").eq("status", "PENDING_MAPPING"),
+          queryWithTimeout(
+            supabase.from("lead_offers").select("id", { count: "exact", head: true }),
+            10000,
+            "lead_offers count"
+          ),
+          queryWithTimeout(
+            supabase.from("tenants").select("id", { count: "exact", head: true }).eq("status", "ACTIVE"),
+            10000,
+            "tenants count"
+          ),
+          queryWithTimeout(
+            supabase.from("tenant_members").select("id", { count: "exact", head: true }).eq("status", "PENDING_APPROVAL"),
+            10000,
+            "tenant_members count"
+          ),
+          queryWithTimeout(
+            supabase.from("lead_offers").select("id").eq("status", "PENDING_MAPPING"),
+            10000,
+            "unmapped leads"
+          ),
         ]);
 
         if (leadsError || tenantsError || approvalsError || unmappedError) {
@@ -127,42 +145,58 @@ export default function AdminDashboard() {
         // Get today's leads
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        const { count: leadsToday, error: leadsTodayError } = await supabase
-          .from("lead_offers")
-          .select("id", { count: "exact", head: true })
-          .gte("created_at", today.toISOString());
+        const { count: leadsToday, error: leadsTodayError } = await queryWithTimeout(
+          supabase
+            .from("lead_offers")
+            .select("id", { count: "exact", head: true })
+            .gte("created_at", today.toISOString()),
+          10000,
+          "today's leads"
+        );
 
         if (leadsTodayError) {
           console.error("Error fetching today's leads:", leadsTodayError);
         }
 
         // Get lead ready count for rate
-        const { count: leadReadyCount, error: leadReadyError } = await supabase
-          .from("lead_offers")
-          .select("id", { count: "exact", head: true })
-          .in("status", ["LEAD_READY", "SENT_TO_DEVELOPER"]);
+        const { count: leadReadyCount, error: leadReadyError } = await queryWithTimeout(
+          supabase
+            .from("lead_offers")
+            .select("id", { count: "exact", head: true })
+            .in("status", ["LEAD_READY", "SENT_TO_DEVELOPER"]),
+          10000,
+          "lead ready count"
+        );
 
         if (leadReadyError) {
           console.error("Error fetching lead ready count:", leadReadyError);
         }
 
         // Get low credit tenants
-        const { data: creditData, error: creditError } = await supabase
-          .from("tenant_credit_balance")
-          .select("tenant_id, current_balance")
-          .lt("current_balance", 10);
+        const { data: creditData, error: creditError } = await queryWithTimeout(
+          supabase
+            .from("tenant_credit_balance")
+            .select("tenant_id, current_balance")
+            .lt("current_balance", 10),
+          10000,
+          "low credit tenants"
+        );
 
         if (creditError) {
           console.error("Error fetching credit data:", creditError);
         }
 
         // Calculate average response time (real calculation)
-        const { data: responseTimes, error: responseTimesError } = await supabase
-          .from("lead_offers")
-          .select("created_at, first_response_at")
-          .not("first_response_at", "is", null)
-          .gte("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-          .limit(100);
+        const { data: responseTimes, error: responseTimesError } = await queryWithTimeout(
+          supabase
+            .from("lead_offers")
+            .select("created_at, first_response_at")
+            .not("first_response_at", "is", null)
+            .gte("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+            .limit(100),
+          10000,
+          "response times"
+        );
 
         if (responseTimesError) {
           console.error("Error fetching response times:", responseTimesError);
@@ -194,11 +228,15 @@ export default function AdminDashboard() {
           const nextDay = new Date(date);
           nextDay.setDate(nextDay.getDate() + 1);
 
-          const { count, error: trendError } = await supabase
-            .from("lead_offers")
-            .select("id", { count: "exact", head: true })
-            .gte("created_at", date.toISOString())
-            .lt("created_at", nextDay.toISOString());
+          const { count, error: trendError } = await queryWithTimeout(
+            supabase
+              .from("lead_offers")
+              .select("id", { count: "exact", head: true })
+              .gte("created_at", date.toISOString())
+              .lt("created_at", nextDay.toISOString()),
+            5000,
+            `trend data for day ${i}`
+          );
 
           if (trendError) {
             console.error("Error fetching trend data:", trendError);
@@ -223,18 +261,22 @@ export default function AdminDashboard() {
         });
 
         // Fetch pending approvals
-        const { data: approvals, error: approvalsDataError } = await supabase
-          .from("tenant_members")
-          .select(`
-            id,
-            role,
-            created_at,
-            user:user_profiles!tenant_members_user_id_fkey(full_name, email),
-            tenant:tenants(name)
-          `)
-          .eq("status", "PENDING_APPROVAL")
-          .order("created_at", { ascending: false })
-          .limit(5);
+        const { data: approvals, error: approvalsDataError } = await queryWithTimeout(
+          supabase
+            .from("tenant_members")
+            .select(`
+              id,
+              role,
+              created_at,
+              user:user_profiles!tenant_members_user_id_fkey(full_name, email),
+              tenant:tenants(name)
+            `)
+            .eq("status", "PENDING_APPROVAL")
+            .order("created_at", { ascending: false })
+            .limit(5),
+          10000,
+          "pending approvals"
+        );
 
         if (approvalsDataError) {
           console.error("Error fetching approvals:", approvalsDataError);
@@ -252,16 +294,20 @@ export default function AdminDashboard() {
         }
 
         // Fetch recent activity (simplified - in production would be from activity_logs)
-        const { data: recentLeads, error: recentLeadsError } = await supabase
-          .from("lead_offers")
-          .select(`
-            id,
-            status,
-            created_at,
-            tenants(name)
-          `)
-          .order("created_at", { ascending: false })
-          .limit(5);
+        const { data: recentLeads, error: recentLeadsError } = await queryWithTimeout(
+          supabase
+            .from("lead_offers")
+            .select(`
+              id,
+              status,
+              created_at,
+              tenants(name)
+            `)
+            .order("created_at", { ascending: false })
+            .limit(5),
+          10000,
+          "recent activity"
+        );
 
         if (recentLeadsError) {
           console.error("Error fetching recent leads:", recentLeadsError);
