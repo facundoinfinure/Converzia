@@ -1,3 +1,5 @@
+"use client";
+
 import { createBrowserClient } from "@supabase/ssr";
 
 // ============================================
@@ -12,10 +14,19 @@ const getPublishableKey = () =>
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+let clientInstance: ReturnType<typeof createBrowserClient> | null = null;
+
 export function createClient() {
-  return createBrowserClient(
+  // Reuse the same client instance to avoid creating multiple clients
+  if (clientInstance) {
+    return clientInstance;
+  }
+
+  clientInstance = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     getPublishableKey()!
   ) as any;
+
+  return clientInstance;
 }
 

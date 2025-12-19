@@ -79,15 +79,20 @@ export default function AdminDashboard() {
       setIsLoading(true);
       setError(null);
 
+      console.log("🔍 Starting dashboard data fetch...");
+
       // Verify authentication first
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       
       if (authError || !user) {
-        console.error("Auth error:", authError);
-        setError("Error de autenticación. Por favor, recargá la página o iniciá sesión nuevamente.");
+        console.error("❌ Auth error:", authError);
+        console.error("User:", user);
+        setError(`Error de autenticación: ${authError?.message || "Usuario no encontrado"}. Por favor, recargá la página o iniciá sesión nuevamente.`);
         setIsLoading(false);
         return;
       }
+
+      console.log("✅ User authenticated:", user.id);
 
       try {
         // Fetch counts in parallel
@@ -104,7 +109,19 @@ export default function AdminDashboard() {
         ]);
 
         if (leadsError || tenantsError || approvalsError || unmappedError) {
-          console.error("Error fetching dashboard counts:", { leadsError, tenantsError, approvalsError, unmappedError });
+          console.error("❌ Error fetching dashboard counts:", { 
+            leadsError: leadsError?.message || leadsError?.code, 
+            tenantsError: tenantsError?.message || tenantsError?.code, 
+            approvalsError: approvalsError?.message || approvalsError?.code, 
+            unmappedError: unmappedError?.message || unmappedError?.code 
+          });
+          
+          // Set error if all queries failed
+          if (leadsError && tenantsError && approvalsError && unmappedError) {
+            setError(`Error al cargar datos: ${leadsError.message || "Error desconocido"}. Verificá la consola para más detalles.`);
+          }
+        } else {
+          console.log("✅ Dashboard counts loaded successfully");
         }
 
         // Get today's leads
@@ -260,15 +277,22 @@ export default function AdminDashboard() {
           );
         }
       } catch (error: any) {
-        console.error("Error fetching dashboard data:", error);
-        setError(error?.message || "Error al cargar los datos del dashboard. Intentá recargar la página.");
+        console.error("❌ Error fetching dashboard data:", error);
+        const errorMessage = error?.message || "Error al cargar los datos del dashboard. Intentá recargar la página.";
+        setError(errorMessage);
+        
+        // Log additional diagnostic info
+        if (error instanceof Error) {
+          console.error("Error stack:", error.stack);
+        }
       } finally {
         setIsLoading(false);
+        console.log("🏁 Dashboard data fetch completed");
       }
     }
 
     fetchDashboardData();
-  }, []);
+  }, [timeRange]);
 
   if (isLoading) {
     return (

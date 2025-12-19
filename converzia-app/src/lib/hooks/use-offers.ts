@@ -270,6 +270,8 @@ export function useOfferMutations() {
   const createOffer = async (data: Partial<Offer>) => {
     setIsLoading(true);
     try {
+      console.log("createOffer called with data:", data);
+      
       // Clean data - remove undefined values and ensure proper types
       const cleanData: any = {};
       Object.keys(data).forEach((key) => {
@@ -278,6 +280,8 @@ export function useOfferMutations() {
           cleanData[key] = value;
         }
       });
+
+      console.log("Cleaned data:", cleanData);
 
       // Ensure required fields
       if (!cleanData.tenant_id) {
@@ -290,6 +294,7 @@ export function useOfferMutations() {
         throw new Error("slug es requerido");
       }
 
+      console.log("Inserting offer into Supabase...");
       const { data: offer, error } = await supabase
         .from("offers")
         .insert(cleanData)
@@ -298,6 +303,7 @@ export function useOfferMutations() {
 
       if (error) {
         console.error("Supabase error creating offer:", error);
+        console.error("Error details:", JSON.stringify(error, null, 2));
         throw new Error(error.message || "Error al crear la oferta");
       }
 
@@ -305,9 +311,11 @@ export function useOfferMutations() {
         throw new Error("No se recibió respuesta del servidor");
       }
 
+      console.log("Offer created successfully:", offer);
       return offer;
     } catch (error: any) {
       console.error("Error in createOffer:", error);
+      console.error("Error stack:", error?.stack);
       throw error instanceof Error ? error : new Error("Error desconocido al crear la oferta");
     } finally {
       setIsLoading(false);

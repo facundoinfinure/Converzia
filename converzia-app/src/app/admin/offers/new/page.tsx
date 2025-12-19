@@ -148,6 +148,8 @@ export default function NewOfferPage() {
 
   const onSubmit = async (data: CreateOfferInput) => {
     try {
+      console.log("Form submitted with data:", data);
+      
       // Prepare data - convert empty strings to null/undefined
       const offerData: any = {
         tenant_id: data.tenant_id,
@@ -170,13 +172,17 @@ export default function NewOfferPage() {
         price_to: data.price_to !== undefined && data.price_to !== null ? Number(data.price_to) : null,
       };
 
+      console.log("Sending offer data:", offerData);
       const offer = await createOffer(offerData);
+      console.log("Offer created successfully:", offer);
+      
       toast.success("Oferta creada correctamente");
       router.push(`/admin/offers/${(offer as any).id}`);
     } catch (error: any) {
       console.error("Error creating offer:", error);
       const errorMessage = error?.message || "Error al crear la oferta";
       toast.error(errorMessage);
+      throw error; // Re-throw to ensure loading state is reset
     }
   };
 
@@ -192,7 +198,10 @@ export default function NewOfferPage() {
         ]}
       />
 
-      <form onSubmit={handleSubmit(onSubmit)}>
+      <form onSubmit={handleSubmit(onSubmit, (errors) => {
+        console.error("Form validation errors:", errors);
+        toast.error("Por favor, completá todos los campos requeridos correctamente");
+      })}>
         <div className="space-y-6">
           {/* Basic Info */}
           <Card>
@@ -413,5 +422,6 @@ export default function NewOfferPage() {
     </PageContainer>
   );
 }
+
 
 

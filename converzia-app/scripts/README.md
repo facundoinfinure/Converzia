@@ -45,3 +45,4 @@ npx tsx scripts/create-test-users.ts
 - Si un usuario ya existe, se actualizará su contraseña y perfil
 - Los tenants deben existir antes de ejecutar el script (ver `converzia-core/seed/002_test_users.sql`)
 
+

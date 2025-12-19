@@ -22,20 +22,42 @@ export const createOfferSchema = z.object({
   status: offerStatusSchema.optional(),
   description: z.string().max(5000).optional().nullable(),
   short_description: z.string().max(500).optional().nullable(),
-  image_url: z.string().url("URL de imagen inválida").optional().nullable().or(z.literal("")),
+  image_url: z
+    .string()
+    .optional()
+    .nullable()
+    .refine(
+      (val) => !val || val.trim() === "" || z.string().url().safeParse(val).success,
+      "URL de imagen inválida"
+    ),
   // Location
   address: z.string().max(500).optional().nullable(),
   city: z.string().max(100).optional().nullable(),
   zone: z.string().max(100).optional().nullable(),
   country: z.string().optional(),
-  latitude: z.number().min(-90).max(90).optional().nullable(),
-  longitude: z.number().min(-180).max(180).optional().nullable(),
+  latitude: z.preprocess(
+    (val) => (typeof val === "number" && isNaN(val) ? null : val),
+    z.number().min(-90).max(90).optional().nullable()
+  ),
+  longitude: z.preprocess(
+    (val) => (typeof val === "number" && isNaN(val) ? null : val),
+    z.number().min(-180).max(180).optional().nullable()
+  ),
   // Pricing
-  price_from: z.number().min(0).optional().nullable(),
-  price_to: z.number().min(0).optional().nullable(),
+  price_from: z.preprocess(
+    (val) => (typeof val === "number" && isNaN(val) ? null : val),
+    z.number().min(0).optional().nullable()
+  ),
+  price_to: z.preprocess(
+    (val) => (typeof val === "number" && isNaN(val) ? null : val),
+    z.number().min(0).optional().nullable()
+  ),
   currency: z.string().optional(),
   // Priority
-  priority: z.number().min(0).max(1000).optional(),
+  priority: z.preprocess(
+    (val) => (typeof val === "number" && isNaN(val) ? undefined : val),
+    z.number().min(0).max(1000).optional()
+  ),
   // Settings
   settings: z.record(z.unknown()).optional(),
 });
@@ -154,5 +176,6 @@ export const updateAdMappingSchema = createAdMappingSchema.partial().omit({
 
 export type CreateAdMappingInput = z.infer<typeof createAdMappingSchema>;
 export type UpdateAdMappingInput = z.infer<typeof updateAdMappingSchema>;
+
 
 
