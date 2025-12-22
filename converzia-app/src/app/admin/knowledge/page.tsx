@@ -269,17 +269,53 @@ export default function KnowledgePage() {
     setIsUploading(true);
 
     try {
-      const formData = new FormData();
-      formData.append("file", pdfFile);
-      formData.append("tenant_id", newSource.tenant_id);
-      if (newSource.offer_id) {
-        formData.append("offer_id", newSource.offer_id);
-      }
-      formData.append("title", newSource.name || pdfFile.name.replace(".pdf", ""));
+      // Step 1: Create RAG source record first
+      const { data: source, error: sourceError } = await supabase
+        .from("rag_sources")
+        .insert({
+          tenant_id: newSource.tenant_id,
+          offer_id: newSource.offer_id || null,
+          source_type: "PDF",
+          name: newSource.name || pdfFile.name.replace(".pdf", ""),
+          is_active: true,
+        })
+        .select()
+        .single();
 
+      if (sourceError) throw sourceError;
+
+      // Step 2: Upload PDF directly to Supabase Storage (bypasses Vercel 4.5MB limit)
+      const storagePath = `${newSource.tenant_id}/${source.id}/${pdfFile.name}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from("rag-documents")
+        .upload(storagePath, pdfFile, {
+          contentType: "application/pdf",
+          upsert: true,
+        });
+
+      if (uploadError) {
+        // Cleanup source if upload fails
+        await supabase.from("rag_sources").delete().eq("id", source.id);
+        throw new Error(`Error al subir archivo: ${uploadError.message}`);
+      }
+
+      // Step 3: Update source with storage path
+      await supabase
+        .from("rag_sources")
+        .update({ storage_path: storagePath })
+        .eq("id", source.id);
+
+      // Step 4: Call API to process the PDF (read from storage, not upload)
       const response = await fetch("/api/rag/ingest", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source_id: source.id,
+          storage_path: storagePath,
+          title: newSource.name || pdfFile.name.replace(".pdf", ""),
+          source_type: "PDF",
+        }),
       });
 
       const result = await response.json();
@@ -289,11 +325,14 @@ export default function KnowledgePage() {
         closeAndResetModal();
         fetchSources();
       } else {
-        toast.error(result.error || "Error al procesar PDF");
+        // PDF uploaded but processing failed - still close modal but show error
+        toast.error(`PDF subido pero error al procesar: ${result.error}. Podés reintentar con "Reindexar".`);
+        closeAndResetModal();
+        fetchSources();
       }
     } catch (error) {
       console.error("PDF upload error:", error);
-      toast.error("Error al subir PDF");
+      toast.error(error instanceof Error ? error.message : "Error al subir PDF");
     } finally {
       setIsUploading(false);
     }
@@ -725,6 +764,7 @@ export default function KnowledgePage() {
     </PageContainer>
   );
 }
+
 
 
 

@@ -56,7 +56,7 @@ export function useNotifications() {
             type: "lead_ready",
             title: "Nuevo Lead Ready",
             message: `Un nuevo lead está listo para entrega`,
-            actionUrl: "/portal/leads?status=LEAD_READY",
+            actionUrl: "/portal/offers",
           });
         }
       }
@@ -71,7 +71,7 @@ export function useNotifications() {
             type: "delivery",
             title: "Lead Entregado",
             message: `Un lead ha sido entregado exitosamente`,
-            actionUrl: "/portal/leads",
+            actionUrl: "/portal/offers",
           });
         }
       }

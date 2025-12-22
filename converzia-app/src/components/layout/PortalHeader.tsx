@@ -69,7 +69,7 @@ export function PortalHeader() {
             description: `Lead • ${lead?.phone || ""}`,
             category: "Leads",
             icon: <Search className="h-4 w-4" />,
-            action: () => router.push(`/portal/leads`),
+            action: () => router.push(`/portal/offers`),
           });
         });
       }

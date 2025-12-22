@@ -161,16 +161,16 @@ export default function PortalDashboard() {
           title="Total Leads"
           value={stats?.totalLeads || 0}
           action={{
-            label: "Ver todos",
-            onClick: () => router.push("/portal/leads"),
+            label: "Ver por oferta",
+            onClick: () => router.push("/portal/offers"),
           }}
         />
         <DashboardCard
           title="Leads Ready"
           value={stats?.leadReadyCount || 0}
           action={{
-            label: "Ver",
-            onClick: () => router.push("/portal/leads?status=LEAD_READY"),
+            label: "Ver por oferta",
+            onClick: () => router.push("/portal/offers"),
           }}
         />
         <DashboardCard
@@ -194,9 +194,9 @@ export default function PortalDashboard() {
           <LightCardHeader>
             <div className="flex items-center justify-between w-full">
               <LightCardTitle>Leads recientes</LightCardTitle>
-              <Link href="/portal/leads">
+              <Link href="/portal/offers">
                 <LightButton size="sm" variant="text" rightIcon={<ArrowRight className="h-4 w-4" />}>
-                  Ver todos
+                  Ver por oferta
                 </LightButton>
               </Link>
             </div>
@@ -208,7 +208,7 @@ export default function PortalDashboard() {
                   <div
                     key={lead.id}
                     className="flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors cursor-pointer"
-                    onClick={() => router.push("/portal/leads")}
+                    onClick={() => router.push("/portal/offers")}
                   >
                     <div className="flex items-center gap-4">
                       <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
@@ -262,8 +262,8 @@ export default function PortalDashboard() {
             </div>
           </LightCardContent>
           <LightCardFooter>
-            <LightButton variant="text" size="sm" onClick={() => router.push("/portal/leads")}>
-              Ver pipeline completo
+            <LightButton variant="text" size="sm" onClick={() => router.push("/portal/offers")}>
+              Ver por oferta
             </LightButton>
           </LightCardFooter>
         </LightCard>

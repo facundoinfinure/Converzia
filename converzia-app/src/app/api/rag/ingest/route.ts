@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
       }
       throw error;
     }
-    const { source_id, source_type, tenant_id, offer_id, content, title, url, doc_type } = body;
+    const { source_id, source_type, tenant_id, offer_id, content, title, url, doc_type, storage_path } = body;
 
     let result;
 
@@ -77,6 +77,9 @@ export async function POST(request: NextRequest) {
       // Ingest into existing source
       if (source_type === "URL" && url) {
         result = await ingestFromUrl(source_id, url);
+      } else if (source_type === "PDF" && storage_path) {
+        // PDF already uploaded to Supabase Storage - download and process
+        result = await handlePdfFromStorage(source_id, storage_path, title);
       } else if (content) {
         result = await ingestDocument(source_id, content, {
           title: title || "Untitled",
@@ -84,7 +87,7 @@ export async function POST(request: NextRequest) {
           doc_type: doc_type || "MANUAL",
         });
       } else {
-        return NextResponse.json({ error: "Content or URL required" }, { status: 400 });
+        return NextResponse.json({ error: "Content, URL, or storage_path required" }, { status: 400 });
       }
     } else {
       // Create new source and ingest
@@ -123,7 +126,58 @@ export async function POST(request: NextRequest) {
 }
 
 // ============================================
-// PDF Upload Handler
+// PDF from Storage Handler (for large files uploaded directly by client)
+// ============================================
+
+async function handlePdfFromStorage(
+  sourceId: string,
+  storagePath: string,
+  title?: string
+): Promise<{ success: true; chunkCount: number } | { success: false; error: string }> {
+  try {
+    const supabase = createAdminClient();
+
+    // Download PDF from Supabase Storage
+    const { data: fileData, error: downloadError } = await supabase.storage
+      .from("rag-documents")
+      .download(storagePath);
+
+    if (downloadError || !fileData) {
+      return { 
+        success: false, 
+        error: `Error al descargar PDF: ${downloadError?.message || "No se encontró el archivo"}` 
+      };
+    }
+
+    // Convert blob to buffer
+    const arrayBuffer = await fileData.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    // Process the PDF
+    const result = await ingestFromPdf(
+      sourceId,
+      buffer,
+      title || "PDF Document"
+    );
+
+    // Update last_processed_at
+    await supabase
+      .from("rag_sources")
+      .update({ last_processed_at: new Date().toISOString() })
+      .eq("id", sourceId);
+
+    return result;
+  } catch (error) {
+    console.error("PDF from storage error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Error al procesar PDF desde storage",
+    };
+  }
+}
+
+// ============================================
+// PDF Upload Handler (legacy - for small files via formData)
 // ============================================
 
 async function handlePdfUpload(request: NextRequest): Promise<NextResponse> {
