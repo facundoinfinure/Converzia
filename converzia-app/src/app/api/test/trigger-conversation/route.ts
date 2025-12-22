@@ -36,6 +36,35 @@ export async function POST(request: NextRequest) {
 
     // Verificar que el lead_offer existe
     const supabase = createAdminClient();
+    
+    // Debug: Log the leadOfferId being searched
+    console.log(`[TEST] Searching for leadOfferId: "${leadOfferId}" (length: ${leadOfferId.length})`);
+    
+    // First try a simple query without joins
+    const { data: simpleCheck, error: simpleError } = await supabase
+      .from("lead_offers")
+      .select("id, status")
+      .eq("id", leadOfferId.trim())
+      .single();
+    
+    console.log(`[TEST] Simple check result:`, { data: simpleCheck, error: simpleError?.message });
+    
+    if (simpleError) {
+      return NextResponse.json(
+        { 
+          error: `Lead offer not found: ${leadOfferId}`,
+          debug: {
+            searchedId: leadOfferId,
+            idLength: leadOfferId.length,
+            supabaseError: simpleError.message,
+            supabaseCode: simpleError.code,
+          }
+        }, 
+        { status: 404 }
+      );
+    }
+    
+    // Now get the full data
     const { data: leadOffer, error } = await supabase
       .from("lead_offers")
       .select(`
@@ -45,13 +74,13 @@ export async function POST(request: NextRequest) {
         offer:offers(name),
         tenant:tenants(name)
       `)
-      .eq("id", leadOfferId)
+      .eq("id", leadOfferId.trim())
       .single();
 
     if (error || !leadOffer) {
       return NextResponse.json(
-        { error: `Lead offer not found: ${leadOfferId}` }, 
-        { status: 404 }
+        { error: `Lead offer found but failed to load details: ${error?.message}` }, 
+        { status: 500 }
       );
     }
 
