@@ -320,8 +320,8 @@ export function useAdMappingMutations() {
             .from("lead_offers")
             .update({
               status: "TO_BE_CONTACTED",
-              offer_id: mapping.offer_id,
-              tenant_id: mapping.tenant_id,
+              offer_id: (mapping as any).offer_id,
+              tenant_id: (mapping as any).tenant_id,
               status_changed_at: new Date().toISOString(),
             })
             .in("lead_source_id", sources.map((s: any) => s.id)),
@@ -386,14 +386,14 @@ export function useOffersForMapping() {
             );
 
             return {
-              id: tenant.id,
-              name: tenant.name,
-              offers: offers || [],
+              id: (tenant as any).id,
+              name: (tenant as any).name,
+              offers: (offers as any[] || []),
             };
           })
         );
 
-        setTenantsWithOffers(results.filter((t) => t.offers.length > 0));
+        setTenantsWithOffers(results.filter((t) => (t.offers as any[]).length > 0));
       }
 
       setIsLoading(false);
@@ -404,6 +404,9 @@ export function useOffersForMapping() {
 
   return { tenantsWithOffers, isLoading };
 }
+
+
+
 
 
 

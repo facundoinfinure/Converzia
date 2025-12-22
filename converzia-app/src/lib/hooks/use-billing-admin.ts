@@ -61,7 +61,7 @@ export function useBillingAdmin() {
         console.error("Error fetching completed orders:", completedError);
       }
 
-      const totalRevenue = completedOrders?.reduce((sum: number, o: OrderTotal) => sum + Number(o.total), 0) || 0;
+      const totalRevenue = (completedOrders as any[] || []).reduce((sum: number, o: OrderTotal) => sum + Number(o.total), 0) || 0;
 
       // Get credits sold
       const { data: creditPurchases, error: creditError } = await queryWithTimeout(
@@ -77,7 +77,7 @@ export function useBillingAdmin() {
         console.error("Error fetching credit purchases:", creditError);
       }
 
-      const creditsSold = creditPurchases?.reduce((sum: number, c: CreditPurchase) => sum + c.amount, 0) || 0;
+      const creditsSold = (creditPurchases as any[] || []).reduce((sum: number, c: CreditPurchase) => sum + c.amount, 0) || 0;
 
       // Get active tenants with billing
       const { count: activeTenants, error: tenantsError } = await queryWithTimeout(
@@ -126,7 +126,7 @@ export function useBillingAdmin() {
         console.error("Error fetching this month orders:", thisMonthError);
       }
 
-      const revenueThisMonth = thisMonthOrders?.reduce((sum: number, o: OrderTotal) => sum + Number(o.total), 0) || 0;
+      const revenueThisMonth = (thisMonthOrders as any[] || []).reduce((sum: number, o: OrderTotal) => sum + Number(o.total), 0) || 0;
 
       // Get revenue last month
       const lastMonth = new Date(thisMonth);
@@ -149,7 +149,7 @@ export function useBillingAdmin() {
         console.error("Error fetching last month orders:", lastMonthError);
       }
 
-      const revenueLastMonth = lastMonthOrders?.reduce((sum: number, o: OrderTotal) => sum + Number(o.total), 0) || 0;
+      const revenueLastMonth = (lastMonthOrders as any[] || []).reduce((sum: number, o: OrderTotal) => sum + Number(o.total), 0) || 0;
 
       // Get revenue trend (last 30 days)
       const daysAgo = 30;
@@ -177,7 +177,7 @@ export function useBillingAdmin() {
           console.error("Error fetching day orders:", dayError);
         }
 
-        const dayRevenue = dayOrders?.reduce((sum: number, o: OrderTotal) => sum + Number(o.total), 0) || 0;
+        const dayRevenue = (dayOrders as any[] || []).reduce((sum: number, o: OrderTotal) => sum + Number(o.total), 0) || 0;
 
         trendData.push({
           date: date.toLocaleDateString("es-AR", { month: "short", day: "numeric" }),

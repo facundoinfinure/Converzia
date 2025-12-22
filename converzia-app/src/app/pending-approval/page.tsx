@@ -36,8 +36,8 @@ export default function PendingApprovalPage() {
           return; // Don't redirect on error, just show the pending page
         }
 
-        if (memberships && memberships.length > 0) {
-          const hasActive = memberships.some(
+        if (memberships && (memberships as any[]).length > 0) {
+          const hasActive = (memberships as any[]).some(
             (m: any) => m.status === "ACTIVE" && m.tenant?.status === "ACTIVE"
           );
           if (hasActive) {
@@ -96,8 +96,8 @@ export default function PendingApprovalPage() {
           return;
         }
 
-        if (memberships && memberships.length > 0) {
-          const hasActive = memberships.some(
+        if (memberships && (memberships as any[]).length > 0) {
+          const hasActive = (memberships as any[]).some(
             (m: any) => m.status === "ACTIVE" && m.tenant?.status === "ACTIVE"
           );
           if (hasActive) {
@@ -217,6 +217,9 @@ export default function PendingApprovalPage() {
     </div>
   );
 }
+
+
+
 
 
 

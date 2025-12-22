@@ -50,9 +50,9 @@ export default function RegisterPage() {
         "check existing tenant memberships"
       );
 
-      if (memberships && memberships.length > 0) {
+      if (memberships && (memberships as any[]).length > 0) {
         // User already has a tenant - redirect appropriately
-        const hasActive = memberships.some(
+        const hasActive = (memberships as any[]).some(
           (m: any) => m.status === "ACTIVE" && m.tenant?.status === "ACTIVE"
         );
         if (hasActive) {
@@ -127,6 +127,8 @@ export default function RegisterPage() {
         p_description: formData.description.trim() || null,
         p_vertical: formData.vertical,
       });
+
+      const { error: registerError } = await rpcPromise;
 
       if (registerError) {
         console.error("Error registering tenant:", registerError);
@@ -282,6 +284,9 @@ export default function RegisterPage() {
     </div>
   );
 }
+
+
+
 
 
 

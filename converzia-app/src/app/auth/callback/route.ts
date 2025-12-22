@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if user is Converzia admin
-    if (profile.is_converzia_admin) {
+    if ((profile as any).is_converzia_admin) {
       return NextResponse.redirect(`${origin}/admin`);
     }
 
@@ -120,6 +120,9 @@ export async function GET(request: NextRequest) {
   // No code provided - redirect to login
   return NextResponse.redirect(`${origin}/login`);
 }
+
+
+
 
 
 

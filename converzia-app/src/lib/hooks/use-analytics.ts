@@ -54,6 +54,7 @@ export function useAnalytics(timeRange: TimeRange = "30d", customStart?: Date, c
         date.setHours(0, 0, 0, 0);
         const nextDay = new Date(date);
         nextDay.setDate(nextDay.getDate() + 1);
+        const dateLabel = date.toLocaleDateString("es-AR", { month: "short", day: "numeric" });
 
         const [
           { count: totalLeads },
@@ -91,7 +92,6 @@ export function useAnalytics(timeRange: TimeRange = "30d", customStart?: Date, c
           ),
         ]);
 
-        const dateLabel = date.toLocaleDateString("es-AR", { month: "short", day: "numeric" });
         leadsByDay.push({ date: dateLabel, value: totalLeads || 0 });
         conversionByDay.push({
           date: dateLabel,
@@ -111,7 +111,7 @@ export function useAnalytics(timeRange: TimeRange = "30d", customStart?: Date, c
       );
 
       const statusCounts: Record<string, number> = {};
-      statusData?.forEach((l: any) => {
+      (statusData as any[] || []).forEach((l: any) => {
         statusCounts[l.status] = (statusCounts[l.status] || 0) + 1;
       });
 
@@ -135,7 +135,7 @@ export function useAnalytics(timeRange: TimeRange = "30d", customStart?: Date, c
       );
 
       const tenantCounts: Record<string, { tenant: string; count: number }> = {};
-      tenantData?.forEach((l: any) => {
+      (tenantData as any[] || []).forEach((l: any) => {
         const tenantId = l.tenant_id;
         const tenantName = Array.isArray(l.tenant) ? l.tenant[0]?.name : l.tenant?.name || "Sin tenant";
         if (!tenantCounts[tenantId]) {
@@ -162,8 +162,8 @@ export function useAnalytics(timeRange: TimeRange = "30d", customStart?: Date, c
       );
 
       let avgResponseTime = 0;
-      if (responseTimes && responseTimes.length > 0) {
-        const times = responseTimes
+      if (responseTimes && (responseTimes as any[]).length > 0) {
+        const times = (responseTimes as any[])
           .map((r: any) => {
             const created = new Date(r.created_at).getTime();
             const responded = new Date(r.first_response_at).getTime();
