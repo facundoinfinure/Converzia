@@ -33,6 +33,7 @@ const publicRoutes = [
   "/pending-approval",
   "/auth/callback",
   "/api/webhooks",
+  "/api/test", // Testing endpoints (protected by TEST_SECRET header)
 ];
 
 // Routes that require Converzia admin
@@ -80,10 +81,13 @@ export async function updateSession(request: NextRequest) {
   // Check if it's a webhook route (always public)
   const isWebhookRoute = path.startsWith("/api/webhooks");
 
+  // Check if it's a test route (protected by TEST_SECRET, not session)
+  const isTestRoute = path.startsWith("/api/test");
+
   // Check if it's the auth callback route
   const isAuthCallback = path.startsWith("/auth/callback");
 
-  if (isWebhookRoute || isAuthCallback) {
+  if (isWebhookRoute || isAuthCallback || isTestRoute) {
     return supabaseResponse;
   }
 
