@@ -24,7 +24,7 @@ import { Button } from "@/components/ui/Button";
 import { Tabs, TabsList, TabTrigger, TabContent } from "@/components/ui/Tabs";
 import { DataTable, Column } from "@/components/ui/Table";
 import { SearchInput } from "@/components/ui/SearchInput";
-import { CustomSelect } from "@/components/ui/CustomSelect";
+import { CustomSelect } from "@/components/ui/Select";
 import { Badge, RoleBadge } from "@/components/ui/Badge";
 import { Avatar, UserAvatar } from "@/components/ui/Avatar";
 import { ActionDropdown } from "@/components/ui/Dropdown";
