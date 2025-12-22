@@ -96,22 +96,22 @@ export async function GET(request: NextRequest) {
     const { data: summary } = await queryWithTimeout(
       supabase
         .from("credit_ledger")
-        .select("entry_type, amount")
+        .select("transaction_type, amount")
         .eq("tenant_id", tenantId),
       10000,
       "get summary"
     );
     
     const totalPurchased = (summary || [])
-      .filter((s: any) => s.entry_type === 'PURCHASE')
+      .filter((s: any) => s.transaction_type === 'CREDIT_PURCHASE')
       .reduce((sum: number, s: any) => sum + Math.abs(s.amount), 0);
     
     const totalConsumed = (summary || [])
-      .filter((s: any) => s.entry_type === 'CONSUMPTION')
+      .filter((s: any) => s.transaction_type === 'CREDIT_CONSUMPTION')
       .reduce((sum: number, s: any) => sum + Math.abs(s.amount), 0);
     
     const totalRefunded = (summary || [])
-      .filter((s: any) => s.entry_type === 'REFUND')
+      .filter((s: any) => s.transaction_type === 'CREDIT_REFUND')
       .reduce((sum: number, s: any) => sum + Math.abs(s.amount), 0);
     
     return NextResponse.json({

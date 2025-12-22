@@ -147,11 +147,11 @@ export default function PortalBillingPage() {
       header: "Tipo",
       cell: (tx) => {
         const config: Record<string, { icon: React.ElementType; color: string; label: string }> = {
-          PURCHASE: { icon: TrendingUp, color: "text-emerald-400", label: "Compra" },
-          CONSUMPTION: { icon: TrendingDown, color: "text-red-400", label: "Lead entregado" },
-          REFUND: { icon: RefreshCw, color: "text-blue-400", label: "Reembolso" },
-          ADJUSTMENT: { icon: CreditCard, color: "text-amber-400", label: "Ajuste" },
-          BONUS: { icon: Sparkles, color: "text-purple-400", label: "Bonus" },
+          CREDIT_PURCHASE: { icon: TrendingUp, color: "text-emerald-400", label: "Compra" },
+          CREDIT_CONSUMPTION: { icon: TrendingDown, color: "text-red-400", label: "Lead entregado" },
+          CREDIT_REFUND: { icon: RefreshCw, color: "text-blue-400", label: "Reembolso" },
+          CREDIT_ADJUSTMENT: { icon: CreditCard, color: "text-amber-400", label: "Ajuste" },
+          CREDIT_BONUS: { icon: Sparkles, color: "text-purple-400", label: "Bonus" },
         };
         const c = config[tx.entry_type] || { icon: CreditCard, color: "text-slate-400", label: tx.entry_type };
         const Icon = c.icon;

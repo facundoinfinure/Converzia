@@ -158,10 +158,10 @@ CREATE OR REPLACE VIEW credit_consumption_details AS
 SELECT 
   cl.id AS ledger_id,
   cl.tenant_id,
-  cl.offer_id,
+  lo.offer_id,
   cl.amount,
   cl.balance_after,
-  cl.entry_type,
+  cl.transaction_type AS entry_type,
   cl.description,
   cl.created_at,
   
@@ -180,7 +180,7 @@ SELECT
   l.id AS lead_id,
   CASE 
     WHEN lo.status = 'SENT_TO_DEVELOPER' THEN l.full_name
-    ELSE 'Lead #' || SUBSTRING(lo.id::text, 1, 8)
+    ELSE 'Lead #' || SUBSTRING(COALESCE(lo.id, cl.id)::text, 1, 8)
   END AS lead_display_name,
   CASE 
     WHEN lo.status = 'SENT_TO_DEVELOPER' THEN l.phone
@@ -195,11 +195,11 @@ SELECT
   o.name AS offer_name
 
 FROM credit_ledger cl
-LEFT JOIN deliveries d ON d.credit_ledger_id = cl.id
-LEFT JOIN lead_offers lo ON d.lead_offer_id = lo.id
+LEFT JOIN deliveries d ON d.id = cl.delivery_id
+LEFT JOIN lead_offers lo ON COALESCE(cl.lead_offer_id, d.lead_offer_id) = lo.id
 LEFT JOIN leads l ON lo.lead_id = l.id
-LEFT JOIN offers o ON cl.offer_id = o.id
-WHERE cl.entry_type IN ('CONSUMPTION', 'REFUND');
+LEFT JOIN offers o ON lo.offer_id = o.id
+WHERE cl.transaction_type IN ('CREDIT_CONSUMPTION', 'CREDIT_REFUND');
 
 GRANT SELECT ON credit_consumption_details TO authenticated;
 
