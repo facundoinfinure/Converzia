@@ -1,5 +1,3 @@
-"use client";
-
 import type { PostgrestError } from "@supabase/supabase-js";
 import { retryQuery } from "./retry";
 
@@ -61,6 +59,7 @@ export async function queryWithTimeout<T>(
 
   return queryWithTimeoutFn();
 }
+
 
 
 

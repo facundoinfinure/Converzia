@@ -191,7 +191,7 @@ export default function OfferDetailPage({ params }: Props) {
       key: "specs",
       header: "Especificaciones",
       cell: (v) => (
-        <span className="text-slate-400">
+        <span className="text-[var(--text-tertiary)]">
           {v.bedrooms !== null && `${v.bedrooms} amb`}
           {v.area_m2 && ` • ${v.area_m2}m²`}
         </span>
@@ -213,7 +213,7 @@ export default function OfferDetailPage({ params }: Props) {
         const variantUnits = units.filter((u) => u.variant_id === v.id);
         const available = variantUnits.filter((u) => u.is_available).length;
         return (
-          <span className="text-slate-400">
+          <span className="text-[var(--text-tertiary)]">
             {available}/{variantUnits.length} disponibles
           </span>
         );
@@ -247,13 +247,13 @@ export default function OfferDetailPage({ params }: Props) {
       header: "Variante",
       cell: (u) => {
         const variant = variants.find((v) => v.id === u.variant_id);
-        return <span className="text-slate-400">{variant?.name || "-"}</span>;
+        return <span className="text-[var(--text-tertiary)]">{variant?.name || "-"}</span>;
       },
     },
     {
       key: "floor",
       header: "Piso",
-      cell: (u) => <span className="text-slate-400">{u.floor ?? "-"}</span>,
+      cell: (u) => <span className="text-[var(--text-tertiary)]">{u.floor ?? "-"}</span>,
     },
     {
       key: "price",
@@ -426,7 +426,7 @@ export default function OfferDetailPage({ params }: Props) {
                   <CardTitle>Descripción</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-slate-400 whitespace-pre-wrap">{offer.description}</p>
+                  <p className="text-[var(--text-tertiary)] whitespace-pre-wrap">{offer.description}</p>
                 </CardContent>
               </Card>
             )}
@@ -448,7 +448,7 @@ export default function OfferDetailPage({ params }: Props) {
               columns={variantColumns}
               keyExtractor={(v) => v.id}
               emptyState={
-                <div className="py-8 text-center text-slate-500">
+                <div className="py-8 text-center text-[var(--text-tertiary)]">
                   No hay variantes. <button onClick={() => setShowVariantModal(true)} className="text-primary-400 hover:underline">Crear primera variante</button>
                 </div>
               }
@@ -471,7 +471,7 @@ export default function OfferDetailPage({ params }: Props) {
               columns={unitColumns}
               keyExtractor={(u) => u.id}
               emptyState={
-                <div className="py-8 text-center text-slate-500">
+                <div className="py-8 text-center text-[var(--text-tertiary)]">
                   {variants.length === 0 
                     ? "Primero debés crear variantes para agregar unidades."
                     : <span>No hay unidades. <button onClick={() => setShowUnitModal(true)} className="text-primary-400 hover:underline">Crear primera unidad</button></span>
@@ -499,7 +499,7 @@ export default function OfferDetailPage({ params }: Props) {
                     <div key={ad.id} className="flex items-center justify-between p-3 rounded-lg bg-[var(--bg-tertiary)]">
                       <div>
                         <p className="font-medium text-[var(--text-primary)]">{ad.ad_name || ad.ad_id}</p>
-                        <p className="text-sm text-slate-500">
+                        <p className="text-sm text-[var(--text-tertiary)]">
                           {ad.campaign_name && `Campaña: ${ad.campaign_name}`}
                           {ad.form_id && ` • Form: ${ad.form_id}`}
                         </p>
@@ -511,7 +511,7 @@ export default function OfferDetailPage({ params }: Props) {
                   ))}
                 </div>
               ) : (
-                <p className="py-8 text-center text-slate-500">
+                <p className="py-8 text-center text-[var(--text-tertiary)]">
                   No hay ads mapeados a esta oferta. Los ads se mapean desde la sección de <Link href="/admin/ads-mapping" className="text-primary-400 hover:underline">Mapeo de Ads</Link>.
                 </p>
               )}
@@ -602,7 +602,7 @@ export default function OfferDetailPage({ params }: Props) {
             <select
               value={newUnit.variant_id}
               onChange={(e) => setNewUnit({ ...newUnit, variant_id: e.target.value })}
-              className="w-full h-10 px-4 rounded-lg border border-card-border bg-card text-white"
+              className="w-full h-10 px-4 rounded-lg border border-card-border bg-card text-[var(--text-primary)]"
             >
               <option value="">Seleccionar variante</option>
               {variants.map((v) => (

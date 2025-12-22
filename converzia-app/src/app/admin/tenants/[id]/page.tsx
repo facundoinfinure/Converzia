@@ -398,7 +398,7 @@ export default function TenantDetailPage({ params }: Props) {
       cell: (offer) => (
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shrink-0">
-            <Package className="h-5 w-5 text-white" />
+            <Package className="h-5 w-5 text-[var(--text-primary)]" />
           </div>
           <div className="min-w-0">
             <span className="font-medium text-[var(--text-primary)] block truncate">
@@ -745,15 +745,15 @@ export default function TenantDetailPage({ params }: Props) {
                       >
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="font-medium text-white">{pkg.name}</span>
+                            <span className="font-medium text-[var(--text-primary)]">{pkg.name}</span>
                             {pkg.is_popular && (
                               <Badge variant="primary" size="sm">Popular</Badge>
                             )}
                           </div>
-                          <span className="text-sm text-slate-500">{pkg.credits} créditos</span>
+                          <span className="text-sm text-[var(--text-tertiary)]">{pkg.credits} créditos</span>
                         </div>
                         <div className="text-right">
-                          <span className="font-semibold text-white">
+                          <span className="font-semibold text-[var(--text-primary)]">
                             {formatCurrency(pkg.price)}
                           </span>
                           {pkg.discount_pct && (
@@ -766,7 +766,7 @@ export default function TenantDetailPage({ params }: Props) {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-slate-500 text-center py-4">
+                  <p className="text-[var(--text-tertiary)] text-center py-4">
                     No hay paquetes configurados
                   </p>
                 )}
@@ -1027,11 +1027,11 @@ function InfoRow({
 }) {
   return (
     <div className="flex items-center justify-between py-2">
-      <div className="flex items-center gap-3 text-slate-400">
+      <div className="flex items-center gap-3 text-[var(--text-tertiary)]">
         {icon}
         <span>{label}</span>
       </div>
-      <div className="text-white">{value}</div>
+      <div className="text-[var(--text-primary)]">{value}</div>
     </div>
   );
 }
@@ -1059,7 +1059,7 @@ function IntegrationCard({
         <div className="flex items-center justify-between">
           <CardTitle>{title}</CardTitle>
           {isLoading ? (
-            <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
+            <Loader2 className="h-4 w-4 animate-spin text-[var(--text-tertiary)]" />
           ) : isConfigured ? (
             hasError ? (
               <Badge variant="danger" dot>Error</Badge>
@@ -1072,12 +1072,12 @@ function IntegrationCard({
         </div>
       </CardHeader>
       <CardContent>
-        <p className="text-slate-400 text-sm mb-4">{description}</p>
+        <p className="text-[var(--text-tertiary)] text-sm mb-4">{description}</p>
         
         {isConfigured ? (
           <div className="space-y-3">
             {integration.last_sync_at && (
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-[var(--text-tertiary)]">
                 Última sync: {formatDate(integration.last_sync_at)}
               </p>
             )}
@@ -1092,7 +1092,7 @@ function IntegrationCard({
           </div>
         ) : (
           <div className="text-center py-2">
-            <p className="text-slate-500 mb-4">No configurado</p>
+            <p className="text-[var(--text-tertiary)] mb-4">No configurado</p>
             <Button variant="secondary" fullWidth onClick={onConfigure}>
               Configurar
             </Button>

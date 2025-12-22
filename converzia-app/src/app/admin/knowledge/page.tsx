@@ -453,12 +453,12 @@ export default function KnowledgePage() {
               <Icon className="h-5 w-5 text-primary-400" />
             </div>
             <div>
-              <span className="font-medium text-white">{s.name}</span>
+              <span className="font-medium text-[var(--text-primary)]">{s.name}</span>
               {s.source_url && (
-                <p className="text-xs text-slate-500 truncate max-w-[200px]">{s.source_url}</p>
+                <p className="text-xs text-[var(--text-tertiary)] truncate max-w-[200px]">{s.source_url}</p>
               )}
               {s.description && !s.source_url && (
-                <p className="text-xs text-slate-500 truncate max-w-[200px]">{s.description}</p>
+                <p className="text-xs text-[var(--text-tertiary)] truncate max-w-[200px]">{s.description}</p>
               )}
             </div>
           </div>
@@ -471,7 +471,7 @@ export default function KnowledgePage() {
       cell: (s) => (
         <div>
           <div className="flex items-center gap-1.5">
-            <span className="text-slate-300">{s.tenant?.name || "Sin tenant"}</span>
+            <span className="text-[var(--text-secondary)]">{s.tenant?.name || "Sin tenant"}</span>
           </div>
           {s.offer ? (
             <div className="flex items-center gap-1 mt-0.5">
@@ -479,7 +479,7 @@ export default function KnowledgePage() {
               <span className="text-xs text-primary-400">{s.offer.name}</span>
             </div>
           ) : (
-            <span className="text-xs text-slate-500">General del tenant</span>
+            <span className="text-xs text-[var(--text-tertiary)]">General del tenant</span>
           )}
         </div>
       ),
@@ -501,7 +501,7 @@ export default function KnowledgePage() {
             {s.is_active ? "Activo" : "Inactivo"}
           </Badge>
           {s.last_processed_at && (
-            <span className="text-xs text-slate-500">
+            <span className="text-xs text-[var(--text-tertiary)]">
               Procesado {formatRelativeTime(s.last_processed_at)}
             </span>
           )}
@@ -516,21 +516,21 @@ export default function KnowledgePage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setReindexId(s.id)}
-            className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-card-border transition-colors"
+            className="p-1.5 rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors"
             title="Reindexar"
           >
             <RefreshCw className="h-4 w-4" />
           </button>
           <button
             onClick={() => toggleActive(s.id, s.is_active)}
-            className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-card-border transition-colors"
+            className="p-1.5 rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors"
             title={s.is_active ? "Desactivar" : "Activar"}
           >
             {s.is_active ? "🔇" : "🔊"}
           </button>
           <button
             onClick={() => setDeleteId(s.id)}
-            className="p-1.5 rounded text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+            className="p-1.5 rounded text-[var(--text-tertiary)] hover:text-red-400 hover:bg-red-500/10 transition-colors"
             title="Eliminar"
           >
             <Trash2 className="h-4 w-4" />
@@ -697,8 +697,8 @@ export default function KnowledgePage() {
                 {pdfFile ? (
                   <div className="space-y-2">
                     <FileText className="h-8 w-8 mx-auto text-primary-400" />
-                    <p className="font-medium text-white">{pdfFile.name}</p>
-                    <p className="text-xs text-slate-500">
+                    <p className="font-medium text-[var(--text-primary)]">{pdfFile.name}</p>
+                    <p className="text-xs text-[var(--text-tertiary)]">
                       {(pdfFile.size / 1024 / 1024).toFixed(2)} MB
                     </p>
                     <button
@@ -711,11 +711,11 @@ export default function KnowledgePage() {
                   </div>
                 ) : (
                   <label className="cursor-pointer block">
-                    <Upload className="h-8 w-8 mx-auto text-slate-400 mb-2" />
-                    <p className="text-slate-300 mb-1">
+                    <Upload className="h-8 w-8 mx-auto text-[var(--text-tertiary)] mb-2" />
+                    <p className="text-[var(--text-secondary)] mb-1">
                       Arrastrá o hacé click para seleccionar
                     </p>
-                    <p className="text-xs text-slate-500">PDF hasta 10MB</p>
+                    <p className="text-xs text-[var(--text-tertiary)]">PDF hasta 10MB</p>
                     <input
                       type="file"
                       accept=".pdf,application/pdf"

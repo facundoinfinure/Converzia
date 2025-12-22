@@ -259,9 +259,9 @@ export default function OperationsPage() {
       header: "Lead",
       cell: (d) => (
         <div>
-          <span className="font-medium text-white">{d.lead?.full_name || d.lead?.phone}</span>
+          <span className="font-medium text-[var(--text-primary)]">{d.lead?.full_name || d.lead?.phone}</span>
           {d.lead?.full_name && (
-            <p className="text-xs text-slate-500">{d.lead.phone}</p>
+            <p className="text-xs text-[var(--text-tertiary)]">{d.lead.phone}</p>
           )}
         </div>
       ),
@@ -273,7 +273,7 @@ export default function OperationsPage() {
         <div>
           <span className="text-slate-300">{d.tenant?.name}</span>
           {d.offer && (
-            <p className="text-xs text-slate-500">{d.offer.name}</p>
+            <p className="text-xs text-[var(--text-tertiary)]">{d.offer.name}</p>
           )}
         </div>
       ),
@@ -296,7 +296,7 @@ export default function OperationsPage() {
       key: "time",
       header: "Fecha",
       cell: (d) => (
-        <span className="text-slate-400 text-sm">{formatRelativeTime(d.created_at)}</span>
+        <span className="text-[var(--text-tertiary)] text-sm">{formatRelativeTime(d.created_at)}</span>
       ),
     },
     {
@@ -336,7 +336,7 @@ export default function OperationsPage() {
     {
       key: "tenant",
       header: "Tenant",
-      cell: (r) => <span className="text-white">{r.tenant?.name}</span>,
+      cell: (r) => <span className="text-[var(--text-primary)]">{r.tenant?.name}</span>,
     },
     {
       key: "amount",
@@ -349,14 +349,14 @@ export default function OperationsPage() {
       key: "reason",
       header: "Motivo",
       cell: (r) => (
-        <span className="text-slate-400">{r.description || "Sin especificar"}</span>
+        <span className="text-[var(--text-tertiary)]">{r.description || "Sin especificar"}</span>
       ),
     },
     {
       key: "date",
       header: "Fecha",
       cell: (r) => (
-        <span className="text-slate-400 text-sm">{formatDate(r.created_at)}</span>
+        <span className="text-[var(--text-tertiary)] text-sm">{formatDate(r.created_at)}</span>
       ),
     },
   ];
@@ -416,7 +416,7 @@ export default function OperationsPage() {
                 <h3 className="text-lg font-semibold text-red-400">
                   {stats?.failedDeliveries} entregas fallidas
                 </h3>
-                <p className="text-sm text-slate-400">
+                <p className="text-sm text-[var(--text-tertiary)]">
                   Hay entregas que requieren atención. Revisá los errores y reintentá.
                 </p>
               </div>
@@ -515,20 +515,20 @@ export default function OperationsPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-400">Tiempo promedio de respuesta</span>
-                  <span className="font-medium text-white">{stats?.avgProcessingTime || "N/A"}</span>
+                  <span className="text-[var(--text-tertiary)]">Tiempo promedio de respuesta</span>
+                  <span className="font-medium text-[var(--text-primary)]">{stats?.avgProcessingTime || "N/A"}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-400">Webhooks recibidos</span>
-                  <span className="font-medium text-white">--</span>
+                  <span className="text-[var(--text-tertiary)]">Webhooks recibidos</span>
+                  <span className="font-medium text-[var(--text-primary)]">--</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-400">Mensajes enviados</span>
-                  <span className="font-medium text-white">--</span>
+                  <span className="text-[var(--text-tertiary)]">Mensajes enviados</span>
+                  <span className="font-medium text-[var(--text-primary)]">--</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-400">Tokens OpenAI usados</span>
-                  <span className="font-medium text-white">--</span>
+                  <span className="text-[var(--text-tertiary)]">Tokens OpenAI usados</span>
+                  <span className="font-medium text-[var(--text-primary)]">--</span>
                 </div>
               </CardContent>
             </Card>
@@ -548,6 +548,7 @@ export default function OperationsPage() {
     </PageContainer>
   );
 }
+
 
 
 

@@ -160,7 +160,7 @@ export default function TenantsPage() {
       header: "Tenant",
       cell: (tenant) => (
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-medium">
+          <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-[var(--text-primary)] font-medium">
             {tenant.name.slice(0, 2).toUpperCase()}
           </div>
           <div>
@@ -170,7 +170,7 @@ export default function TenantsPage() {
             >
               {tenant.name}
             </Link>
-            <div className="flex items-center gap-2 text-sm text-slate-500">
+            <div className="flex items-center gap-2 text-sm text-[var(--text-tertiary)]">
               <span>{tenant.slug}</span>
               {(tenant as any).vertical && (
                 <>
@@ -194,10 +194,10 @@ export default function TenantsPage() {
       cell: (tenant) => (
         <div className="text-sm">
           {tenant.contact_email && (
-            <div className="text-slate-400">{tenant.contact_email}</div>
+            <div className="text-[var(--text-tertiary)]">{tenant.contact_email}</div>
           )}
           {tenant.contact_phone && (
-            <div className="flex items-center gap-1 text-slate-500">
+            <div className="flex items-center gap-1 text-[var(--text-tertiary)]">
               <Phone className="h-3 w-3" />
               {tenant.contact_phone}
             </div>
@@ -210,11 +210,11 @@ export default function TenantsPage() {
       header: "Estadísticas",
       cell: (tenant) => (
         <div className="flex items-center gap-4 text-sm">
-          <div className="flex items-center gap-1.5 text-slate-400">
+          <div className="flex items-center gap-1.5 text-[var(--text-tertiary)]">
             <Users className="h-4 w-4" />
             <span>{tenant._count?.leads || 0}</span>
           </div>
-          <div className="flex items-center gap-1.5 text-slate-400">
+          <div className="flex items-center gap-1.5 text-[var(--text-tertiary)]">
             <Package className="h-4 w-4" />
             <span>{tenant._count?.offers || 0}</span>
           </div>
@@ -226,7 +226,7 @@ export default function TenantsPage() {
       header: "Créditos",
       cell: (tenant) => (
         <div className="flex items-center gap-1.5">
-          <CreditCard className="h-4 w-4 text-slate-500" />
+          <CreditCard className="h-4 w-4 text-[var(--text-tertiary)]" />
           <span className={tenant.credit_balance && tenant.credit_balance < 10 ? "text-amber-400" : "text-slate-300"}>
             {tenant.credit_balance || 0}
           </span>
@@ -237,7 +237,7 @@ export default function TenantsPage() {
       key: "created",
       header: "Creado",
       cell: (tenant) => (
-        <span className="text-slate-400">{formatDate(tenant.created_at)}</span>
+        <span className="text-[var(--text-tertiary)]">{formatDate(tenant.created_at)}</span>
       ),
     },
     {
@@ -356,7 +356,7 @@ export default function TenantsPage() {
                       ? status.value === "PENDING"
                         ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
                         : "bg-primary-500/20 text-primary-400 border border-primary-500/30"
-                      : "text-slate-400 hover:text-white hover:bg-card-border"
+                      : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-card-border"
                   }`}
                 >
                   {status.value === "PENDING" && <Clock className="h-3.5 w-3.5" />}
@@ -414,7 +414,7 @@ export default function TenantsPage() {
             statusFilter === "PENDING" ? (
               <div className="py-12 text-center">
                 <Clock className="h-12 w-12 text-slate-600 mx-auto mb-4" />
-                <p className="text-slate-400">No hay solicitudes pendientes</p>
+                <p className="text-[var(--text-tertiary)]">No hay solicitudes pendientes</p>
               </div>
             ) : (
               <NoTenantsEmptyState
@@ -506,7 +506,7 @@ export default function TenantsPage() {
         title="Rechazar solicitud"
       >
         <div className="space-y-4">
-          <p className="text-slate-400">
+          <p className="text-[var(--text-tertiary)]">
             ¿Estás seguro de que querés rechazar esta solicitud? El usuario será notificado.
           </p>
           <TextArea

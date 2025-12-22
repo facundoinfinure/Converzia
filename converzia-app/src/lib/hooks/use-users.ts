@@ -317,6 +317,37 @@ export function useUserMutations() {
     }
   };
 
+  const deleteUser = async (userId: string) => {
+    setIsLoading(true);
+    try {
+      // First remove all memberships
+      const { error: memberError } = await queryWithTimeout(
+        supabase
+          .from("tenant_members")
+          .delete()
+          .eq("user_id", userId),
+        30000,
+        `delete memberships for user ${userId}`
+      );
+
+      if (memberError) throw memberError;
+
+      // Then delete the user profile (auth user will remain for data integrity)
+      const { error: profileError } = await queryWithTimeout(
+        supabase
+          .from("user_profiles")
+          .delete()
+          .eq("id", userId),
+        30000,
+        `delete user profile ${userId}`
+      );
+
+      if (profileError) throw profileError;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return {
     updateProfile,
     setConverziaAdmin,
@@ -324,9 +355,11 @@ export function useUserMutations() {
     rejectMembership,
     updateMembershipRole,
     suspendMembership,
+    deleteUser,
     isLoading,
   };
 }
+
 
 
 

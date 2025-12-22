@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Users,
@@ -11,6 +11,8 @@ import {
   Building2,
   Mail,
   UserCog,
+  Eye,
+  Trash2,
 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -21,7 +23,8 @@ import { SearchInput } from "@/components/ui/SearchInput";
 import { Badge, RoleBadge } from "@/components/ui/Badge";
 import { Avatar, UserAvatar } from "@/components/ui/Avatar";
 import { ActionDropdown } from "@/components/ui/Dropdown";
-import { ConfirmModal } from "@/components/ui/Modal";
+import { Modal, ConfirmModal } from "@/components/ui/Modal";
+import { Input } from "@/components/ui/Input";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
 import { useToast } from "@/components/ui/Toast";
@@ -44,10 +47,12 @@ export default function UsersPage() {
   });
 
   const { approvals, total: approvalsCount, isLoading: loadingApprovals, refetch: refetchApprovals } = usePendingApprovals();
-  const { approveMembership, rejectMembership, setConverziaAdmin, isLoading: isMutating } = useUserMutations();
+  const { approveMembership, rejectMembership, setConverziaAdmin, deleteUser, isLoading: isMutating } = useUserMutations();
 
   const [approveId, setApproveId] = useState<string | null>(null);
   const [rejectId, setRejectId] = useState<string | null>(null);
+  const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
+  const [viewUser, setViewUser] = useState<(typeof users)[0] | null>(null);
 
   const handleApprove = async () => {
     if (!approveId) return;
@@ -83,6 +88,18 @@ export default function UsersPage() {
     }
   };
 
+  const handleDeleteUser = async () => {
+    if (!deleteUserId) return;
+    try {
+      await deleteUser(deleteUserId);
+      toast.success("Usuario eliminado correctamente");
+      setDeleteUserId(null);
+      refetch();
+    } catch (error) {
+      toast.error("Error al eliminar usuario");
+    }
+  };
+
   // Users table columns
   const userColumns: Column<(typeof users)[0]>[] = [
     {
@@ -108,7 +125,7 @@ export default function UsersPage() {
             </Badge>
           )}
           {u.memberships.length > 0 && (
-            <span className="text-sm text-slate-500">
+            <span className="text-sm text-[var(--text-tertiary)]">
               {u.memberships.length} tenant{u.memberships.length > 1 ? "s" : ""}
             </span>
           )}
@@ -131,7 +148,7 @@ export default function UsersPage() {
             </Badge>
           )}
           {u.memberships.length === 0 && (
-            <span className="text-slate-500 text-sm">Sin tenants</span>
+            <span className="text-[var(--text-tertiary)] text-sm">Sin tenants</span>
           )}
         </div>
       ),
@@ -140,7 +157,7 @@ export default function UsersPage() {
       key: "created",
       header: "Registrado",
       cell: (u) => (
-        <span className="text-slate-400 text-sm">{formatDate(u.created_at)}</span>
+        <span className="text-[var(--text-tertiary)] text-sm">{formatDate(u.created_at)}</span>
       ),
     },
     {
@@ -152,18 +169,27 @@ export default function UsersPage() {
           items={[
             {
               label: "Ver perfil",
-              onClick: () => {},
+              icon: <Eye className="h-4 w-4" />,
+              onClick: () => setViewUser(u),
             },
             u.is_converzia_admin
               ? {
                   label: "Remover admin",
+                  icon: <Shield className="h-4 w-4" />,
                   onClick: () => handleToggleAdmin(u.id, true),
                   danger: true,
                 }
               : {
                   label: "Hacer admin",
+                  icon: <Shield className="h-4 w-4" />,
                   onClick: () => handleToggleAdmin(u.id, false),
                 },
+            {
+              label: "Eliminar usuario",
+              icon: <Trash2 className="h-4 w-4" />,
+              onClick: () => setDeleteUserId(u.id),
+              danger: true,
+            },
           ]}
         />
       ),
@@ -187,8 +213,8 @@ export default function UsersPage() {
       header: "Tenant",
       cell: (a) => (
         <div className="flex items-center gap-2">
-          <Building2 className="h-4 w-4 text-slate-500" />
-          <span className="text-white">{a.tenant?.name}</span>
+          <Building2 className="h-4 w-4 text-[var(--text-tertiary)]" />
+          <span className="text-[var(--text-primary)]">{a.tenant?.name}</span>
         </div>
       ),
     },
@@ -201,7 +227,7 @@ export default function UsersPage() {
       key: "requested",
       header: "Solicitado",
       cell: (a) => (
-        <div className="flex items-center gap-2 text-slate-400 text-sm">
+        <div className="flex items-center gap-2 text-[var(--text-tertiary)] text-sm">
           <Clock className="h-4 w-4" />
           {formatRelativeTime(a.created_at)}
         </div>
@@ -301,7 +327,7 @@ export default function UsersPage() {
                       className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
                         adminFilter === opt.value
                           ? "bg-primary-500/20 text-primary-400 border border-primary-500/30"
-                          : "text-slate-400 hover:text-white hover:bg-card-border"
+                          : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-card-border"
                       }`}
                     >
                       {opt.label}
@@ -361,9 +387,92 @@ export default function UsersPage() {
         variant="danger"
         isLoading={isMutating}
       />
+
+      {/* Delete User Modal */}
+      <ConfirmModal
+        isOpen={!!deleteUserId}
+        onClose={() => setDeleteUserId(null)}
+        onConfirm={handleDeleteUser}
+        title="Eliminar usuario"
+        description="Se eliminarán el perfil del usuario y todas sus membresías. Esta acción no se puede deshacer."
+        confirmText="Eliminar"
+        variant="danger"
+        isLoading={isMutating}
+      />
+
+      {/* View User Profile Modal */}
+      <Modal
+        isOpen={!!viewUser}
+        onClose={() => setViewUser(null)}
+        title="Perfil de usuario"
+        size="lg"
+      >
+        {viewUser && (
+          <div className="space-y-6">
+            {/* User Info */}
+            <div className="flex items-center gap-4">
+              <div className="h-16 w-16 rounded-full bg-[var(--accent-primary-light)] flex items-center justify-center">
+                <span className="text-2xl font-semibold text-[var(--accent-primary)]">
+                  {(viewUser.full_name || viewUser.email).charAt(0).toUpperCase()}
+                </span>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-[var(--text-primary)]">
+                  {viewUser.full_name || "Sin nombre"}
+                </h3>
+                <p className="text-[var(--text-secondary)]">{viewUser.email}</p>
+                {viewUser.is_converzia_admin && (
+                  <Badge variant="primary" className="mt-1">
+                    <Shield className="h-3 w-3 mr-1" />
+                    Administrador Converzia
+                  </Badge>
+                )}
+              </div>
+            </div>
+
+            {/* Details */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-3 rounded-lg bg-[var(--bg-tertiary)]">
+                <p className="text-xs text-[var(--text-tertiary)] mb-1">Registrado</p>
+                <p className="text-sm text-[var(--text-primary)]">{formatDate(viewUser.created_at)}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-[var(--bg-tertiary)]">
+                <p className="text-xs text-[var(--text-tertiary)] mb-1">Última actualización</p>
+                <p className="text-sm text-[var(--text-primary)]">{formatDate(viewUser.updated_at)}</p>
+              </div>
+            </div>
+
+            {/* Memberships */}
+            <div>
+              <h4 className="text-sm font-medium text-[var(--text-primary)] mb-3">Membresías de Tenants</h4>
+              {viewUser.memberships.length > 0 ? (
+                <div className="space-y-2">
+                  {viewUser.memberships.map((m) => (
+                    <div key={m.id} className="flex items-center justify-between p-3 rounded-lg bg-[var(--bg-tertiary)]">
+                      <div className="flex items-center gap-2">
+                        <Building2 className="h-4 w-4 text-[var(--text-tertiary)]" />
+                        <span className="text-sm text-[var(--text-primary)]">{m.tenant?.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <RoleBadge role={m.role} />
+                        <Badge variant={m.status === "ACTIVE" ? "success" : "secondary"} size="sm">
+                          {m.status === "ACTIVE" ? "Activo" : m.status}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-[var(--text-tertiary)]">Sin membresías en tenants</p>
+              )}
+            </div>
+          </div>
+        )}
+      </Modal>
     </PageContainer>
   );
 }
+
 
 
 

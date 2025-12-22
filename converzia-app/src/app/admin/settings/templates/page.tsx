@@ -179,8 +179,8 @@ export default function TemplatesPage() {
       header: "Template",
       cell: (t) => (
         <div>
-          <div className="font-medium text-white">{t.template_name}</div>
-          <div className="text-xs text-slate-500 mt-1">
+          <div className="font-medium text-[var(--text-primary)]">{t.template_name}</div>
+          <div className="text-xs text-[var(--text-tertiary)] mt-1">
             {t.body_text.substring(0, 60)}
             {t.body_text.length > 60 ? "..." : ""}
           </div>
@@ -193,7 +193,7 @@ export default function TemplatesPage() {
       cell: (t) => (
         <div>
           <Badge variant="secondary">{categoryLabels[t.category] || t.category}</Badge>
-          <div className="text-xs text-slate-500 mt-1">{t.language.toUpperCase()}</div>
+          <div className="text-xs text-[var(--text-tertiary)] mt-1">{t.language.toUpperCase()}</div>
         </div>
       ),
     },
@@ -230,7 +230,7 @@ export default function TemplatesPage() {
               </Badge>
             ))
           ) : (
-            <span className="text-xs text-slate-500">Sin uso definido</span>
+            <span className="text-xs text-[var(--text-tertiary)]">Sin uso definido</span>
           )}
         </div>
       ),
@@ -243,28 +243,28 @@ export default function TemplatesPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowPreview(t.id)}
-            className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-card-border transition-colors"
+            className="p-1.5 rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-card-border transition-colors"
             title="Vista previa"
           >
             <Eye className="h-4 w-4" />
           </button>
           <button
             onClick={() => toggleActive(t)}
-            className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-card-border transition-colors"
+            className="p-1.5 rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-card-border transition-colors"
             title={t.is_active ? "Desactivar" : "Activar"}
           >
             {t.is_active ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
           <button
             onClick={() => handleOpenEdit(t)}
-            className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-card-border transition-colors"
+            className="p-1.5 rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-card-border transition-colors"
             title="Editar"
           >
             <Edit className="h-4 w-4" />
           </button>
           <button
             onClick={() => setDeleteId(t.id)}
-            className="p-1.5 rounded text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+            className="p-1.5 rounded text-[var(--text-tertiary)] hover:text-red-400 hover:bg-red-500/10 transition-colors"
             title="Eliminar"
           >
             <Trash2 className="h-4 w-4" />
@@ -456,7 +456,7 @@ export default function TemplatesPage() {
           <div className="space-y-4">
             <div>
               <div className="text-sm font-medium text-foreground mb-2">Nombre</div>
-              <div className="text-white">{previewTemplate.template_name}</div>
+              <div className="text-[var(--text-primary)]">{previewTemplate.template_name}</div>
             </div>
             <div>
               <div className="text-sm font-medium text-foreground mb-2">Categoría</div>
@@ -466,14 +466,14 @@ export default function TemplatesPage() {
             </div>
             <div>
               <div className="text-sm font-medium text-foreground mb-2">Mensaje</div>
-              <div className="p-4 bg-slate-800 rounded-lg text-white whitespace-pre-wrap">
+              <div className="p-4 bg-slate-800 rounded-lg text-[var(--text-primary)] whitespace-pre-wrap">
                 {previewTemplate.body_text}
               </div>
             </div>
             {previewTemplate.footer_text && (
               <div>
                 <div className="text-sm font-medium text-foreground mb-2">Footer</div>
-                <div className="text-slate-400">{previewTemplate.footer_text}</div>
+                <div className="text-[var(--text-tertiary)]">{previewTemplate.footer_text}</div>
               </div>
             )}
             {previewTemplate.use_for && previewTemplate.use_for.length > 0 && (
@@ -505,6 +505,7 @@ export default function TemplatesPage() {
     </PageContainer>
   );
 }
+
 
 
 

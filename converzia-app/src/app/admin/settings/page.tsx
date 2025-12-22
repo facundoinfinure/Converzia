@@ -63,6 +63,9 @@ export default function SettingsPage() {
 
   const [promptSettings, setPromptSettings] = useState({
     qualification_system_prompt_md: "",
+    extraction_system_prompt_md: "",
+    conversation_summary_prompt_md: "",
+    initial_greeting_template: "",
   });
 
   // Show/hide secrets
@@ -99,6 +102,9 @@ export default function SettingsPage() {
       });
       setPromptSettings({
         qualification_system_prompt_md: (settings as any).qualification_system_prompt_md || "",
+        extraction_system_prompt_md: (settings as any).extraction_system_prompt_md || "",
+        conversation_summary_prompt_md: (settings as any).conversation_summary_prompt_md || "",
+        initial_greeting_template: (settings as any).initial_greeting_template || "",
       });
     }
   });
@@ -229,7 +235,7 @@ export default function SettingsPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Preferencias</CardTitle>
-                <p className="text-sm text-slate-500 mt-1">
+                <p className="text-sm text-[var(--text-tertiary)] mt-1">
                   Personalizá tu experiencia en la plataforma
                 </p>
               </CardHeader>
@@ -243,22 +249,67 @@ export default function SettingsPage() {
               <CardHeader>
                 <div>
                   <CardTitle>Prompts del bot</CardTitle>
-                  <p className="text-sm text-slate-500 mt-1">
+                  <p className="text-sm text-[var(--text-tertiary)] mt-1">
                     Configuración del comportamiento del bot para todos los tenants
                   </p>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <TextArea
-                  label="System prompt - Calificación (Markdown)"
-                  value={promptSettings.qualification_system_prompt_md}
-                  onChange={(e) =>
-                    setPromptSettings({ ...promptSettings, qualification_system_prompt_md: e.target.value })
-                  }
-                  rows={12}
-                  placeholder="Pegá acá el prompt (Markdown)"
-                  hint="Variables disponibles: {{tenant_name}}, {{offer_name}}, etc."
-                />
+              <CardContent className="space-y-6">
+                {/* Qualification Prompt */}
+                <div>
+                  <TextArea
+                    label="System prompt - Calificación de leads"
+                    value={promptSettings.qualification_system_prompt_md}
+                    onChange={(e) =>
+                      setPromptSettings({ ...promptSettings, qualification_system_prompt_md: e.target.value })
+                    }
+                    rows={10}
+                    placeholder="Prompt que define cómo el bot califica leads..."
+                    hint="Variables: {{tenant_name}}, {{offer_name}}, {{lead_name}}, {{qualification_fields}}, {{rag_context}}"
+                  />
+                </div>
+
+                {/* Extraction Prompt */}
+                <div>
+                  <TextArea
+                    label="System prompt - Extracción de campos"
+                    value={promptSettings.extraction_system_prompt_md}
+                    onChange={(e) =>
+                      setPromptSettings({ ...promptSettings, extraction_system_prompt_md: e.target.value })
+                    }
+                    rows={8}
+                    placeholder="Prompt que define cómo extraer campos del mensaje del usuario..."
+                    hint="Define los campos a extraer (nombre, presupuesto, zona, etc.) y las reglas de extracción."
+                  />
+                </div>
+
+                {/* Conversation Summary Prompt */}
+                <div>
+                  <TextArea
+                    label="System prompt - Resumen de conversación"
+                    value={promptSettings.conversation_summary_prompt_md}
+                    onChange={(e) =>
+                      setPromptSettings({ ...promptSettings, conversation_summary_prompt_md: e.target.value })
+                    }
+                    rows={6}
+                    placeholder="Prompt para generar resúmenes de conversaciones..."
+                    hint="Se usa para generar notas automáticas para el equipo comercial."
+                  />
+                </div>
+
+                {/* Initial Greeting Template */}
+                <div>
+                  <TextArea
+                    label="Plantilla de saludo inicial"
+                    value={promptSettings.initial_greeting_template}
+                    onChange={(e) =>
+                      setPromptSettings({ ...promptSettings, initial_greeting_template: e.target.value })
+                    }
+                    rows={4}
+                    placeholder="Hola {{lead_name}}! Gracias por tu interés en {{offer_name}}..."
+                    hint="Variables: {{lead_name}}, {{offer_name}}, {{tenant_name}}"
+                  />
+                </div>
               </CardContent>
               <CardFooter>
                 <Button onClick={() => handleSave("prompts")} isLoading={isSaving} leftIcon={<Save className="h-4 w-4" />}>
@@ -277,7 +328,7 @@ export default function SettingsPage() {
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle>Meta / Facebook Lead Ads</CardTitle>
-                <p className="text-sm text-slate-500 mt-1">
+                <p className="text-sm text-[var(--text-tertiary)] mt-1">
                   Configurá la integración con Meta para recibir leads de Facebook e Instagram
                 </p>
               </div>
@@ -352,7 +403,7 @@ export default function SettingsPage() {
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle>WhatsApp Business API</CardTitle>
-                <p className="text-sm text-slate-500 mt-1">
+                <p className="text-sm text-[var(--text-tertiary)] mt-1">
                   Configurá la conexión con WhatsApp Cloud API
                 </p>
               </div>
@@ -407,7 +458,7 @@ export default function SettingsPage() {
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle>Chatwoot</CardTitle>
-                <p className="text-sm text-slate-500 mt-1">
+                <p className="text-sm text-[var(--text-tertiary)] mt-1">
                   Configurá la conexión con Chatwoot para gestionar conversaciones
                 </p>
               </div>
@@ -472,7 +523,7 @@ export default function SettingsPage() {
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle>OpenAI</CardTitle>
-                <p className="text-sm text-slate-500 mt-1">
+                <p className="text-sm text-[var(--text-tertiary)] mt-1">
                   Configurá la API de OpenAI para calificación y respuestas
                 </p>
               </div>

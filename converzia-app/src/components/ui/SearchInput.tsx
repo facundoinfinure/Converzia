@@ -90,7 +90,7 @@ export function SearchInput({
     <div className={cn("relative", className)}>
       <Search
         className={cn(
-          "absolute top-1/2 -translate-y-1/2 text-slate-500",
+          "absolute top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]",
           iconSizes[size]
         )}
       />
@@ -104,9 +104,9 @@ export function SearchInput({
         placeholder={placeholder}
         autoFocus={autoFocus}
         className={cn(
-          "w-full rounded-lg border border-card-border bg-card text-white placeholder-slate-500",
+          "w-full rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] placeholder-[var(--text-tertiary)]",
           "transition-all duration-200",
-          "focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500",
+          "focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] focus:border-[var(--accent-primary)]",
           sizes[size]
         )}
       />
@@ -124,7 +124,7 @@ export function SearchInput({
           <button
             type="button"
             onClick={handleClear}
-            className="p-1 rounded text-slate-500 hover:text-white hover:bg-card-border transition-colors"
+            className="p-1 rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors"
           >
             <X className="h-4 w-4" />
           </button>
@@ -161,8 +161,8 @@ export function SearchWithFilters({
             className={cn(
               "flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors",
               filtersOpen
-                ? "bg-primary-500/20 text-primary-400 border-primary-500/30"
-                : "bg-card text-slate-400 border-card-border hover:text-white hover:border-slate-600"
+                ? "bg-[var(--accent-primary-light)] text-[var(--accent-primary)] border-[var(--accent-primary-muted)]"
+                : "bg-[var(--bg-primary)] text-[var(--text-tertiary)] border-[var(--border-primary)] hover:text-[var(--text-primary)] hover:border-[var(--border-secondary)]"
             )}
           >
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -179,7 +179,7 @@ export function SearchWithFilters({
       </div>
 
       {filtersOpen && filters && (
-        <div className="p-4 rounded-lg bg-card border border-card-border">
+        <div className="p-4 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-primary)]">
           {filters}
         </div>
       )}

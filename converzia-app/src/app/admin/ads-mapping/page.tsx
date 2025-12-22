@@ -224,9 +224,9 @@ export default function AdsMappingPage() {
       header: "Ad ID",
       cell: (ad) => (
         <div>
-          <span className="font-medium text-white font-mono text-sm">{ad.ad_id}</span>
+          <span className="font-medium text-[var(--text-primary)] font-mono text-sm">{ad.ad_id}</span>
           {ad.campaign_id && (
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-[var(--text-tertiary)] mt-0.5">
               Campaign: {ad.campaign_id}
             </p>
           )}
@@ -238,9 +238,9 @@ export default function AdsMappingPage() {
       header: "Leads",
       cell: (ad) => (
         <div className="flex items-center gap-2">
-          <Users className="h-4 w-4 text-slate-500" />
+          <Users className="h-4 w-4 text-[var(--text-tertiary)]" />
           <span className="font-medium text-amber-400">{ad.lead_count}</span>
-          <span className="text-slate-500">esperando</span>
+          <span className="text-[var(--text-tertiary)]">esperando</span>
         </div>
       ),
     },
@@ -248,7 +248,7 @@ export default function AdsMappingPage() {
       key: "dates",
       header: "Período",
       cell: (ad) => (
-        <div className="text-sm text-slate-400">
+        <div className="text-sm text-[var(--text-tertiary)]">
           <span>{formatRelativeTime(ad.first_lead_at)}</span>
           <span className="mx-1">→</span>
           <span>{formatRelativeTime(ad.last_lead_at)}</span>
@@ -279,7 +279,7 @@ export default function AdsMappingPage() {
       cell: (offer) => (
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shrink-0">
-            <Package className="h-5 w-5 text-white" />
+            <Package className="h-5 w-5 text-[var(--text-primary)]" />
           </div>
           <div className="min-w-0">
             <Link
@@ -325,7 +325,7 @@ export default function AdsMappingPage() {
       key: "created",
       header: "Creada",
       cell: (offer) => (
-        <span className="text-slate-400 text-sm">{formatRelativeTime(offer.created_at)}</span>
+        <span className="text-[var(--text-tertiary)] text-sm">{formatRelativeTime(offer.created_at)}</span>
       ),
     },
     {
@@ -351,9 +351,9 @@ export default function AdsMappingPage() {
       header: "Ad",
       cell: (m) => (
         <div>
-          <span className="font-medium text-white">{m.ad_name || m.ad_id}</span>
+          <span className="font-medium text-[var(--text-primary)]">{m.ad_name || m.ad_id}</span>
           {m.campaign_name && (
-            <p className="text-xs text-slate-500 mt-0.5">{m.campaign_name}</p>
+            <p className="text-xs text-[var(--text-tertiary)] mt-0.5">{m.campaign_name}</p>
           )}
         </div>
       ),
@@ -364,7 +364,7 @@ export default function AdsMappingPage() {
       cell: (m) => (
         <div>
           <span className="text-primary-400">{m.offer?.name}</span>
-          <p className="text-xs text-slate-500 mt-0.5">{m.tenant?.name}</p>
+          <p className="text-xs text-[var(--text-tertiary)] mt-0.5">{m.tenant?.name}</p>
         </div>
       ),
     },
@@ -381,7 +381,7 @@ export default function AdsMappingPage() {
       key: "created",
       header: "Creado",
       cell: (m) => (
-        <span className="text-slate-400 text-sm">{formatDate(m.created_at)}</span>
+        <span className="text-[var(--text-tertiary)] text-sm">{formatDate(m.created_at)}</span>
       ),
     },
     {
@@ -572,9 +572,9 @@ export default function AdsMappingPage() {
             <div className="p-4 rounded-lg bg-card-border/50">
               <div className="flex items-center gap-3 mb-2">
                 <Megaphone className="h-5 w-5 text-amber-400" />
-                <span className="font-medium text-white">Ad ID: {mappingAd.ad_id}</span>
+                <span className="font-medium text-[var(--text-primary)]">Ad ID: {mappingAd.ad_id}</span>
               </div>
-              <div className="flex items-center gap-4 text-sm text-slate-400">
+              <div className="flex items-center gap-4 text-sm text-[var(--text-tertiary)]">
                 <span className="flex items-center gap-1">
                   <Users className="h-4 w-4" />
                   {mappingAd.lead_count} leads pendientes
@@ -587,7 +587,7 @@ export default function AdsMappingPage() {
 
             {/* Tenant Selection */}
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
+              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
                 Tenant *
               </label>
               <SelectDropdown
@@ -608,7 +608,7 @@ export default function AdsMappingPage() {
 
             {/* Offer Selection */}
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
+              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
                 Oferta *
               </label>
               <SelectDropdown
@@ -661,16 +661,16 @@ export default function AdsMappingPage() {
         >
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
+              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
                 Ad ID
               </label>
-              <div className="p-3 bg-slate-800 rounded-lg text-slate-400">
+              <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg text-[var(--text-tertiary)]">
                 {editingMapping.ad_id}
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
+              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
                 Tenant *
               </label>
               <SelectDropdown
@@ -690,7 +690,7 @@ export default function AdsMappingPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
+              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
                 Oferta *
               </label>
               <SelectDropdown
@@ -753,9 +753,9 @@ export default function AdsMappingPage() {
             <div className="p-4 rounded-lg bg-card-border/50">
               <div className="flex items-center gap-3 mb-2">
                 <Package className="h-5 w-5 text-emerald-400" />
-                <span className="font-medium text-white">{manualMappingOffer.name}</span>
+                <span className="font-medium text-[var(--text-primary)]">{manualMappingOffer.name}</span>
               </div>
-              <div className="flex items-center gap-4 text-sm text-slate-400">
+              <div className="flex items-center gap-4 text-sm text-[var(--text-tertiary)]">
                 <span>{manualMappingOffer.tenant?.name}</span>
                 {manualMappingOffer.city && (
                   <span className="flex items-center gap-1">

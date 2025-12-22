@@ -1,5 +1,3 @@
-"use client";
-
 import type { PostgrestError } from "@supabase/supabase-js";
 
 type SupabaseResponse<T> = {
@@ -129,6 +127,7 @@ export async function retryQuery<T>(
     error: lastError,
   };
 }
+
 
 
 
