@@ -1,15 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { Download, Calendar } from "lucide-react";
+import { Download, Calendar, BarChart3, TrendingUp, Users, CheckCircle2 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
-import { LightCard, LightCardHeader, LightCardTitle, LightCardContent } from "@/components/ui/LightCard";
-import { LightButton } from "@/components/ui/LightButton";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 import { DashboardCard } from "@/components/dashboard/DashboardCard";
 import { AnalyticsCharts } from "@/components/admin/AnalyticsCharts";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { useAnalytics, TimeRange } from "@/lib/hooks/use-analytics";
-import { formatCurrency } from "@/lib/utils";
 
 export default function AnalyticsPage() {
   const [timeRange, setTimeRange] = useState<TimeRange>("30d");
@@ -55,11 +55,14 @@ export default function AnalyticsPage() {
     return (
       <PageContainer>
         <PageHeader title="Analytics" description="Métricas y reportes de la plataforma" />
-        <LightCard>
-          <div className="p-12 text-center text-gray-500">
-            No hay datos disponibles para el período seleccionado.
-          </div>
-        </LightCard>
+        <Card>
+          <EmptyState
+            icon={<BarChart3 />}
+            title="Sin datos disponibles"
+            description="No hay datos disponibles para el período seleccionado."
+            size="lg"
+          />
+        </Card>
       </PageContainer>
     );
   }
@@ -74,30 +77,30 @@ export default function AnalyticsPage() {
           { label: "Analytics" },
         ]}
         actions={
-          <LightButton
+          <Button
             variant="secondary"
             onClick={handleExport}
             leftIcon={<Download className="h-4 w-4" />}
           >
             Exportar Reporte
-          </LightButton>
+          </Button>
         }
       />
 
       {/* Time Range Selector */}
-      <LightCard className="mb-6">
-        <LightCardContent>
+      <Card className="mb-6">
+        <CardContent className="p-4">
           <div className="flex items-center gap-4">
-            <Calendar className="h-5 w-5 text-gray-500" />
+            <Calendar className="h-5 w-5 text-[var(--text-tertiary)]" />
             <div className="flex items-center gap-2">
               {(["today", "7d", "30d", "90d"] as TimeRange[]).map((range) => (
                 <button
                   key={range}
                   onClick={() => setTimeRange(range)}
-                  className={`px-4 py-2 text-sm rounded-md transition-colors ${
+                  className={`px-4 py-2 text-sm rounded-lg transition-colors ${
                     timeRange === range
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                      ? "bg-[var(--accent-primary)] text-white"
+                      : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]"
                   }`}
                 >
                   {range === "today"
@@ -111,26 +114,39 @@ export default function AnalyticsPage() {
               ))}
             </div>
           </div>
-        </LightCardContent>
-      </LightCard>
+        </CardContent>
+      </Card>
 
       {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <DashboardCard
           title="Total Leads"
           value={data.totalLeads.toLocaleString()}
+          icon={<Users className="h-5 w-5" />}
+          iconColor="primary"
         />
         <DashboardCard
           title="Leads Ready"
           value={data.totalReady.toLocaleString()}
+          icon={<CheckCircle2 className="h-5 w-5" />}
+          iconColor="success"
         />
         <DashboardCard
           title="Entregados"
           value={data.totalDelivered.toLocaleString()}
+          icon={<TrendingUp className="h-5 w-5" />}
+          iconColor="info"
         />
         <DashboardCard
           title="Tasa de Conversión"
           value={`${data.conversionRate}%`}
+          icon={<BarChart3 className="h-5 w-5" />}
+          iconColor="warning"
+          change={
+            data.conversionRate > 0
+              ? { value: data.conversionRate, trend: "up" as const }
+              : undefined
+          }
         />
       </div>
 
@@ -143,30 +159,30 @@ export default function AnalyticsPage() {
       />
 
       {/* Additional Stats */}
-      <LightCard className="mt-6">
-        <LightCardHeader>
-          <LightCardTitle>Métricas Adicionales</LightCardTitle>
-        </LightCardHeader>
-        <LightCardContent>
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>Métricas Adicionales</CardTitle>
+        </CardHeader>
+        <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Tiempo Promedio de Respuesta</p>
-              <p className="text-2xl font-bold text-gray-900">
+            <div className="p-4 rounded-xl bg-[var(--bg-tertiary)]">
+              <p className="text-sm text-[var(--text-tertiary)] mb-1">Tiempo Promedio de Respuesta</p>
+              <p className="text-2xl font-bold text-[var(--text-primary)]">
                 {data.avgResponseTime.toFixed(1)}min
               </p>
             </div>
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Leads Ready Rate</p>
-              <p className="text-2xl font-bold text-gray-900">
+            <div className="p-4 rounded-xl bg-[var(--bg-tertiary)]">
+              <p className="text-sm text-[var(--text-tertiary)] mb-1">Leads Ready Rate</p>
+              <p className="text-2xl font-bold text-[var(--text-primary)]">
                 {data.totalLeads
                   ? Math.round((data.totalReady / data.totalLeads) * 100)
                   : 0}
                 %
               </p>
             </div>
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Delivery Rate</p>
-              <p className="text-2xl font-bold text-gray-900">
+            <div className="p-4 rounded-xl bg-[var(--bg-tertiary)]">
+              <p className="text-sm text-[var(--text-tertiary)] mb-1">Delivery Rate</p>
+              <p className="text-2xl font-bold text-[var(--text-primary)]">
                 {data.totalReady
                   ? Math.round((data.totalDelivered / data.totalReady) * 100)
                   : 0}
@@ -174,8 +190,8 @@ export default function AnalyticsPage() {
               </p>
             </div>
           </div>
-        </LightCardContent>
-      </LightCard>
+        </CardContent>
+      </Card>
     </PageContainer>
   );
 }

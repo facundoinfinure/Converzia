@@ -1,8 +1,8 @@
 "use client";
 
-import { DashboardCard } from "@/components/dashboard/DashboardCard";
+import { DashboardCard, HeroMetric } from "@/components/dashboard/DashboardCard";
 import { SimpleChart } from "@/components/ui/SimpleChart";
-import { LightCard, LightCardHeader, LightCardTitle, LightCardContent } from "@/components/ui/LightCard";
+import { CreditCard, TrendingUp, Users, Clock } from "lucide-react";
 
 interface BillingStatsProps {
   totalRevenue: number;
@@ -30,72 +30,67 @@ export function BillingStats({
   return (
     <div className="space-y-6">
       {/* Main Revenue Card */}
-      <LightCard className="border-blue-200 bg-gradient-to-br from-blue-50 to-white">
-        <LightCardHeader>
-          <div className="flex items-center justify-between w-full">
-            <div>
-              <LightCardTitle className="text-gray-600 text-sm font-medium">
-                Ingresos Totales
-              </LightCardTitle>
-              <div className="flex items-baseline gap-2 mt-2">
-                <span className="text-4xl font-bold text-gray-900">
-                  ${totalRevenue.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-              </div>
-              <div className="flex items-center gap-4 mt-4">
-                <div className="text-sm">
-                  <span className="text-gray-600">Este mes: </span>
-                  <span className="font-medium text-gray-900">
-                    ${revenueThisMonth.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-                {revenueChange !== 0 && (
-                  <div className={`text-sm ${revenueChange > 0 ? "text-green-600" : "text-red-600"}`}>
-                    {revenueChange > 0 ? "+" : ""}
-                    {revenueChange.toFixed(1)}% vs. mes anterior
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </LightCardHeader>
-        <LightCardContent>
-          {revenueTrend.length > 0 && (
-            <div className="mt-4">
-              <SimpleChart
-                data={revenueTrend}
-                color="#3b82f6"
-                height={120}
-                showGrid={false}
-                showAxis={false}
-              />
-            </div>
-          )}
-        </LightCardContent>
-      </LightCard>
+      <HeroMetric
+        title="Ingresos Totales"
+        value={`$${totalRevenue.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+        icon={<CreditCard className="h-6 w-6" />}
+        accentColor="success"
+        trend={
+          revenueChange !== 0
+            ? {
+                value: Math.abs(revenueChange),
+                label: "vs. mes anterior",
+                direction: revenueChange >= 0 ? "up" : "down",
+              }
+            : undefined
+        }
+        chart={
+          revenueTrend.length > 0 && (
+            <SimpleChart
+              data={revenueTrend}
+              color="var(--success)"
+              height={100}
+              showGrid={false}
+              showAxis={false}
+            />
+          )
+        }
+      />
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <DashboardCard
           title="Créditos Vendidos"
           value={creditsSold.toLocaleString()}
+          icon={<TrendingUp className="h-5 w-5" />}
+          iconColor="primary"
         />
         <DashboardCard
           title="Tenants Activos"
           value={activeTenants}
+          icon={<Users className="h-5 w-5" />}
+          iconColor="info"
         />
         <DashboardCard
           title="Pagos Pendientes"
           value={pendingPayments}
+          icon={<Clock className="h-5 w-5" />}
+          iconColor={pendingPayments > 0 ? "warning" : "success"}
         />
         <DashboardCard
           title="Ingresos Este Mes"
           value={`$${revenueThisMonth.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`}
-          change={{
-            value: Math.abs(revenueChange),
-            trend: revenueChange >= 0 ? "up" : "down",
-            label: "vs. mes anterior",
-          }}
+          icon={<CreditCard className="h-5 w-5" />}
+          iconColor="success"
+          change={
+            revenueChange !== 0
+              ? {
+                  value: Math.abs(Math.round(revenueChange)),
+                  trend: revenueChange >= 0 ? "up" : "down",
+                  label: "vs. mes anterior",
+                }
+              : undefined
+          }
         />
       </div>
     </div>

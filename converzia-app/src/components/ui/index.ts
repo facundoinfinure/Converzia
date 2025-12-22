@@ -25,11 +25,8 @@ export * from "./StatCard";
 export * from "./SearchInput";
 export * from "./FileUpload";
 export * from "./DatePicker";
-export * from "./LightCard";
-export * from "./LightButton";
 export * from "./SimpleChart";
 export * from "./AdvancedFilters";
 export * from "./BulkActions";
 export * from "./NotificationCenter";
 export * from "./ThemeToggle";
-

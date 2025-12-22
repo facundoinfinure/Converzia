@@ -1,6 +1,5 @@
 "use client";
 
-// Force dynamic rendering
 export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from "react";
@@ -13,15 +12,25 @@ import {
   MessageSquare,
   CreditCard,
   LayoutDashboard,
+  Building2,
+  TrendingUp,
+  Clock,
+  Zap,
+  ArrowRight,
 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
-import { LightCard, LightCardHeader, LightCardTitle, LightCardContent, LightCardFooter } from "@/components/ui/LightCard";
-import { LightButton } from "@/components/ui/LightButton";
-import { DashboardCard } from "@/components/dashboard/DashboardCard";
-import { SimpleChart } from "@/components/ui/SimpleChart";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { 
+  DashboardCard, 
+  HeroMetric, 
+  AlertCard, 
+  ActivityItem 
+} from "@/components/dashboard/DashboardCard";
+import { SimpleChart } from "@/components/ui/SimpleChart";
 import { createClient } from "@/lib/supabase/client";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { formatRelativeTime } from "@/lib/utils";
@@ -62,7 +71,6 @@ export default function AdminDashboard() {
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [timeRange, setTimeRange] = useState<"7d" | "30d" | "90d">("30d");
 
   useEffect(() => {
     async function fetchDashboardData() {
@@ -70,29 +78,20 @@ export default function AdminDashboard() {
       setIsLoading(true);
       setError(null);
 
-      console.log("🔍 Starting dashboard data fetch...");
-
-      // Verify authentication first
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       
       if (authError || !user) {
-        console.error("❌ Auth error:", authError);
-        console.error("User:", user);
-        setError(`Error de autenticación: ${authError?.message || "Usuario no encontrado"}. Por favor, recargá la página o iniciá sesión nuevamente.`);
+        setError(`Error de autenticación: ${authError?.message || "Usuario no encontrado"}`);
         setIsLoading(false);
         return;
       }
 
-      console.log("✅ User authenticated:", user.id);
-
       try {
-        // Fetch counts in parallel with timeout
-        console.log("Fetching dashboard counts with 10s timeout...");
         const [
-          { count: totalLeads, error: leadsError },
-          { count: activeTenants, error: tenantsError },
-          { count: pendingApprovals, error: approvalsError },
-          { data: unmappedLeads, error: unmappedError },
+          { count: totalLeads },
+          { count: activeTenants },
+          { count: pendingApprovals },
+          { data: unmappedLeads },
         ] = await Promise.all([
           queryWithTimeout(
             supabase.from("lead_offers").select("id", { count: "exact", head: true }),
@@ -116,26 +115,9 @@ export default function AdminDashboard() {
           ),
         ]);
 
-        if (leadsError || tenantsError || approvalsError || unmappedError) {
-          console.error("❌ Error fetching dashboard counts:", { 
-            leadsError: leadsError?.message || leadsError?.code, 
-            tenantsError: tenantsError?.message || tenantsError?.code, 
-            approvalsError: approvalsError?.message || approvalsError?.code, 
-            unmappedError: unmappedError?.message || unmappedError?.code 
-          });
-          
-          // Set error if all queries failed
-          if (leadsError && tenantsError && approvalsError && unmappedError) {
-            setError(`Error al cargar datos: ${leadsError.message || "Error desconocido"}. Verificá la consola para más detalles.`);
-          }
-        } else {
-          console.log("✅ Dashboard counts loaded successfully");
-        }
-
-        // Get today's leads
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        const { count: leadsToday, error: leadsTodayError } = await queryWithTimeout(
+        const { count: leadsToday } = await queryWithTimeout(
           supabase
             .from("lead_offers")
             .select("id", { count: "exact", head: true })
@@ -144,12 +126,7 @@ export default function AdminDashboard() {
           "today's leads"
         );
 
-        if (leadsTodayError) {
-          console.error("Error fetching today's leads:", leadsTodayError);
-        }
-
-        // Get lead ready count for rate
-        const { count: leadReadyCount, error: leadReadyError } = await queryWithTimeout(
+        const { count: leadReadyCount } = await queryWithTimeout(
           supabase
             .from("lead_offers")
             .select("id", { count: "exact", head: true })
@@ -158,12 +135,7 @@ export default function AdminDashboard() {
           "lead ready count"
         );
 
-        if (leadReadyError) {
-          console.error("Error fetching lead ready count:", leadReadyError);
-        }
-
-        // Get low credit tenants
-        const { data: creditData, error: creditError } = await queryWithTimeout(
+        const { data: creditData } = await queryWithTimeout(
           supabase
             .from("tenant_credit_balance")
             .select("tenant_id, current_balance")
@@ -172,12 +144,7 @@ export default function AdminDashboard() {
           "low credit tenants"
         );
 
-        if (creditError) {
-          console.error("Error fetching credit data:", creditError);
-        }
-
-        // Calculate average response time (real calculation)
-        const { data: responseTimes, error: responseTimesError } = await queryWithTimeout(
+        const { data: responseTimes } = await queryWithTimeout(
           supabase
             .from("lead_offers")
             .select("created_at, first_response_at")
@@ -188,19 +155,15 @@ export default function AdminDashboard() {
           "response times"
         );
 
-        if (responseTimesError) {
-          console.error("Error fetching response times:", responseTimesError);
-        }
-
         let avgResponseTime = "N/A";
         if (responseTimes && Array.isArray(responseTimes) && responseTimes.length > 0) {
           const times = (responseTimes as any[])
             .map((r: any) => {
               const created = new Date(r.created_at).getTime();
               const responded = new Date(r.first_response_at).getTime();
-              return (responded - created) / 1000 / 60; // minutes
+              return (responded - created) / 1000 / 60;
             })
-            .filter((t: number) => t > 0 && t < 1440); // Filter outliers (0-24h)
+            .filter((t: number) => t > 0 && t < 1440);
 
           if (times.length > 0) {
             const avg = times.reduce((a: number, b: number) => a + b, 0) / times.length;
@@ -218,7 +181,7 @@ export default function AdminDashboard() {
           const nextDay = new Date(date);
           nextDay.setDate(nextDay.getDate() + 1);
 
-          const { count, error: trendError } = await queryWithTimeout(
+          const { count } = await queryWithTimeout(
             supabase
               .from("lead_offers")
               .select("id", { count: "exact", head: true })
@@ -227,10 +190,6 @@ export default function AdminDashboard() {
             5000,
             `trend data for day ${i}`
           );
-
-          if (trendError) {
-            console.error("Error fetching trend data:", trendError);
-          }
 
           trendData.push({
             date: date.toLocaleDateString("es-AR", { month: "short", day: "numeric" }),
@@ -251,7 +210,7 @@ export default function AdminDashboard() {
         });
 
         // Fetch pending approvals
-        const { data: approvals, error: approvalsDataError } = await queryWithTimeout(
+        const { data: approvals } = await queryWithTimeout(
           supabase
             .from("tenant_members")
             .select(`
@@ -268,9 +227,7 @@ export default function AdminDashboard() {
           "pending approvals"
         );
 
-        if (approvalsDataError) {
-          console.error("Error fetching approvals:", approvalsDataError);
-        } else if (approvals && Array.isArray(approvals)) {
+        if (approvals && Array.isArray(approvals)) {
           setPendingApprovals(
             (approvals as any[]).map((a: any) => ({
               id: a.id,
@@ -283,8 +240,8 @@ export default function AdminDashboard() {
           );
         }
 
-        // Fetch recent activity (simplified - in production would be from activity_logs)
-        const { data: recentLeads, error: recentLeadsError } = await queryWithTimeout(
+        // Fetch recent activity
+        const { data: recentLeads } = await queryWithTimeout(
           supabase
             .from("lead_offers")
             .select(`
@@ -299,42 +256,33 @@ export default function AdminDashboard() {
           "recent activity"
         );
 
-        if (recentLeadsError) {
-          console.error("Error fetching recent leads:", recentLeadsError);
-        } else if (recentLeads && Array.isArray(recentLeads)) {
+        if (recentLeads && Array.isArray(recentLeads)) {
           setRecentActivity(
             (recentLeads as any[]).map((l: any) => ({
               id: l.id,
               type: l.status === "LEAD_READY" ? "lead_ready" : l.status === "PENDING_MAPPING" ? "unmapped" : "conversation",
               tenant: l.tenants?.name || "Sin tenant",
-              message: l.status === "LEAD_READY" ? "Nuevo lead listo para entrega" : l.status === "PENDING_MAPPING" ? "Lead sin mapear" : "Conversación activa",
+              message: l.status === "LEAD_READY" ? "Nuevo lead listo" : l.status === "PENDING_MAPPING" ? "Lead sin mapear" : "Conversación activa",
               time: formatRelativeTime(l.created_at),
             }))
           );
         }
       } catch (error: any) {
-        console.error("❌ Error fetching dashboard data:", error);
-        const errorMessage = error?.message || "Error al cargar los datos del dashboard. Intentá recargar la página.";
-        setError(errorMessage);
-        
-        // Log additional diagnostic info
-        if (error instanceof Error) {
-          console.error("Error stack:", error.stack);
-        }
+        setError(error?.message || "Error al cargar los datos");
       } finally {
         setIsLoading(false);
-        console.log("🏁 Dashboard data fetch completed");
       }
     }
 
     fetchDashboardData();
-  }, [timeRange]);
+  }, []);
 
   if (isLoading) {
     return (
       <PageContainer>
         <div className="space-y-6">
-          <Skeleton className="h-10 w-48" />
+          <Skeleton className="h-10 w-64" />
+          <Skeleton className="h-40 rounded-xl" />
           <div className="grid grid-cols-4 gap-4">
             {[...Array(4)].map((_, i) => (
               <Skeleton key={i} className="h-32 rounded-xl" />
@@ -350,19 +298,16 @@ export default function AdminDashboard() {
   }
 
   const activityIcons = {
-    lead_ready: { icon: CheckCircle2, bg: "bg-emerald-500/20", color: "text-emerald-400" },
-    unmapped: { icon: AlertTriangle, bg: "bg-amber-500/20", color: "text-amber-400" },
-    conversation: { icon: MessageSquare, bg: "bg-blue-500/20", color: "text-blue-400" },
-    approval: { icon: Users, bg: "bg-purple-500/20", color: "text-purple-400" },
+    lead_ready: { icon: CheckCircle2, color: "success" as const },
+    unmapped: { icon: AlertTriangle, color: "warning" as const },
+    conversation: { icon: MessageSquare, color: "primary" as const },
+    approval: { icon: Users, color: "info" as const },
   };
 
-  // Check if there's no data at all
   const hasNoData = stats && 
     stats.totalLeads === 0 && 
     stats.activeTenants === 0 && 
-    stats.leadReadyRate === 0 &&
-    recentActivity.length === 0 &&
-    pendingApprovals.length === 0;
+    recentActivity.length === 0;
 
   return (
     <PageContainer>
@@ -372,299 +317,228 @@ export default function AdminDashboard() {
       />
 
       {error && (
-        <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400">
-          <p className="font-medium">Error al cargar datos</p>
-          <p className="text-sm mt-1">{error}</p>
-          <div className="flex gap-3 mt-3">
-            <button
-              onClick={() => window.location.reload()}
-              className="px-3 py-1.5 text-sm bg-red-500/20 hover:bg-red-500/30 rounded-lg transition-colors"
-            >
-              Recargar página
-            </button>
-            <button
-              onClick={() => {
-                // Clear localStorage and sessionStorage
-                localStorage.clear();
-                sessionStorage.clear();
-                // Clear cookies related to Supabase
-                document.cookie.split(";").forEach((c) => {
-                  const eqPos = c.indexOf("=");
-                  const name = eqPos > -1 ? c.substr(0, eqPos).trim() : c.trim();
-                  if (name.includes("supabase") || name.includes("sb-")) {
-                    document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
-                  }
-                });
-                window.location.href = "/login";
-              }}
-              className="px-3 py-1.5 text-sm bg-red-500/20 hover:bg-red-500/30 rounded-lg transition-colors"
-            >
-              Limpiar cache e iniciar sesión
-            </button>
-          </div>
-        </div>
+        <AlertCard
+          type="danger"
+          title="Error al cargar datos"
+          description={error}
+          action={{
+            label: "Recargar",
+            onClick: () => window.location.reload(),
+          }}
+          className="mb-6"
+        />
       )}
 
       {hasNoData ? (
-        <LightCard>
+        <Card>
           <EmptyState
             icon={<LayoutDashboard />}
             title="Sin información disponible"
-            description="Aún no hay datos para mostrar en el dashboard. Los datos aparecerán aquí cuando haya actividad en la plataforma."
+            description="Los datos aparecerán aquí cuando haya actividad en la plataforma."
             size="lg"
           />
-        </LightCard>
+        </Card>
       ) : (
         <div className="space-y-6">
-          {/* Alerts Row - Show actionable items first */}
+          {/* Actionable Alerts */}
           {(stats?.unmappedAds || 0) > 0 && (
-            <LightCard className="border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30">
-              <LightCardContent>
-                <div className="flex items-center gap-4">
-                  <div className="h-12 w-12 rounded-lg bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center">
-                    <AlertTriangle className="h-6 w-6 text-amber-600 dark:text-amber-400" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                      {stats?.unmappedAds} ads sin mapear
-                    </h3>
-                    <p className="text-sm text-gray-600 dark:text-slate-400">
-                      Hay leads esperando. Mapeá los ads para iniciar la calificación.
-                    </p>
-                  </div>
-                  <Link href="/admin/ads-mapping">
-                    <LightButton variant="primary" size="sm">
-                      Mapear ahora
-                    </LightButton>
-                  </Link>
-                </div>
-              </LightCardContent>
-            </LightCard>
+            <AlertCard
+              type="warning"
+              icon={<AlertTriangle className="h-5 w-5" />}
+              title={`${stats?.unmappedAds} ads sin mapear`}
+              description="Hay leads esperando. Mapeá los ads para iniciar la calificación."
+              action={{
+                label: "Mapear ahora",
+                onClick: () => router.push("/admin/ads-mapping"),
+              }}
+            />
           )}
 
           {(stats?.pendingApprovals || 0) > 0 && (
-            <LightCard className="border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/30">
-              <LightCardContent>
-                <div className="flex items-center gap-4">
-                  <div className="h-12 w-12 rounded-lg bg-purple-100 dark:bg-purple-900/50 flex items-center justify-center">
-                    <Users className="h-6 w-6 text-purple-600 dark:text-purple-400" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                      {stats?.pendingApprovals} aprobaciones pendientes
-                    </h3>
-                    <p className="text-sm text-gray-600 dark:text-slate-400">
-                      Usuarios esperando acceso a la plataforma.
-                    </p>
-                  </div>
-                  <Link href="/admin/users">
-                    <LightButton variant="primary" size="sm">
-                      Revisar
-                    </LightButton>
-                  </Link>
-                </div>
-              </LightCardContent>
-            </LightCard>
+            <AlertCard
+              type="info"
+              icon={<Users className="h-5 w-5" />}
+              title={`${stats?.pendingApprovals} aprobaciones pendientes`}
+              description="Usuarios esperando acceso a la plataforma."
+              action={{
+                label: "Revisar",
+                onClick: () => router.push("/admin/users"),
+              }}
+            />
           )}
 
-          {/* Main Metric Card */}
-          <LightCard className="border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50 to-white dark:from-slate-800 dark:to-slate-800">
-            <LightCardHeader>
-              <div className="flex items-center justify-between w-full">
-                <div>
-                  <LightCardTitle className="text-gray-600 dark:text-slate-400 text-sm font-medium">
-                    Total Leads
-                  </LightCardTitle>
-                  <div className="flex items-baseline gap-2 mt-2">
-                    <span className="text-4xl font-bold text-gray-900 dark:text-slate-100">
-                      {stats?.totalLeads.toLocaleString() || "0"}
-                    </span>
-                    <span className="text-gray-600 dark:text-slate-400">leads</span>
-                  </div>
-                  <div className="flex items-center gap-4 mt-4">
-                    <select
-                      value={timeRange}
-                      onChange={(e) => setTimeRange(e.target.value as any)}
-                      className="text-sm text-gray-600 dark:text-slate-300 bg-white dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-md px-2 py-1"
-                    >
-                      <option value="7d">Últimos 7 días</option>
-                      <option value="30d">Últimos 30 días</option>
-                      <option value="90d">Últimos 90 días</option>
-                    </select>
-                    <div className="text-sm text-gray-600 dark:text-slate-400">
-                      {stats?.leadsToday || 0} leads hoy
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </LightCardHeader>
-            <LightCardContent>
-              {stats?.leadsTrend && stats.leadsTrend.length > 0 && (
-                <div className="mt-4">
-                  <SimpleChart
-                    data={stats.leadsTrend}
-                    color="#3b82f6"
-                    height={120}
-                    showGrid={false}
-                    showAxis={false}
-                  />
-                </div>
-              )}
-            </LightCardContent>
-          </LightCard>
+          {(stats?.lowCreditTenants || 0) > 0 && (
+            <AlertCard
+              type="danger"
+              icon={<CreditCard className="h-5 w-5" />}
+              title={`${stats?.lowCreditTenants} tenants con créditos bajos`}
+              description="Estos tenants tienen menos de 10 créditos."
+              action={{
+                label: "Ver tenants",
+                onClick: () => router.push("/admin/tenants?filter=low_credits"),
+              }}
+            />
+          )}
+
+          {/* Hero Metric - Total Leads */}
+          <HeroMetric
+            title="Total Leads"
+            value={stats?.totalLeads.toLocaleString() || "0"}
+            subtitle="leads"
+            icon={<Zap className="h-6 w-6" />}
+            accentColor="primary"
+            trend={
+              stats?.leadsToday && stats.leadsToday > 0
+                ? { value: stats.leadsToday, label: "hoy", direction: "up" }
+                : undefined
+            }
+            chart={
+              stats?.leadsTrend && stats.leadsTrend.length > 0 && (
+                <SimpleChart
+                  data={stats.leadsTrend}
+                  color="var(--accent-primary)"
+                  height={100}
+                  showGrid={false}
+                  showAxis={false}
+                />
+              )
+            }
+          />
 
           {/* Stats Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <DashboardCard
               title="Tenants Activos"
               value={stats?.activeTenants || 0}
-              change={{ value: 2, trend: "up", label: "este mes" }}
+              icon={<Building2 className="h-5 w-5" />}
+              iconColor="primary"
               action={{
                 label: "Ver todos",
                 onClick: () => router.push("/admin/tenants"),
               }}
             />
             <DashboardCard
-              title="Lead Ready Rate"
+              title="Tasa Lead Ready"
               value={`${stats?.leadReadyRate || 0}%`}
-              change={{ value: 5.2, trend: "up", label: "vs. mes anterior" }}
+              icon={<TrendingUp className="h-5 w-5" />}
+              iconColor="success"
+              change={
+                stats?.leadReadyRate && stats.leadReadyRate > 0
+                  ? { value: stats.leadReadyRate, trend: "up" as const }
+                  : undefined
+              }
             />
             <DashboardCard
               title="Tiempo Respuesta"
               value={stats?.avgResponseTime || "N/A"}
-              change={{ value: -18, trend: "down", label: "mejorado" }}
+              icon={<Clock className="h-5 w-5" />}
+              iconColor="info"
             />
             <DashboardCard
               title="Leads Hoy"
               value={stats?.leadsToday || 0}
+              icon={<Users className="h-5 w-5" />}
+              iconColor="warning"
             />
           </div>
 
-
-          {/* Cards Informativos */}
+          {/* Two column layout */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Recent Activity */}
-            <LightCard>
-              <LightCardHeader>
-                <LightCardTitle>Actividad Reciente</LightCardTitle>
-              </LightCardHeader>
-              <LightCardContent className="p-0">
-                <div className="divide-y divide-gray-200">
-                  {recentActivity.length > 0 ? (
-                    recentActivity.map((activity) => {
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Actividad Reciente</CardTitle>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => router.push("/admin/operations")}
+                    rightIcon={<ArrowRight className="h-4 w-4" />}
+                  >
+                    Ver todas
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent noPadding>
+                {recentActivity.length > 0 ? (
+                  <div className="divide-y divide-[var(--border-primary)]">
+                    {recentActivity.map((activity) => {
                       const config = activityIcons[activity.type];
                       const Icon = config.icon;
                       return (
-                        <div
+                        <ActivityItem
                           key={activity.id}
-                          className="flex items-center gap-4 px-6 py-4 hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
-                        >
-                          <div className={`h-10 w-10 rounded-lg bg-gray-100 dark:bg-slate-700 flex items-center justify-center`}>
-                            <Icon className={`h-5 w-5 text-gray-600 dark:text-slate-400`} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900 dark:text-slate-100 truncate">{activity.message}</p>
-                            <p className="text-sm text-gray-500 dark:text-slate-400">{activity.tenant}</p>
-                          </div>
-                          <span className="text-xs text-gray-500 dark:text-slate-500 whitespace-nowrap">{activity.time}</span>
-                        </div>
+                          icon={<Icon className="h-4 w-4" />}
+                          iconColor={config.color}
+                          title={activity.message}
+                          subtitle={activity.tenant}
+                          timestamp={activity.time}
+                        />
                       );
-                    })
-                  ) : (
-                    <div className="px-6 py-8 text-center text-gray-500 dark:text-slate-400">
-                      No hay actividad reciente
-                    </div>
-                  )}
-                </div>
-              </LightCardContent>
-              <LightCardFooter>
-                <LightButton variant="text" size="sm" onClick={() => router.push("/admin/operations")}>
-                  Ver todas
-                </LightButton>
-              </LightCardFooter>
-            </LightCard>
+                    })}
+                  </div>
+                ) : (
+                  <div className="py-12 text-center">
+                    <MessageSquare className="h-10 w-10 text-[var(--text-tertiary)] mx-auto mb-3" />
+                    <p className="text-[var(--text-secondary)]">Sin actividad reciente</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
             {/* Pending Approvals */}
-            <LightCard>
-              <LightCardHeader>
-                <div className="flex items-center justify-between w-full">
-                  <LightCardTitle>Aprobaciones Pendientes</LightCardTitle>
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Aprobaciones Pendientes</CardTitle>
                   {(stats?.pendingApprovals || 0) > 0 && (
-                    <Badge variant="warning">{stats?.pendingApprovals} pendientes</Badge>
+                    <Badge variant="warning">{stats?.pendingApprovals}</Badge>
                   )}
                 </div>
-              </LightCardHeader>
-              <LightCardContent className="p-0">
-                <div className="divide-y divide-gray-200 dark:divide-slate-700">
-                  {pendingApprovals.length > 0 ? (
-                    pendingApprovals.map((approval) => (
+              </CardHeader>
+              <CardContent noPadding>
+                {pendingApprovals.length > 0 ? (
+                  <div className="divide-y divide-[var(--border-primary)]">
+                    {pendingApprovals.map((approval) => (
                       <div
                         key={approval.id}
-                        className="flex items-center justify-between px-6 py-4 hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
+                        className="flex items-center justify-between p-4 hover:bg-[var(--bg-tertiary)] transition-colors"
                       >
-                        <div className="flex items-center gap-4">
-                          <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 font-medium">
-                            {approval.name
-                              .split(" ")
-                              .map((n) => n[0])
-                              .join("")}
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 rounded-full bg-[var(--accent-primary-light)] flex items-center justify-center text-[var(--accent-primary)] font-medium text-sm">
+                            {approval.name.split(" ").map((n) => n[0]).join("")}
                           </div>
                           <div>
-                            <p className="text-sm font-medium text-gray-900 dark:text-slate-100">{approval.name}</p>
-                            <p className="text-sm text-gray-500 dark:text-slate-400">{approval.tenant}</p>
+                            <p className="text-sm font-medium text-[var(--text-primary)]">
+                              {approval.name}
+                            </p>
+                            <p className="text-xs text-[var(--text-tertiary)]">
+                              {approval.tenant}
+                            </p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2">
                           <Badge variant="default">{approval.role}</Badge>
-                          <LightButton size="sm" variant="primary">
+                          <Button size="sm" variant="primary">
                             Aprobar
-                          </LightButton>
+                          </Button>
                         </div>
                       </div>
-                    ))
-                  ) : (
-                    <div className="px-6 py-8 text-center text-gray-500 dark:text-slate-400">
-                      No hay aprobaciones pendientes
-                    </div>
-                  )}
-                </div>
-              </LightCardContent>
-              <LightCardFooter>
-                <LightButton variant="text" size="sm" onClick={() => router.push("/admin/users")}>
-                  Ver todas
-                </LightButton>
-              </LightCardFooter>
-            </LightCard>
-          </div>
-
-          {/* Low Credit Tenants Alert */}
-          {(stats?.lowCreditTenants || 0) > 0 && (
-            <LightCard className="border-red-200 bg-red-50">
-              <LightCardContent>
-                <div className="flex items-center gap-4">
-                  <div className="h-12 w-12 rounded-lg bg-red-100 flex items-center justify-center">
-                    <CreditCard className="h-6 w-6 text-red-600" />
+                    ))}
                   </div>
-                  <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                      {stats?.lowCreditTenants} Tenants con créditos bajos
-                    </h3>
-                    <p className="text-sm text-gray-600 dark:text-slate-400">
-                      Estos tenants tienen menos de 10 créditos y podrían dejar de procesar leads pronto.
+                ) : (
+                  <div className="py-12 text-center">
+                    <CheckCircle2 className="h-10 w-10 text-[var(--success)] mx-auto mb-3" />
+                    <p className="text-[var(--text-secondary)]">
+                      Sin aprobaciones pendientes
                     </p>
                   </div>
-                  <Link href="/admin/tenants?filter=low_credits">
-                    <LightButton variant="primary" size="sm">
-                      Ver tenants
-                    </LightButton>
-                  </Link>
-                </div>
-              </LightCardContent>
-            </LightCard>
-          )}
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </div>
       )}
     </PageContainer>
   );
 }
-

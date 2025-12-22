@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, ReactNode } from "react";
-import { Filter, X, Calendar, DollarSign, TrendingUp } from "lucide-react";
-import { LightButton } from "./LightButton";
+import { Filter, X } from "lucide-react";
+import { Button } from "./Button";
 import { Input } from "./Input";
 import { DatePicker } from "./DatePicker";
 import { cn } from "@/lib/utils";
@@ -52,18 +52,18 @@ export function AdvancedFilters({
 
   return (
     <div className={cn("relative", className)}>
-      <LightButton
+      <Button
         variant="outline"
         onClick={() => setIsOpen(!isOpen)}
         leftIcon={<Filter className="h-4 w-4" />}
       >
         Filtros
         {activeFiltersCount > 0 && (
-          <span className="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-blue-600 text-white">
+          <span className="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-[var(--accent-primary)] text-white">
             {activeFiltersCount}
           </span>
         )}
-      </LightButton>
+      </Button>
 
       {isOpen && (
         <>
@@ -71,12 +71,12 @@ export function AdvancedFilters({
             className="fixed inset-0 z-40"
             onClick={() => setIsOpen(false)}
           />
-          <div className="absolute top-full left-0 mt-2 w-96 bg-white border border-gray-200 rounded-lg shadow-lg z-50 p-4">
+          <div className="absolute top-full left-0 mt-2 w-96 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl shadow-lg z-50 p-4">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-gray-900">Filtros Avanzados</h3>
+              <h3 className="font-semibold text-[var(--text-primary)]">Filtros Avanzados</h3>
               <button
                 onClick={() => setIsOpen(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -85,7 +85,7 @@ export function AdvancedFilters({
             <div className="space-y-4 max-h-96 overflow-y-auto">
               {filters.map((filter) => (
                 <div key={filter.key}>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
                     {filter.label}
                   </label>
                   {filter.type === "text" && (
@@ -108,7 +108,7 @@ export function AdvancedFilters({
                         onChange={(date) => handleFilterChange(`${filter.key}_start`, date?.toISOString())}
                         placeholder="Desde"
                       />
-                      <span className="text-gray-400">-</span>
+                      <span className="text-[var(--text-tertiary)]">-</span>
                       <DatePicker
                         value={values[`${filter.key}_end`]}
                         onChange={(date) => handleFilterChange(`${filter.key}_end`, date?.toISOString())}
@@ -132,7 +132,7 @@ export function AdvancedFilters({
                         onChange={(e) => handleFilterChange(`${filter.key}_min`, e.target.value ? Number(e.target.value) : null)}
                         placeholder="Mín"
                       />
-                      <span className="text-gray-400">-</span>
+                      <span className="text-[var(--text-tertiary)]">-</span>
                       <Input
                         type="number"
                         value={values[`${filter.key}_max`] || ""}
@@ -145,7 +145,7 @@ export function AdvancedFilters({
                     <select
                       value={values[filter.key] || ""}
                       onChange={(e) => handleFilterChange(filter.key, e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-[var(--border-primary)] rounded-lg text-sm bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]"
                     >
                       <option value="">Todos</option>
                       {filter.options?.map((opt) => (
@@ -161,14 +161,14 @@ export function AdvancedFilters({
 
             {/* Saved Filters */}
             {savedFilters.length > 0 && (
-              <div className="mt-4 pt-4 border-t border-gray-200">
-                <p className="text-sm font-medium text-gray-700 mb-2">Filtros Guardados</p>
+              <div className="mt-4 pt-4 border-t border-[var(--border-primary)]">
+                <p className="text-sm font-medium text-[var(--text-secondary)] mb-2">Filtros Guardados</p>
                 <div className="space-y-1">
                   {savedFilters.map((saved, idx) => (
                     <button
                       key={idx}
                       onClick={() => onChange(saved.values)}
-                      className="w-full text-left px-2 py-1 text-sm text-gray-600 hover:bg-gray-50 rounded"
+                      className="w-full text-left px-2 py-1 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] rounded"
                     >
                       {saved.name}
                     </button>
@@ -178,8 +178,8 @@ export function AdvancedFilters({
             )}
 
             {/* Actions */}
-            <div className="flex items-center justify-between gap-2 mt-4 pt-4 border-t border-gray-200">
-              <LightButton
+            <div className="flex items-center justify-between gap-2 mt-4 pt-4 border-t border-[var(--border-primary)]">
+              <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => {
@@ -188,7 +188,7 @@ export function AdvancedFilters({
                 }}
               >
                 Limpiar
-              </LightButton>
+              </Button>
               {onSaveFilter && (
                 <div className="flex items-center gap-2 flex-1">
                   <Input
@@ -197,14 +197,14 @@ export function AdvancedFilters({
                     placeholder="Nombre del filtro"
                     className="flex-1"
                   />
-                  <LightButton
+                  <Button
                     size="sm"
                     variant="primary"
                     onClick={handleSaveFilter}
                     disabled={!saveFilterName}
                   >
                     Guardar
-                  </LightButton>
+                  </Button>
                 </div>
               )}
             </div>

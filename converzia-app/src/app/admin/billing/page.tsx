@@ -4,22 +4,17 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   CreditCard,
-  DollarSign,
-  TrendingUp,
-  Users,
-  Clock,
-  Search,
   Download,
-  Filter,
 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
-import { LightCard, LightCardHeader, LightCardTitle, LightCardContent } from "@/components/ui/LightCard";
-import { LightButton } from "@/components/ui/LightButton";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 import { BillingStats } from "@/components/admin/BillingStats";
 import { DataTable, Column } from "@/components/ui/Table";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Badge } from "@/components/ui/Badge";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { useBillingAdmin } from "@/lib/hooks/use-billing-admin";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
@@ -47,9 +42,9 @@ export default function BillingPage() {
       header: "Orden",
       cell: (order) => (
         <div>
-          <span className="font-medium text-gray-900">{order.order_number}</span>
+          <span className="font-medium text-[var(--text-primary)]">{order.order_number}</span>
           {order.package_name && (
-            <p className="text-sm text-gray-500">{order.package_name}</p>
+            <p className="text-sm text-[var(--text-tertiary)]">{order.package_name}</p>
           )}
         </div>
       ),
@@ -58,21 +53,21 @@ export default function BillingPage() {
       key: "tenant",
       header: "Tenant",
       cell: (order) => (
-        <span className="text-gray-700">{order.tenant?.name || "N/A"}</span>
+        <span className="text-[var(--text-secondary)]">{order.tenant?.name || "N/A"}</span>
       ),
     },
     {
       key: "credits",
       header: "Créditos",
       cell: (order) => (
-        <span className="text-gray-900 font-medium">{order.credits_purchased}</span>
+        <span className="text-[var(--text-primary)] font-medium">{order.credits_purchased}</span>
       ),
     },
     {
       key: "amount",
       header: "Monto",
       cell: (order) => (
-        <span className="text-gray-900 font-semibold">
+        <span className="text-[var(--text-primary)] font-semibold">
           {formatCurrency(Number(order.total), order.currency)}
         </span>
       ),
@@ -95,7 +90,7 @@ export default function BillingPage() {
       key: "date",
       header: "Fecha",
       cell: (order) => (
-        <span className="text-gray-500 text-sm">
+        <span className="text-[var(--text-tertiary)] text-sm">
           {order.paid_at ? formatDate(order.paid_at) : formatDate(order.created_at)}
         </span>
       ),
@@ -113,7 +108,7 @@ export default function BillingPage() {
     }));
 
     const csv = [
-      Object.keys(csvData[0]).join(","),
+      Object.keys(csvData[0] || {}).join(","),
       ...csvData.map((row) => Object.values(row).join(",")),
     ].join("\n");
 
@@ -140,50 +135,52 @@ export default function BillingPage() {
   return (
     <PageContainer>
       <PageHeader
-        title="Billing"
+        title="Facturación"
         description="Gestiona facturación y pagos de tenants"
         breadcrumbs={[
           { label: "Admin", href: "/admin" },
-          { label: "Billing" },
+          { label: "Facturación" },
         ]}
         actions={
-          <LightButton
+          <Button
             variant="secondary"
             onClick={handleExport}
             leftIcon={<Download className="h-4 w-4" />}
             disabled={filteredOrders.length === 0}
           >
             Exportar
-          </LightButton>
+          </Button>
         }
       />
 
       {error && (
-        <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400">
+        <div className="mb-4 p-4 bg-[var(--error-light)] border border-[var(--error)]/20 rounded-lg text-[var(--error)]">
           {error}
         </div>
       )}
 
       {stats && (
-        <BillingStats
-          totalRevenue={stats.totalRevenue}
-          creditsSold={stats.creditsSold}
-          activeTenants={stats.activeTenants}
-          pendingPayments={stats.pendingPayments}
-          revenueThisMonth={stats.revenueThisMonth}
-          revenueLastMonth={stats.revenueLastMonth}
-          revenueTrend={stats.revenueTrend}
-        />
+        <div className="mb-6">
+          <BillingStats
+            totalRevenue={stats.totalRevenue}
+            creditsSold={stats.creditsSold}
+            activeTenants={stats.activeTenants}
+            pendingPayments={stats.pendingPayments}
+            revenueThisMonth={stats.revenueThisMonth}
+            revenueLastMonth={stats.revenueLastMonth}
+            revenueTrend={stats.revenueTrend}
+          />
+        </div>
       )}
 
       {/* Orders Table */}
-      <LightCard>
-        <LightCardHeader>
-          <LightCardTitle>Historial de Órdenes</LightCardTitle>
-        </LightCardHeader>
-        <LightCardContent className="p-0">
+      <Card>
+        <CardHeader>
+          <CardTitle>Historial de Órdenes</CardTitle>
+        </CardHeader>
+        <CardContent noPadding>
           {/* Filters */}
-          <div className="p-4 border-b border-gray-200">
+          <div className="p-4 border-b border-[var(--border-primary)]">
             <div className="flex flex-col sm:flex-row gap-4">
               <SearchInput
                 value={search}
@@ -202,10 +199,10 @@ export default function BillingPage() {
                   <button
                     key={status.value}
                     onClick={() => setStatusFilter(status.value)}
-                    className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                    className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
                       statusFilter === status.value
-                        ? "bg-blue-600 text-white"
-                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                        ? "bg-[var(--accent-primary)] text-white"
+                        : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]"
                     }`}
                   >
                     {status.label}
@@ -221,14 +218,16 @@ export default function BillingPage() {
             keyExtractor={(o) => o.id}
             isLoading={isLoading}
             emptyState={
-              <div className="px-6 py-12 text-center text-gray-500">
-                No hay órdenes todavía.
-              </div>
+              <EmptyState
+                icon={<CreditCard />}
+                title="Sin órdenes"
+                description="No hay órdenes todavía."
+                size="sm"
+              />
             }
           />
-        </LightCardContent>
-      </LightCard>
+        </CardContent>
+      </Card>
     </PageContainer>
   );
 }
-
