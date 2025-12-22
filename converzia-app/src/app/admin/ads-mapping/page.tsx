@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Megaphone,
   AlertTriangle,
@@ -11,6 +12,9 @@ import {
   RefreshCw,
   Check,
   Edit,
+  Package,
+  MapPin,
+  Plus,
 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -25,13 +29,29 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Alert } from "@/components/ui/Alert";
 import { Pagination } from "@/components/ui/Pagination";
 import { useToast } from "@/components/ui/Toast";
+import { Input } from "@/components/ui/Input";
 import { useUnmappedAds, useAdMappings, useAdMappingMutations, useOffersForMapping } from "@/lib/hooks/use-ads";
-import { formatRelativeTime, formatDate } from "@/lib/utils";
+import { formatRelativeTime, formatDate, formatCurrency } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
 import type { UnmappedAd } from "@/types";
+
+interface OfferWithoutAd {
+  id: string;
+  name: string;
+  slug: string;
+  city?: string;
+  zone?: string;
+  price_from?: number;
+  price_to?: number;
+  currency?: string;
+  created_at: string;
+  tenant: { id: string; name: string };
+}
 
 export default function AdsMappingPage() {
   const router = useRouter();
   const toast = useToast();
+  const supabase = createClient();
 
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -40,6 +60,15 @@ export default function AdsMappingPage() {
   const [selectedOfferId, setSelectedOfferId] = useState("");
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editingMapping, setEditingMapping] = useState<typeof mappings[0] | null>(null);
+
+  // State for offers without ads
+  const [offersWithoutAds, setOffersWithoutAds] = useState<OfferWithoutAd[]>([]);
+  const [loadingOffersWithoutAds, setLoadingOffersWithoutAds] = useState(true);
+
+  // State for manual mapping modal
+  const [manualMappingOffer, setManualMappingOffer] = useState<OfferWithoutAd | null>(null);
+  const [manualAdId, setManualAdId] = useState("");
+  const [manualCampaignId, setManualCampaignId] = useState("");
 
   const { unmappedAds, total: unmappedTotal, isLoading: loadingUnmapped, error: unmappedError, refetch: refetchUnmapped } = useUnmappedAds();
   const { mappings, total: mappingsTotal, isLoading: loadingMappings, error: mappingsError, refetch: refetchMappings } = useAdMappings({
@@ -53,6 +82,69 @@ export default function AdsMappingPage() {
   // Get offers for selected tenant
   const selectedTenant = tenantsWithOffers.find((t) => t.id === selectedTenantId);
   const offerOptions = selectedTenant?.offers.map((o) => ({ value: o.id, label: o.name, description: selectedTenant.name })) || [];
+
+  // Fetch offers without ads
+  const fetchOffersWithoutAds = useCallback(async () => {
+    setLoadingOffersWithoutAds(true);
+    try {
+      // Get all active/approved offers
+      const { data: offers, error: offersError } = await supabase
+        .from("offers")
+        .select("id, name, slug, city, zone, price_from, price_to, currency, created_at, tenant:tenants(id, name)")
+        .eq("status", "ACTIVE")
+        .eq("approval_status", "APPROVED")
+        .order("created_at", { ascending: false });
+
+      if (offersError) throw offersError;
+
+      // Get all offer_ids that have mappings
+      const { data: mappedOffers } = await supabase
+        .from("ad_offer_map")
+        .select("offer_id");
+
+      const mappedOfferIds = new Set((mappedOffers || []).map((m: any) => m.offer_id));
+
+      // Filter offers that don't have any mappings
+      const unmappedOffers = (offers || [])
+        .filter((offer: any) => !mappedOfferIds.has(offer.id))
+        .map((offer: any) => ({
+          ...offer,
+          tenant: Array.isArray(offer.tenant) ? offer.tenant[0] : offer.tenant,
+        }));
+
+      setOffersWithoutAds(unmappedOffers);
+    } catch (err) {
+      console.error("Error fetching offers without ads:", err);
+    } finally {
+      setLoadingOffersWithoutAds(false);
+    }
+  }, [supabase]);
+
+  useEffect(() => {
+    fetchOffersWithoutAds();
+  }, [fetchOffersWithoutAds]);
+
+  // Handle manual mapping creation
+  const handleManualMapping = async () => {
+    if (!manualMappingOffer || !manualAdId.trim()) return;
+
+    try {
+      await createMapping({
+        tenant_id: manualMappingOffer.tenant.id,
+        offer_id: manualMappingOffer.id,
+        ad_id: manualAdId.trim(),
+        campaign_id: manualCampaignId.trim() || undefined,
+      });
+      toast.success("Mapeo creado correctamente");
+      setManualMappingOffer(null);
+      setManualAdId("");
+      setManualCampaignId("");
+      fetchOffersWithoutAds();
+      refetchMappings();
+    } catch (error) {
+      toast.error("Error al crear el mapeo");
+    }
+  };
 
   const handleCreateMapping = async () => {
     if (!mappingAd || !selectedTenantId || !selectedOfferId) return;
@@ -179,6 +271,79 @@ export default function AdsMappingPage() {
     },
   ];
 
+  // Offers without ads columns
+  const offersWithoutAdsColumns: Column<OfferWithoutAd>[] = [
+    {
+      key: "name",
+      header: "Oferta",
+      cell: (offer) => (
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shrink-0">
+            <Package className="h-5 w-5 text-white" />
+          </div>
+          <div className="min-w-0">
+            <Link
+              href={`/admin/offers/${offer.id}`}
+              className="font-medium text-[var(--text-primary)] hover:text-[var(--accent-primary)] transition-colors block truncate"
+            >
+              {offer.name}
+            </Link>
+            <div className="flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
+              <MapPin className="h-3 w-3 shrink-0" />
+              <span className="truncate">{offer.city || offer.zone || "Sin ubicación"}</span>
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "tenant",
+      header: "Tenant",
+      cell: (offer) => (
+        <Link
+          href={`/admin/tenants/${offer.tenant?.id}`}
+          className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+        >
+          {offer.tenant?.name || "Sin tenant"}
+        </Link>
+      ),
+    },
+    {
+      key: "price",
+      header: "Precio",
+      cell: (offer) => (
+        <span className="text-[var(--text-secondary)]">
+          {offer.price_from
+            ? offer.price_to && offer.price_to !== offer.price_from
+              ? `${formatCurrency(offer.price_from, offer.currency)} - ${formatCurrency(offer.price_to, offer.currency)}`
+              : formatCurrency(offer.price_from, offer.currency)
+            : "Sin precio"}
+        </span>
+      ),
+    },
+    {
+      key: "created",
+      header: "Creada",
+      cell: (offer) => (
+        <span className="text-slate-400 text-sm">{formatRelativeTime(offer.created_at)}</span>
+      ),
+    },
+    {
+      key: "actions",
+      header: "",
+      width: "140px",
+      cell: (offer) => (
+        <Button
+          size="sm"
+          onClick={() => setManualMappingOffer(offer)}
+          leftIcon={<Plus className="h-4 w-4" />}
+        >
+          Crear mapeo
+        </Button>
+      ),
+    },
+  ];
+
   // Mappings columns
   const mappingsColumns: Column<(typeof mappings)[0]>[] = [
     {
@@ -283,6 +448,9 @@ export default function AdsMappingPage() {
           <TabTrigger value="mappings" count={mappingsTotal}>
             Mapeos activos
           </TabTrigger>
+          <TabTrigger value="offers-pending" count={offersWithoutAds.length}>
+            Ofertas sin campaña
+          </TabTrigger>
         </TabsList>
 
         {/* Unmapped Ads */}
@@ -344,6 +512,30 @@ export default function AdsMappingPage() {
                 />
               </div>
             )}
+          </Card>
+        </TabContent>
+
+        {/* Offers without Ads */}
+        <TabContent value="offers-pending">
+          <Card>
+            <CardHeader>
+              <CardTitle>Ofertas sin campaña asociada</CardTitle>
+            </CardHeader>
+            <DataTable
+              data={offersWithoutAds}
+              columns={offersWithoutAdsColumns}
+              keyExtractor={(o) => o.id}
+              isLoading={loadingOffersWithoutAds}
+              onRowClick={(offer) => router.push(`/admin/offers/${offer.id}`)}
+              emptyState={
+                <EmptyState
+                  icon={<Check />}
+                  title="¡Todo listo!"
+                  description="Todas las ofertas activas tienen al menos un ad asociado."
+                  size="sm"
+                />
+              }
+            />
           </Card>
         </TabContent>
       </Tabs>
@@ -524,9 +716,84 @@ export default function AdsMappingPage() {
         variant="danger"
         isLoading={isMutating}
       />
+
+      {/* Manual Mapping Modal */}
+      <Modal
+        isOpen={!!manualMappingOffer}
+        onClose={() => {
+          setManualMappingOffer(null);
+          setManualAdId("");
+          setManualCampaignId("");
+        }}
+        title="Crear mapeo manual"
+        description="Ingresá el Ad ID de Meta para asociar a esta oferta"
+        size="md"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => {
+              setManualMappingOffer(null);
+              setManualAdId("");
+              setManualCampaignId("");
+            }}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleManualMapping}
+              isLoading={isMutating}
+              disabled={!manualAdId.trim()}
+            >
+              Crear mapeo
+            </Button>
+          </>
+        }
+      >
+        {manualMappingOffer && (
+          <div className="space-y-6">
+            {/* Offer Info */}
+            <div className="p-4 rounded-lg bg-card-border/50">
+              <div className="flex items-center gap-3 mb-2">
+                <Package className="h-5 w-5 text-emerald-400" />
+                <span className="font-medium text-white">{manualMappingOffer.name}</span>
+              </div>
+              <div className="flex items-center gap-4 text-sm text-slate-400">
+                <span>{manualMappingOffer.tenant?.name}</span>
+                {manualMappingOffer.city && (
+                  <span className="flex items-center gap-1">
+                    <MapPin className="h-3 w-3" />
+                    {manualMappingOffer.city}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Ad ID Input */}
+            <Input
+              label="Ad ID de Meta *"
+              value={manualAdId}
+              onChange={(e) => setManualAdId(e.target.value)}
+              placeholder="Ej: 23851234567890123"
+              hint="Podés encontrar el Ad ID en el Ads Manager de Meta"
+              required
+            />
+
+            {/* Campaign ID Input (optional) */}
+            <Input
+              label="Campaign ID (opcional)"
+              value={manualCampaignId}
+              onChange={(e) => setManualCampaignId(e.target.value)}
+              placeholder="Ej: 23851234567890456"
+            />
+
+            <Alert variant="info">
+              Una vez creado el mapeo, los leads que lleguen con este Ad ID serán asignados automáticamente a esta oferta.
+            </Alert>
+          </div>
+        )}
+      </Modal>
     </PageContainer>
   );
 }
+
 
 
 

@@ -4,17 +4,20 @@ import { use, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Plus, Trash2 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardFooter, CardSection } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
+import { Switch } from "@/components/ui/Switch";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Alert } from "@/components/ui/Alert";
 import { useToast } from "@/components/ui/Toast";
 import { useTenant, useTenantMutations } from "@/lib/hooks/use-tenants";
 import { updateTenantSchema, type UpdateTenantInput } from "@/lib/validations/tenant";
 import { slugify } from "@/lib/utils";
+import type { TenantPricing } from "@/types";
 
 // Timezone options for Argentina
 const timezoneOptions = [
@@ -22,6 +25,23 @@ const timezoneOptions = [
   { value: "America/Argentina/Cordoba", label: "Córdoba (GMT-3)" },
   { value: "America/Argentina/Mendoza", label: "Mendoza (GMT-3)" },
 ];
+
+// Charge model options
+const chargeModelOptions = [
+  { value: "PER_LEAD", label: "Por Lead" },
+  { value: "PER_SALE", label: "Por Venta" },
+  { value: "SUBSCRIPTION", label: "Suscripción" },
+];
+
+// Default package structure
+interface CreditPackage {
+  id: string;
+  name: string;
+  credits: number;
+  price: number;
+  discount_pct?: number;
+  is_popular?: boolean;
+}
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -31,9 +51,20 @@ export default function EditTenantPage({ params }: Props) {
   const { id } = use(params);
   const router = useRouter();
   const toast = useToast();
-  const { tenant, isLoading: loadingTenant, refetch } = useTenant(id);
-  const { updateTenant, isLoading } = useTenantMutations();
+  const { tenant, pricing, isLoading: loadingTenant, refetch } = useTenant(id);
+  const { updateTenant, updatePricing, isLoading } = useTenantMutations();
   const [autoSlug, setAutoSlug] = useState(true);
+  const [isSavingPricing, setIsSavingPricing] = useState(false);
+
+  // Pricing state
+  const [pricingForm, setPricingForm] = useState({
+    charge_model: "PER_LEAD" as "PER_LEAD" | "PER_SALE" | "SUBSCRIPTION",
+    cost_per_lead: 10,
+    low_credit_threshold: 10,
+    auto_refund_duplicates: true,
+    auto_refund_spam: true,
+    packages: [] as CreditPackage[],
+  });
 
   const {
     register,
@@ -63,6 +94,20 @@ export default function EditTenantPage({ params }: Props) {
     }
   }, [tenant, reset]);
 
+  // Load pricing data into form
+  useEffect(() => {
+    if (pricing) {
+      setPricingForm({
+        charge_model: pricing.charge_model || "PER_LEAD",
+        cost_per_lead: pricing.cost_per_lead || 10,
+        low_credit_threshold: pricing.low_credit_threshold || 10,
+        auto_refund_duplicates: pricing.auto_refund_duplicates ?? true,
+        auto_refund_spam: pricing.auto_refund_spam ?? true,
+        packages: (pricing.packages as CreditPackage[]) || [],
+      });
+    }
+  }, [pricing]);
+
   // Auto-generate slug from name
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newName = e.target.value;
@@ -85,6 +130,49 @@ export default function EditTenantPage({ params }: Props) {
       const errorMessage = error?.message || "Error al actualizar el tenant";
       toast.error(errorMessage);
     }
+  };
+
+  // Save pricing
+  const handleSavePricing = async () => {
+    setIsSavingPricing(true);
+    try {
+      await updatePricing(id, pricingForm);
+      toast.success("Pricing actualizado correctamente");
+      refetch();
+    } catch (error: any) {
+      console.error("Error updating pricing:", error);
+      toast.error(error?.message || "Error al actualizar el pricing");
+    } finally {
+      setIsSavingPricing(false);
+    }
+  };
+
+  // Package management
+  const addPackage = () => {
+    const newId = `pkg_${Date.now()}`;
+    setPricingForm((prev) => ({
+      ...prev,
+      packages: [
+        ...prev.packages,
+        { id: newId, name: "", credits: 50, price: 400 },
+      ],
+    }));
+  };
+
+  const updatePackage = (index: number, field: keyof CreditPackage, value: any) => {
+    setPricingForm((prev) => ({
+      ...prev,
+      packages: prev.packages.map((pkg, i) =>
+        i === index ? { ...pkg, [field]: value } : pkg
+      ),
+    }));
+  };
+
+  const removePackage = (index: number) => {
+    setPricingForm((prev) => ({
+      ...prev,
+      packages: prev.packages.filter((_, i) => i !== index),
+    }));
   };
 
   if (loadingTenant) {
@@ -225,9 +313,187 @@ export default function EditTenantPage({ params }: Props) {
           </Card>
         </div>
       </form>
+
+      {/* Pricing Section - Separate form */}
+      <Card className="mt-6">
+        <CardContent className="p-6">
+          <CardSection title="Modelo de cobro" description="Configuración de pricing y paquetes de créditos">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <Select
+                label="Tipo de cobro"
+                options={chargeModelOptions}
+                value={pricingForm.charge_model}
+                onChange={(e) =>
+                  setPricingForm((prev) => ({
+                    ...prev,
+                    charge_model: e.target.value as "PER_LEAD" | "PER_SALE" | "SUBSCRIPTION",
+                  }))
+                }
+              />
+
+              <Input
+                label="Costo por lead (USD)"
+                type="number"
+                min={0}
+                step={0.01}
+                value={pricingForm.cost_per_lead}
+                onChange={(e) =>
+                  setPricingForm((prev) => ({
+                    ...prev,
+                    cost_per_lead: parseFloat(e.target.value) || 0,
+                  }))
+                }
+              />
+
+              <Input
+                label="Umbral bajo de créditos"
+                type="number"
+                min={0}
+                value={pricingForm.low_credit_threshold}
+                onChange={(e) =>
+                  setPricingForm((prev) => ({
+                    ...prev,
+                    low_credit_threshold: parseInt(e.target.value) || 0,
+                  }))
+                }
+                hint="Se mostrará alerta cuando baje de este nivel"
+              />
+            </div>
+
+            <div className="flex items-center gap-8 mt-6">
+              <Switch
+                label="Auto-refund duplicados"
+                checked={pricingForm.auto_refund_duplicates}
+                onCheckedChange={(checked) =>
+                  setPricingForm((prev) => ({
+                    ...prev,
+                    auto_refund_duplicates: checked,
+                  }))
+                }
+              />
+
+              <Switch
+                label="Auto-refund spam"
+                checked={pricingForm.auto_refund_spam}
+                onCheckedChange={(checked) =>
+                  setPricingForm((prev) => ({
+                    ...prev,
+                    auto_refund_spam: checked,
+                  }))
+                }
+              />
+            </div>
+          </CardSection>
+
+          {/* Credit Packages */}
+          <CardSection
+            title="Paquetes de créditos"
+            description="Configurá los paquetes disponibles para compra"
+            className="mt-8"
+          >
+            <div className="space-y-4">
+              {pricingForm.packages.map((pkg, index) => (
+                <div
+                  key={pkg.id}
+                  className="flex items-center gap-4 p-4 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)]"
+                >
+                  <Input
+                    label="Nombre"
+                    value={pkg.name}
+                    onChange={(e) => updatePackage(index, "name", e.target.value)}
+                    placeholder="Ej: Starter"
+                    className="flex-1"
+                  />
+                  <Input
+                    label="Créditos"
+                    type="number"
+                    min={1}
+                    value={pkg.credits}
+                    onChange={(e) =>
+                      updatePackage(index, "credits", parseInt(e.target.value) || 0)
+                    }
+                    className="w-28"
+                  />
+                  <Input
+                    label="Precio (USD)"
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={pkg.price}
+                    onChange={(e) =>
+                      updatePackage(index, "price", parseFloat(e.target.value) || 0)
+                    }
+                    className="w-32"
+                  />
+                  <Input
+                    label="Descuento %"
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={pkg.discount_pct || ""}
+                    onChange={(e) =>
+                      updatePackage(
+                        index,
+                        "discount_pct",
+                        e.target.value ? parseFloat(e.target.value) : undefined
+                      )
+                    }
+                    className="w-28"
+                  />
+                  <div className="flex items-end gap-2 pb-1">
+                    <Switch
+                      label="Popular"
+                      checked={pkg.is_popular || false}
+                      onCheckedChange={(checked) =>
+                        updatePackage(index, "is_popular", checked)
+                      }
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removePackage(index)}
+                      className="text-red-400 hover:text-red-300"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={addPackage}
+                leftIcon={<Plus className="h-4 w-4" />}
+              >
+                Agregar paquete
+              </Button>
+            </div>
+          </CardSection>
+        </CardContent>
+
+        <CardFooter>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => router.push(`/admin/tenants/${id}`)}
+          >
+            Cancelar
+          </Button>
+          <Button
+            type="button"
+            onClick={handleSavePricing}
+            isLoading={isSavingPricing}
+          >
+            Guardar Pricing
+          </Button>
+        </CardFooter>
+      </Card>
     </PageContainer>
   );
 }
+
 
 
 

@@ -20,6 +20,10 @@ import {
   CheckCircle,
   XCircle,
   Loader2,
+  MapPin,
+  Plus,
+  UserPlus,
+  Activity,
 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -30,12 +34,16 @@ import { ActionDropdown } from "@/components/ui/Dropdown";
 import { StatCard, StatsGrid } from "@/components/ui/StatCard";
 import { Skeleton, FormSkeleton } from "@/components/ui/Skeleton";
 import { Alert } from "@/components/ui/Alert";
+import { DataTable, Column } from "@/components/ui/Table";
+import { StatusBadge } from "@/components/ui/Badge";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Avatar } from "@/components/ui/Avatar";
 import { Modal, ConfirmModal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
 import { useTenant, useTenantMutations } from "@/lib/hooks/use-tenants";
-import { formatDate, formatCurrency } from "@/lib/utils";
+import { formatDate, formatCurrency, formatRelativeTime } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { IntegrationConfigModal } from "@/components/admin/IntegrationConfigModal";
 import { useImpersonation } from "@/lib/hooks/use-impersonation";
@@ -52,6 +60,43 @@ interface TenantIntegration {
   config: Record<string, unknown>;
   last_sync_at: string | null;
   last_error: string | null;
+}
+
+interface TenantOffer {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+  approval_status: string;
+  city?: string;
+  zone?: string;
+  price_from?: number;
+  price_to?: number;
+  currency?: string;
+  created_at: string;
+  _count?: { leads: number; ads: number };
+}
+
+interface TenantMember {
+  id: string;
+  user_id: string;
+  role: string;
+  status: string;
+  created_at: string;
+  user_profiles?: {
+    id: string;
+    full_name: string;
+    email: string;
+    avatar_url?: string;
+  };
+}
+
+interface ActivityEvent {
+  id: string;
+  type: "tenant_created" | "tenant_activated" | "offer_created" | "member_joined" | "lead_received";
+  description: string;
+  timestamp: string;
+  icon: React.ReactNode;
 }
 
 interface Props {
@@ -80,6 +125,18 @@ export default function TenantDetailPage({ params }: Props) {
     existingId?: string;
   } | null>(null);
 
+  // Offers state
+  const [offers, setOffers] = useState<TenantOffer[]>([]);
+  const [offersLoading, setOffersLoading] = useState(true);
+
+  // Members state
+  const [members, setMembers] = useState<TenantMember[]>([]);
+  const [membersLoading, setMembersLoading] = useState(true);
+
+  // Activity state
+  const [activity, setActivity] = useState<ActivityEvent[]>([]);
+  const [activityLoading, setActivityLoading] = useState(true);
+
   // Fetch integrations
   const fetchIntegrations = useCallback(async () => {
     if (!id) return;
@@ -101,6 +158,159 @@ export default function TenantDetailPage({ params }: Props) {
   useEffect(() => {
     fetchIntegrations();
   }, [fetchIntegrations]);
+
+  // Fetch offers
+  const fetchOffers = useCallback(async () => {
+    if (!id) return;
+    setOffersLoading(true);
+
+    try {
+      const { data, error } = await supabase
+        .from("offers")
+        .select("id, name, slug, status, approval_status, city, zone, price_from, price_to, currency, created_at")
+        .eq("tenant_id", id)
+        .order("created_at", { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+
+      // Get counts for each offer
+      const offersWithCounts = await Promise.all(
+        (data || []).map(async (offer: any) => {
+          const [{ count: leadsCount }, { count: adsCount }] = await Promise.all([
+            supabase.from("lead_offers").select("id", { count: "exact", head: true }).eq("offer_id", offer.id),
+            supabase.from("ad_offer_map").select("id", { count: "exact", head: true }).eq("offer_id", offer.id),
+          ]);
+          return { ...offer, _count: { leads: leadsCount || 0, ads: adsCount || 0 } };
+        })
+      );
+
+      setOffers(offersWithCounts);
+    } catch (err) {
+      console.error("Error fetching offers:", err);
+    } finally {
+      setOffersLoading(false);
+    }
+  }, [id, supabase]);
+
+  // Fetch members
+  const fetchMembers = useCallback(async () => {
+    if (!id) return;
+    setMembersLoading(true);
+
+    try {
+      const { data, error } = await supabase
+        .from("tenant_members")
+        .select("id, user_id, role, status, created_at, user_profiles(id, full_name, email, avatar_url)")
+        .eq("tenant_id", id)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      
+      // Flatten user_profiles from array to single object
+      const formattedData = (data || []).map((m: any) => ({
+        ...m,
+        user_profiles: Array.isArray(m.user_profiles) ? m.user_profiles[0] : m.user_profiles,
+      }));
+      
+      setMembers(formattedData);
+    } catch (err) {
+      console.error("Error fetching members:", err);
+    } finally {
+      setMembersLoading(false);
+    }
+  }, [id, supabase]);
+
+  // Fetch activity
+  const fetchActivity = useCallback(async () => {
+    if (!id || !tenant) return;
+    setActivityLoading(true);
+
+    try {
+      const events: ActivityEvent[] = [];
+
+      // Tenant created
+      if (tenant.created_at) {
+        events.push({
+          id: "tenant_created",
+          type: "tenant_created",
+          description: "Tenant registrado",
+          timestamp: tenant.created_at,
+          icon: <Building2 className="h-4 w-4" />,
+        });
+      }
+
+      // Tenant activated
+      if (tenant.activated_at) {
+        events.push({
+          id: "tenant_activated",
+          type: "tenant_activated",
+          description: "Tenant activado",
+          timestamp: tenant.activated_at,
+          icon: <CheckCircle className="h-4 w-4 text-emerald-400" />,
+        });
+      }
+
+      // Get recent offers
+      const { data: recentOffers } = await supabase
+        .from("offers")
+        .select("id, name, created_at")
+        .eq("tenant_id", id)
+        .order("created_at", { ascending: false })
+        .limit(5);
+
+      (recentOffers || []).forEach((offer: any) => {
+        events.push({
+          id: `offer_${offer.id}`,
+          type: "offer_created",
+          description: `Oferta "${offer.name}" creada`,
+          timestamp: offer.created_at,
+          icon: <Package className="h-4 w-4 text-emerald-400" />,
+        });
+      });
+
+      // Get recent members
+      const { data: recentMembers } = await supabase
+        .from("tenant_members")
+        .select("id, created_at, user_profiles(full_name)")
+        .eq("tenant_id", id)
+        .order("created_at", { ascending: false })
+        .limit(5);
+
+      (recentMembers || []).forEach((member: any) => {
+        const userName = Array.isArray(member.user_profiles) 
+          ? member.user_profiles[0]?.full_name 
+          : member.user_profiles?.full_name;
+        events.push({
+          id: `member_${member.id}`,
+          type: "member_joined",
+          description: `${userName || "Usuario"} se unió al equipo`,
+          timestamp: member.created_at,
+          icon: <UserPlus className="h-4 w-4 text-blue-400" />,
+        });
+      });
+
+      // Sort by timestamp descending
+      events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+      setActivity(events.slice(0, 10));
+    } catch (err) {
+      console.error("Error fetching activity:", err);
+    } finally {
+      setActivityLoading(false);
+    }
+  }, [id, tenant, supabase]);
+
+  useEffect(() => {
+    fetchOffers();
+    fetchMembers();
+  }, [fetchOffers, fetchMembers]);
+
+  useEffect(() => {
+    if (tenant) {
+      fetchActivity();
+    }
+  }, [tenant, fetchActivity]);
 
   // Get integration by type
   const getIntegration = (type: IntegrationType): TenantIntegration | undefined => {
@@ -179,6 +389,132 @@ export default function TenantDetailPage({ params }: Props) {
       setIsInviting(false);
     }
   };
+
+  // Offers table columns
+  const offersColumns: Column<TenantOffer>[] = [
+    {
+      key: "name",
+      header: "Oferta",
+      cell: (offer) => (
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shrink-0">
+            <Package className="h-5 w-5 text-white" />
+          </div>
+          <div className="min-w-0">
+            <span className="font-medium text-[var(--text-primary)] block truncate">
+              {offer.name}
+            </span>
+            <div className="flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
+              <MapPin className="h-3 w-3 shrink-0" />
+              <span className="truncate">{offer.city || offer.zone || "Sin ubicación"}</span>
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "status",
+      header: "Estado",
+      cell: (offer) => {
+        const statusConfig: Record<string, { label: string; variant: "success" | "warning" | "secondary" | "default" }> = {
+          ACTIVE: { label: "Activo", variant: "success" },
+          DRAFT: { label: "Borrador", variant: "secondary" },
+          PAUSED: { label: "Pausado", variant: "warning" },
+          ARCHIVED: { label: "Archivado", variant: "default" },
+        };
+        const config = statusConfig[offer.status] || { label: offer.status, variant: "default" };
+        return <StatusBadge status={config.label} variant={config.variant} />;
+      },
+    },
+    {
+      key: "price",
+      header: "Precio",
+      cell: (offer) => (
+        <span className="text-[var(--text-secondary)]">
+          {offer.price_from
+            ? offer.price_to && offer.price_to !== offer.price_from
+              ? `${formatCurrency(offer.price_from, offer.currency)} - ${formatCurrency(offer.price_to, offer.currency)}`
+              : formatCurrency(offer.price_from, offer.currency)
+            : "Sin precio"}
+        </span>
+      ),
+    },
+    {
+      key: "stats",
+      header: "Stats",
+      cell: (offer) => (
+        <div className="flex items-center gap-4 text-sm text-[var(--text-secondary)]">
+          <span title="Leads">{offer._count?.leads || 0} leads</span>
+          <span title="Ads">{offer._count?.ads || 0} ads</span>
+        </div>
+      ),
+    },
+  ];
+
+  // Members table columns
+  const membersColumns: Column<TenantMember>[] = [
+    {
+      key: "user",
+      header: "Usuario",
+      cell: (member) => (
+        <div className="flex items-center gap-3">
+          <Avatar
+            src={member.user_profiles?.avatar_url}
+            alt={member.user_profiles?.full_name || "Usuario"}
+            size="sm"
+          />
+          <div className="min-w-0">
+            <span className="font-medium text-[var(--text-primary)] block truncate">
+              {member.user_profiles?.full_name || "Usuario sin nombre"}
+            </span>
+            <span className="text-xs text-[var(--text-tertiary)] truncate block">
+              {member.user_profiles?.email}
+            </span>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "role",
+      header: "Rol",
+      cell: (member) => {
+        const roleLabels: Record<string, string> = {
+          OWNER: "Owner",
+          ADMIN: "Admin",
+          BILLING: "Billing",
+          VIEWER: "Viewer",
+        };
+        return (
+          <Badge variant="secondary">
+            {roleLabels[member.role] || member.role}
+          </Badge>
+        );
+      },
+    },
+    {
+      key: "status",
+      header: "Estado",
+      cell: (member) => {
+        const statusConfig: Record<string, { label: string; variant: "success" | "warning" | "secondary" | "danger" }> = {
+          ACTIVE: { label: "Activo", variant: "success" },
+          PENDING_APPROVAL: { label: "Pendiente", variant: "warning" },
+          SUSPENDED: { label: "Suspendido", variant: "danger" },
+          REVOKED: { label: "Revocado", variant: "secondary" },
+        };
+        const config = statusConfig[member.status] || { label: member.status, variant: "secondary" };
+        return <StatusBadge status={config.label} variant={config.variant} />;
+      },
+    },
+    {
+      key: "joined",
+      header: "Agregado",
+      cell: (member) => (
+        <span className="text-[var(--text-tertiary)] text-sm">
+          {formatRelativeTime(member.created_at)}
+        </span>
+      ),
+    },
+  ];
 
   if (isLoading) {
     return (
@@ -446,17 +782,43 @@ export default function TenantDetailPage({ params }: Props) {
               <Button
                 size="sm"
                 onClick={() => router.push(`/admin/offers/new?tenant=${tenant.id}`)}
+                leftIcon={<Plus className="h-4 w-4" />}
               >
                 Nueva oferta
               </Button>
             }>
               <CardTitle>Ofertas del tenant</CardTitle>
             </CardHeader>
-            <CardContent>
-              <p className="text-slate-500 text-center py-8">
-                Ir a <Link href={`/admin/offers?tenant=${tenant.id}`} className="text-primary-400 hover:underline">Ofertas</Link> para ver todas las ofertas de este tenant.
-              </p>
-            </CardContent>
+            <DataTable
+              data={offers}
+              columns={offersColumns}
+              keyExtractor={(o) => o.id}
+              isLoading={offersLoading}
+              loadingRows={3}
+              onRowClick={(offer) => router.push(`/admin/offers/${offer.id}`)}
+              emptyState={
+                <EmptyState
+                  icon={<Package />}
+                  title="Sin ofertas"
+                  description="Este tenant no tiene ofertas creadas aún."
+                  action={{
+                    label: "Crear oferta",
+                    onClick: () => router.push(`/admin/offers/new?tenant=${tenant.id}`),
+                  }}
+                  size="sm"
+                />
+              }
+            />
+            {offers.length > 0 && (
+              <div className="p-4 border-t border-[var(--border-primary)]">
+                <Link
+                  href={`/admin/offers?tenant=${tenant.id}`}
+                  className="text-sm text-[var(--accent-primary)] hover:underline"
+                >
+                  Ver todas las ofertas →
+                </Link>
+              </div>
+            )}
           </Card>
         </TabContent>
 
@@ -464,15 +826,41 @@ export default function TenantDetailPage({ params }: Props) {
         <TabContent value="users">
           <Card>
             <CardHeader action={
-              <Button size="sm" onClick={() => setShowInviteModal(true)}>Invitar usuario</Button>
+              <Button size="sm" onClick={() => setShowInviteModal(true)} leftIcon={<UserPlus className="h-4 w-4" />}>
+                Invitar usuario
+              </Button>
             }>
               <CardTitle>Miembros del equipo</CardTitle>
             </CardHeader>
-            <CardContent>
-              <p className="text-slate-500 text-center py-8">
-                Los usuarios del tenant se gestionan desde la sección de <Link href="/admin/users" className="text-primary-400 hover:underline">Usuarios</Link>.
-              </p>
-            </CardContent>
+            <DataTable
+              data={members}
+              columns={membersColumns}
+              keyExtractor={(m) => m.id}
+              isLoading={membersLoading}
+              loadingRows={3}
+              emptyState={
+                <EmptyState
+                  icon={<Users />}
+                  title="Sin miembros"
+                  description="Este tenant no tiene miembros asignados."
+                  action={{
+                    label: "Invitar usuario",
+                    onClick: () => setShowInviteModal(true),
+                  }}
+                  size="sm"
+                />
+              }
+            />
+            {members.length > 0 && (
+              <div className="p-4 border-t border-[var(--border-primary)]">
+                <Link
+                  href={`/admin/users?tenant=${tenant.id}`}
+                  className="text-sm text-[var(--accent-primary)] hover:underline"
+                >
+                  Gestionar usuarios →
+                </Link>
+              </div>
+            )}
           </Card>
         </TabContent>
 
@@ -504,9 +892,39 @@ export default function TenantDetailPage({ params }: Props) {
               <CardTitle>Historial de actividad</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-slate-500 text-center py-8">
-                No hay actividad reciente registrada.
-              </p>
+              {activityLoading ? (
+                <div className="space-y-4">
+                  {[...Array(5)].map((_, i) => (
+                    <Skeleton key={i} className="h-12 rounded-lg" />
+                  ))}
+                </div>
+              ) : activity.length === 0 ? (
+                <EmptyState
+                  icon={<Activity />}
+                  title="Sin actividad"
+                  description="No hay actividad registrada para este tenant."
+                  size="sm"
+                />
+              ) : (
+                <div className="space-y-1">
+                  {activity.map((event, index) => (
+                    <div
+                      key={event.id}
+                      className="flex items-start gap-4 py-3 px-3 rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors"
+                    >
+                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[var(--bg-tertiary)] flex items-center justify-center">
+                        {event.icon}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-[var(--text-primary)]">{event.description}</p>
+                        <p className="text-xs text-[var(--text-tertiary)]">
+                          {formatRelativeTime(event.timestamp)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabContent>
@@ -684,6 +1102,7 @@ function IntegrationCard({
     </Card>
   );
 }
+
 
 
 

@@ -198,8 +198,10 @@ export default function OffersPage() {
       return offer.approval_status === "PENDING_APPROVAL";
     }
     if (activeTab === "backlog") {
-      // This would need actual ad mapping check - for now show approved without status check
-      return offer.approval_status === "APPROVED" && offer.status === "ACTIVE";
+      // Show approved/active offers that have no ad mappings
+      return offer.approval_status === "APPROVED" && 
+             offer.status === "ACTIVE" && 
+             (offer._count?.ads || 0) === 0;
     }
     return true;
   });
