@@ -64,15 +64,15 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Now get the full data
+    // Now get the full data - specify the FK relationship explicitly
     const { data: leadOffer, error } = await supabase
       .from("lead_offers")
       .select(`
         id,
         status,
-        lead:leads(phone, full_name),
-        offer:offers(name),
-        tenant:tenants(name)
+        lead:leads!lead_id(phone, full_name),
+        offer:offers!offer_id(name),
+        tenant:tenants!tenant_id(name)
       `)
       .eq("id", leadOfferId.trim())
       .single();
