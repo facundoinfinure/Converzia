@@ -170,6 +170,8 @@ export interface WebhookConfig {
 export type OfferStatus = "ACTIVE" | "DRAFT" | "PAUSED" | "ARCHIVED";
 export type OfferType = "PROPERTY" | "AUTO" | "LOAN" | "INSURANCE";
 
+export type OfferApprovalStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
+
 export interface Offer {
   id: string;
   tenant_id: string;
@@ -177,6 +179,13 @@ export interface Offer {
   slug: string;
   offer_type: OfferType;
   status: OfferStatus;
+  // Approval workflow (for tenant-created offers)
+  approval_status?: OfferApprovalStatus;
+  submitted_at?: string | null;
+  approved_at?: string | null;
+  approved_by?: string | null;
+  rejection_reason?: string | null;
+  // Content
   description: string | null;
   short_description: string | null;
   image_url: string | null;
@@ -192,6 +201,9 @@ export interface Offer {
   priority: number;
   created_at: string;
   updated_at: string;
+  // Relations (populated by queries)
+  tenant?: { id: string; name: string };
+  _count?: { variants?: number; leads?: number; ads?: number };
 }
 
 export interface OfferVariant {

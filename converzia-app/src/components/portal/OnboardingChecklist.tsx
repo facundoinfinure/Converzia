@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   CheckCircle2,
-  Link2,
   CreditCard,
   ChevronDown,
   ChevronUp,
@@ -49,16 +48,10 @@ export function OnboardingChecklist({ tenantId }: OnboardingChecklistProps) {
     // Check each onboarding milestone in parallel
     const [
       { count: adsCount },
-      { count: integrationsCount },
       { data: creditsData },
     ] = await Promise.all([
       supabase
         .from("ad_offer_map")
-        .select("id", { count: "exact", head: true })
-        .eq("tenant_id", tenantId)
-        .eq("is_active", true),
-      supabase
-        .from("tenant_integrations")
         .select("id", { count: "exact", head: true })
         .eq("tenant_id", tenantId)
         .eq("is_active", true),
@@ -69,38 +62,30 @@ export function OnboardingChecklist({ tenantId }: OnboardingChecklistProps) {
         .maybeSingle(),
     ]);
 
-    const hasAds = (adsCount || 0) > 0;
-    const hasIntegration = (integrationsCount || 0) > 0;
+    const hasCampaigns = (adsCount || 0) > 0;
     const hasCredits = (creditsData?.current_balance || 0) > 0;
 
     // Only show tenant-actionable steps + status of Converzia-managed steps
+    // Note: Integrations are now managed by Converzia, not visible to tenant
     setSteps([
-      {
-        id: "integrations",
-        title: "Configurar integraciones",
-        description: "Conectá Google Sheets, Tokko o un webhook para recibir leads",
-        href: "/portal/integrations",
-        icon: Link2,
-        isCompleted: hasIntegration,
-      },
       {
         id: "credits",
         title: "Comprar créditos",
-        description: "Adquirí créditos para que tus leads sean entregados",
+        description: "Adquirí créditos para recibir leads calificados",
         href: "/portal/billing",
         icon: CreditCard,
         isCompleted: hasCredits,
       },
       {
-        id: "ads",
-        title: "Anuncios mapeados",
-        description: hasAds 
-          ? "Tus anuncios de Meta están conectados" 
-          : "Converzia está configurando tus anuncios",
+        id: "campaigns",
+        title: "Campañas activas",
+        description: hasCampaigns 
+          ? "Tus campañas están generando leads" 
+          : "Converzia está configurando tus campañas",
         href: null, // Not actionable by tenant
-        icon: hasAds ? Megaphone : Clock,
-        isCompleted: hasAds,
-        isPending: !hasAds,
+        icon: hasCampaigns ? Megaphone : Clock,
+        isCompleted: hasCampaigns,
+        isPending: !hasCampaigns,
       },
     ]);
 

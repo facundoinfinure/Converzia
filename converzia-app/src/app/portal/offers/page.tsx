@@ -1,6 +1,8 @@
 "use client";
 
-import { Package, Users, Layers, MapPin, Mail, ExternalLink } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Package, Users, MapPin, Plus, TrendingUp, Clock, CheckCircle, XCircle, Pause, Play } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -8,24 +10,48 @@ import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { NoOffersEmptyState } from "@/components/ui/EmptyState";
 import { usePortalOffers } from "@/lib/hooks/use-portal";
+import { useAuth } from "@/lib/auth/context";
 import { formatCurrency } from "@/lib/utils";
-import { Alert } from "@/components/ui/Alert";
 
-// Status config
-const statusConfig: Record<string, { label: string; variant: "success" | "warning" | "secondary" | "default" }> = {
-  ACTIVE: { label: "Activo", variant: "success" },
-  DRAFT: { label: "Borrador", variant: "secondary" },
-  PAUSED: { label: "Pausado", variant: "warning" },
-  ARCHIVED: { label: "Archivado", variant: "default" },
+// Combined status config (status + approval_status)
+const getStatusDisplay = (offer: any): { label: string; variant: "success" | "warning" | "secondary" | "default" | "danger" | "info"; icon?: React.ElementType } => {
+  // Check approval status first
+  const approvalStatus = offer.approval_status || 'APPROVED';
+  
+  if (approvalStatus === 'PENDING_APPROVAL') {
+    return { label: "En revisión", variant: "info", icon: Clock };
+  }
+  if (approvalStatus === 'REJECTED') {
+    return { label: "Rechazada", variant: "danger", icon: XCircle };
+  }
+  if (approvalStatus === 'DRAFT') {
+    return { label: "Borrador", variant: "secondary" };
+  }
+  
+  // If approved, check operational status
+  switch (offer.status) {
+    case 'ACTIVE':
+      return { label: "Activa", variant: "success", icon: CheckCircle };
+    case 'PAUSED':
+      return { label: "Pausada", variant: "warning", icon: Pause };
+    case 'ARCHIVED':
+      return { label: "Archivada", variant: "default" };
+    default:
+      return { label: offer.status, variant: "secondary" };
+  }
 };
 
 export default function PortalOffersPage() {
+  const router = useRouter();
   const { offers, isLoading } = usePortalOffers();
+  const { hasPermission } = useAuth();
+  
+  const canManageOffers = hasPermission?.('manage_offers') ?? false;
 
   if (isLoading) {
     return (
       <PageContainer>
-        <PageHeader title="Mis Ofertas" />
+        <PageHeader title="Mis Proyectos" />
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[...Array(3)].map((_, i) => (
             <Skeleton key={i} className="h-64 rounded-xl" />
@@ -35,67 +61,65 @@ export default function PortalOffersPage() {
     );
   }
 
-  const handleRequestChanges = () => {
-    window.location.href = "mailto:soporte@converzia.ai?subject=Solicitud de cambios en ofertas";
-  };
-
   return (
     <PageContainer>
       <PageHeader
-        title="Mis Ofertas"
-        description="Proyectos configurados para recibir y calificar leads"
+        title="Mis Proyectos"
+        description="Tus proyectos inmobiliarios y su rendimiento"
         actions={
-          offers.length > 0 && (
+          canManageOffers && (
             <Button
-              variant="secondary"
-              leftIcon={<Mail className="h-4 w-4" />}
-              onClick={handleRequestChanges}
+              leftIcon={<Plus className="h-4 w-4" />}
+              onClick={() => router.push("/portal/offers/new")}
             >
-              Solicitar cambios
+              Nuevo proyecto
             </Button>
           )
         }
       />
 
-      {/* Info alert */}
-      {offers.length > 0 && (
-        <Alert variant="info" className="mb-6">
-          Las ofertas son configuradas por el equipo de Converzia. Si necesitás agregar o modificar una oferta, contactanos.
-        </Alert>
-      )}
-
       {offers.length === 0 ? (
         <NoOffersEmptyState 
-          action={{
-            label: "Contactar a Converzia",
-            onClick: handleRequestChanges,
-          }}
+          action={canManageOffers ? {
+            label: "Crear primer proyecto",
+            onClick: () => router.push("/portal/offers/new"),
+          } : undefined}
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {offers.map((offer) => {
-            const status = statusConfig[offer.status];
+            const statusDisplay = getStatusDisplay(offer);
+            const StatusIcon = statusDisplay.icon;
+            const leadCount = (offer as any).lead_count || 0;
+            const deliveredCount = (offer as any).delivered_count || 0;
 
             return (
-              <Card key={offer.id} className="overflow-hidden hover:border-slate-600 transition-colors">
-                {/* Image */}
-                <div className="h-40 bg-gradient-to-br from-primary-500/20 to-accent-500/20 flex items-center justify-center">
-                  {offer.image_url ? (
-                    <img
-                      src={offer.image_url}
-                      alt={offer.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <Package className="h-12 w-12 text-slate-600" />
-                  )}
-                </div>
+              <Link key={offer.id} href={`/portal/offers/${offer.id}`}>
+                <Card className="overflow-hidden hover:border-primary-500/50 transition-colors cursor-pointer h-full">
+                  {/* Image */}
+                  <div className="h-36 bg-gradient-to-br from-primary-500/20 to-accent-500/20 flex items-center justify-center relative">
+                    {offer.image_url ? (
+                      <img
+                        src={offer.image_url}
+                        alt={offer.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <Package className="h-10 w-10 text-slate-600" />
+                    )}
+                    {/* Status badge overlay */}
+                    <div className="absolute top-3 right-3">
+                      <Badge variant={statusDisplay.variant} dot>
+                        {StatusIcon && <StatusIcon className="h-3 w-3 mr-1" />}
+                        {statusDisplay.label}
+                      </Badge>
+                    </div>
+                  </div>
 
-                <CardContent className="p-4">
-                  {/* Header */}
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h3 className="font-semibold text-white">{offer.name}</h3>
+                  <CardContent className="p-4">
+                    {/* Header */}
+                    <div className="mb-3">
+                      <h3 className="font-semibold text-white text-lg">{offer.name}</h3>
                       {(offer.city || offer.zone) && (
                         <p className="text-sm text-slate-500 flex items-center gap-1 mt-0.5">
                           <MapPin className="h-3 w-3" />
@@ -103,40 +127,39 @@ export default function PortalOffersPage() {
                         </p>
                       )}
                     </div>
-                    <Badge variant={status?.variant || "default"} dot>
-                      {status?.label || offer.status}
-                    </Badge>
-                  </div>
 
-                  {/* Description */}
-                  {offer.short_description && (
-                    <p className="text-sm text-slate-400 mb-4 line-clamp-2">
-                      {offer.short_description}
-                    </p>
-                  )}
+                    {/* Price */}
+                    {offer.price_from && (
+                      <p className="text-lg font-semibold text-primary-400 mb-3">
+                        {offer.price_to && offer.price_to !== offer.price_from
+                          ? `${formatCurrency(offer.price_from, offer.currency)} - ${formatCurrency(offer.price_to, offer.currency)}`
+                          : `Desde ${formatCurrency(offer.price_from, offer.currency)}`}
+                      </p>
+                    )}
 
-                  {/* Price */}
-                  {offer.price_from && (
-                    <p className="text-lg font-semibold text-primary-400 mb-4">
-                      {offer.price_to && offer.price_to !== offer.price_from
-                        ? `${formatCurrency(offer.price_from, offer.currency)} - ${formatCurrency(offer.price_to, offer.currency)}`
-                        : `Desde ${formatCurrency(offer.price_from, offer.currency)}`}
-                    </p>
-                  )}
+                    {/* Funnel Summary */}
+                    <div className="flex items-center gap-4 text-sm pt-3 border-t border-card-border">
+                      <div className="flex items-center gap-1.5">
+                        <Users className="h-4 w-4 text-slate-500" />
+                        <span className="text-slate-400">{leadCount} leads</span>
+                      </div>
+                      {deliveredCount > 0 && (
+                        <div className="flex items-center gap-1.5">
+                          <TrendingUp className="h-4 w-4 text-emerald-500" />
+                          <span className="text-emerald-400">{deliveredCount} entregados</span>
+                        </div>
+                      )}
+                    </div>
 
-                  {/* Stats */}
-                  <div className="flex items-center gap-4 text-sm text-slate-500 pt-3 border-t border-card-border">
-                    <span className="flex items-center gap-1">
-                      <Users className="h-4 w-4" />
-                      {(offer as any).lead_count || 0} leads
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Layers className="h-4 w-4" />
-                      {(offer as any).variant_count || 0} variantes
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
+                    {/* Rejection reason if applicable */}
+                    {offer.approval_status === 'REJECTED' && offer.rejection_reason && (
+                      <div className="mt-3 p-2 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-400">
+                        <strong>Motivo:</strong> {offer.rejection_reason}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </Link>
             );
           })}
         </div>
@@ -144,4 +167,3 @@ export default function PortalOffersPage() {
     </PageContainer>
   );
 }
-

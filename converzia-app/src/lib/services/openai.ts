@@ -568,3 +568,215 @@ export function calculateFinePrefsCompleteness(fields: QualificationFields): num
   return filled / finePrefs.length;
 }
 
+// ============================================
+// Disqualification Categories
+// ============================================
+
+export const DISQUALIFICATION_CATEGORIES = [
+  'PRICE_TOO_HIGH',
+  'PRICE_TOO_LOW', 
+  'WRONG_ZONE',
+  'WRONG_TYPOLOGY',
+  'NO_RESPONSE',
+  'NOT_INTERESTED',
+  'MISSING_AMENITY',
+  'DUPLICATE',
+  'OTHER'
+] as const;
+
+export type DisqualificationCategory = typeof DISQUALIFICATION_CATEGORIES[number];
+
+export interface DisqualificationResult {
+  shouldDisqualify: boolean;
+  category?: DisqualificationCategory;
+  reason?: string;
+}
+
+/**
+ * Evaluate if a lead should be disqualified based on their qualification fields
+ * compared to the offer's requirements. Also extracts the category and reason.
+ */
+export async function evaluateDisqualification(
+  fields: QualificationFields,
+  offer: Offer | null,
+  conversationHistory: Array<{ role: "user" | "assistant"; content: string }>
+): Promise<DisqualificationResult> {
+  // Quick checks that don't need LLM
+  
+  // 1. Check if lead explicitly said not interested
+  const lastUserMessages = conversationHistory
+    .filter(m => m.role === "user")
+    .slice(-3)
+    .map(m => m.content.toLowerCase());
+  
+  const notInterestedPhrases = [
+    "no me interesa",
+    "no estoy interesado",
+    "no quiero",
+    "no gracias",
+    "dejá de escribirme",
+    "no me contacten",
+  ];
+  
+  for (const msg of lastUserMessages) {
+    if (notInterestedPhrases.some(phrase => msg.includes(phrase))) {
+      return {
+        shouldDisqualify: true,
+        category: "NOT_INTERESTED",
+        reason: "El lead indicó explícitamente que no está interesado",
+      };
+    }
+  }
+
+  // If no offer, can't do offer-specific disqualification
+  if (!offer) {
+    return { shouldDisqualify: false };
+  }
+
+  // 2. Budget check
+  if (fields.budget && offer.price_from) {
+    const maxBudget = fields.budget.max || fields.budget.min;
+    const minOfferPrice = offer.price_from;
+    
+    // If lead's max budget is significantly less than offer's minimum price
+    if (maxBudget && maxBudget < minOfferPrice * 0.7) {
+      return {
+        shouldDisqualify: true,
+        category: "PRICE_TOO_HIGH",
+        reason: `Presupuesto máximo del lead (${maxBudget}) muy por debajo del precio mínimo del proyecto (${minOfferPrice})`,
+      };
+    }
+    
+    // If lead's min budget is way above offer's max price
+    if (fields.budget.min && offer.price_to && fields.budget.min > offer.price_to * 1.5) {
+      return {
+        shouldDisqualify: true,
+        category: "PRICE_TOO_LOW",
+        reason: `Presupuesto mínimo del lead (${fields.budget.min}) muy por encima del precio máximo del proyecto (${offer.price_to})`,
+      };
+    }
+  }
+
+  // 3. Zone check
+  if (fields.zone && fields.zone.length > 0 && offer.city) {
+    const offerLocation = `${offer.city} ${offer.zone || ""}`.toLowerCase();
+    const leadZones = fields.zone.map(z => z.toLowerCase());
+    
+    // If lead has specific zones and none match the offer location
+    const hasMatch = leadZones.some(zone => 
+      offerLocation.includes(zone) || zone.includes(offer.city?.toLowerCase() || "")
+    );
+    
+    if (!hasMatch && leadZones.length <= 3) {
+      // Only disqualify if they have specific zones (not just "anywhere")
+      const anywhereIndicators = ["cualquier", "donde sea", "no importa", "toda", "todos"];
+      const isFlexible = leadZones.some(z => anywhereIndicators.some(i => z.includes(i)));
+      
+      if (!isFlexible) {
+        return {
+          shouldDisqualify: true,
+          category: "WRONG_ZONE",
+          reason: `El lead busca en ${fields.zone.join(", ")} pero el proyecto está en ${offer.city}`,
+        };
+      }
+    }
+  }
+
+  // 4. Typology check (if offer specifies and lead has preferences)
+  // This would need offer variants data - skip for now
+
+  return { shouldDisqualify: false };
+}
+
+/**
+ * Determine disqualification from conversation using LLM
+ * Use this for more nuanced cases that rule-based checks can't handle
+ */
+export async function determineDisqualificationFromConversation(
+  conversationHistory: Array<{ role: "user" | "assistant"; content: string }>,
+  fields: QualificationFields,
+  offer: Offer | null
+): Promise<DisqualificationResult> {
+  // First try rule-based evaluation
+  const ruleBasedResult = await evaluateDisqualification(fields, offer, conversationHistory);
+  if (ruleBasedResult.shouldDisqualify) {
+    return ruleBasedResult;
+  }
+
+  // If rule-based doesn't disqualify, and we have enough context, use LLM
+  if (conversationHistory.length < 4) {
+    return { shouldDisqualify: false };
+  }
+
+  const openai = await getOpenAI();
+  const model = await getModel("extraction");
+
+  const conversationText = conversationHistory
+    .slice(-8)
+    .map(m => `${m.role === "user" ? "Lead" : "Bot"}: ${m.content}`)
+    .join("\n");
+
+  const offerContext = offer 
+    ? `Proyecto: ${offer.name} en ${offer.city || "ubicación no especificada"}. Precio: ${offer.price_from ? `desde ${offer.price_from} USD` : "a consultar"}.`
+    : "Sin proyecto específico asignado.";
+
+  const systemPrompt = `Analizá esta conversación de calificación inmobiliaria y determiná si el lead debe ser descalificado.
+
+Contexto del proyecto:
+${offerContext}
+
+Información del lead:
+${JSON.stringify(fields, null, 2)}
+
+Categorías de descalificación válidas:
+- PRICE_TOO_HIGH: el presupuesto del lead está muy por debajo del precio del proyecto
+- PRICE_TOO_LOW: el presupuesto del lead está muy por encima (busca algo más caro)
+- WRONG_ZONE: el lead busca en zonas muy diferentes a donde está el proyecto
+- WRONG_TYPOLOGY: el lead busca un tipo de propiedad que no ofrecemos (ej: casa en un edificio)
+- NO_RESPONSE: el lead dejó de responder después de múltiples intentos
+- NOT_INTERESTED: el lead indicó que no le interesa
+- MISSING_AMENITY: el lead requiere algo específico que no tenemos (ej: pileta, cochera)
+- OTHER: otro motivo de descalificación
+
+Respondé en JSON con el formato:
+{
+  "shouldDisqualify": boolean,
+  "category": "CATEGORY_NAME" | null,
+  "reason": "explicación breve" | null
+}
+
+IMPORTANTE:
+- Solo descalificá si hay evidencia clara en la conversación
+- Si hay duda, NO descalifiques (shouldDisqualify: false)
+- No descalifiques solo porque faltan datos - eso es normal en calificación`;
+
+  const timer = startTimer();
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `CONVERSACIÓN:\n${conversationText}` },
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.1,
+    });
+
+    Metrics.openaiRequest(model, "disqualification");
+    Metrics.openaiLatency(model, timer());
+
+    const content = completion.choices[0]?.message?.content || "{}";
+    const result = JSON.parse(content);
+
+    return {
+      shouldDisqualify: result.shouldDisqualify || false,
+      category: DISQUALIFICATION_CATEGORIES.includes(result.category) ? result.category : undefined,
+      reason: result.reason || undefined,
+    };
+  } catch (error) {
+    logger.exception("Error determining disqualification", error);
+    return { shouldDisqualify: false };
+  }
+}
+

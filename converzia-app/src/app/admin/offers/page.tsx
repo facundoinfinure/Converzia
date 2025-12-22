@@ -1,23 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Plus, Package, Users, Layers, Megaphone, MapPin, Building2 } from "lucide-react";
+import { Plus, Package, Users, Layers, Megaphone, MapPin, Building2, Clock, AlertTriangle, CheckCircle, XCircle } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
-import { Card, CardContent } from "@/components/ui/Card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { DataTable, Column } from "@/components/ui/Table";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Badge, StatusBadge } from "@/components/ui/Badge";
 import { ActionDropdown } from "@/components/ui/Dropdown";
 import { CustomSelect } from "@/components/ui/Select";
-import { ConfirmModal } from "@/components/ui/Modal";
-import { NoOffersEmptyState } from "@/components/ui/EmptyState";
+import { ConfirmModal, Modal } from "@/components/ui/Modal";
+import { NoOffersEmptyState, EmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
+import { TextArea } from "@/components/ui/TextArea";
 import { useToast } from "@/components/ui/Toast";
 import { useOffers, useOfferMutations, useTenantOptions } from "@/lib/hooks/use-offers";
-import { formatCurrency } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
+import { formatCurrency, formatRelativeTime } from "@/lib/utils";
 import type { Offer } from "@/types";
 
 // Status config
@@ -28,6 +31,14 @@ const statusConfig: Record<string, { label: string; variant: "success" | "warnin
   ARCHIVED: { label: "Archivado", variant: "default" },
 };
 
+// Approval status config
+const approvalStatusConfig: Record<string, { label: string; variant: "success" | "warning" | "secondary" | "default" | "info" | "danger" }> = {
+  DRAFT: { label: "Borrador", variant: "secondary" },
+  PENDING_APPROVAL: { label: "Pendiente", variant: "info" },
+  APPROVED: { label: "Aprobada", variant: "success" },
+  REJECTED: { label: "Rechazada", variant: "danger" },
+};
+
 // Offer type config
 const typeConfig: Record<string, { label: string; icon: React.ElementType }> = {
   PROPERTY: { label: "Inmueble", icon: Building2 },
@@ -36,16 +47,30 @@ const typeConfig: Record<string, { label: string; icon: React.ElementType }> = {
   INSURANCE: { label: "Seguro", icon: Package },
 };
 
+// Tabs
+type TabType = "all" | "pending" | "backlog";
+
 export default function OffersPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const toast = useToast();
+  const supabase = createClient();
 
+  const [activeTab, setActiveTab] = useState<TabType>("all");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [tenantFilter, setTenantFilter] = useState<string>(searchParams.get("tenant") || "");
   const [page, setPage] = useState(1);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  
+  // Approval/Rejection modal
+  const [reviewingOffer, setReviewingOffer] = useState<any>(null);
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  // Pending offers count
+  const [pendingCount, setPendingCount] = useState(0);
+  const [backlogCount, setBacklogCount] = useState(0);
 
   const { offers, total, isLoading, error, refetch } = useOffers({
     tenantId: tenantFilter || undefined,
@@ -57,6 +82,46 @@ export default function OffersPage() {
 
   const { deleteOffer, updateOffer, isLoading: isMutating } = useOfferMutations();
   const { options: tenantOptions } = useTenantOptions();
+
+  // Fetch counts for tabs
+  useEffect(() => {
+    async function fetchCounts() {
+      // Pending approval count
+      const { count: pending } = await supabase
+        .from("offers")
+        .select("id", { count: "exact", head: true })
+        .eq("approval_status", "PENDING_APPROVAL");
+      setPendingCount(pending || 0);
+
+      // Backlog count (approved but no ad mapped)
+      const { data: approvedOffers } = await queryWithTimeout(
+        supabase
+          .from("offers")
+          .select("id")
+          .eq("approval_status", "APPROVED")
+          .eq("status", "ACTIVE"),
+        10000,
+        "fetch approved offers"
+      );
+
+      if (approvedOffers) {
+        const offerIds = approvedOffers.map((o: any) => o.id);
+        const { data: mappedOffers } = await queryWithTimeout(
+          supabase
+            .from("ad_offer_map")
+            .select("offer_id")
+            .in("offer_id", offerIds)
+            .eq("is_active", true),
+          10000,
+          "fetch mapped offers"
+        );
+        
+        const mappedIds = new Set((mappedOffers || []).map((m: any) => m.offer_id));
+        setBacklogCount(offerIds.filter(id => !mappedIds.has(id)).length);
+      }
+    }
+    fetchCounts();
+  }, [supabase, offers]);
 
   const handleStatusChange = async (id: string, newStatus: Offer["status"]) => {
     try {
@@ -80,6 +145,65 @@ export default function OffersPage() {
     }
   };
 
+  const handleApprove = async () => {
+    if (!reviewingOffer) return;
+    setIsProcessing(true);
+    
+    try {
+      const { error } = await supabase.rpc("approve_offer", {
+        p_offer_id: reviewingOffer.id,
+      });
+      
+      if (error) throw error;
+      
+      toast.success("Oferta aprobada");
+      setReviewingOffer(null);
+      refetch();
+    } catch (error) {
+      toast.error("Error al aprobar la oferta");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!reviewingOffer || !rejectionReason.trim()) {
+      toast.error("Debés indicar un motivo de rechazo");
+      return;
+    }
+    setIsProcessing(true);
+    
+    try {
+      const { error } = await supabase.rpc("reject_offer", {
+        p_offer_id: reviewingOffer.id,
+        p_reason: rejectionReason,
+      });
+      
+      if (error) throw error;
+      
+      toast.success("Oferta rechazada");
+      setReviewingOffer(null);
+      setRejectionReason("");
+      refetch();
+    } catch (error) {
+      toast.error("Error al rechazar la oferta");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Filter offers based on active tab
+  const filteredOffers = offers.filter(offer => {
+    if (activeTab === "pending") {
+      return offer.approval_status === "PENDING_APPROVAL";
+    }
+    if (activeTab === "backlog") {
+      // This would need actual ad mapping check - for now show approved without status check
+      return offer.approval_status === "APPROVED" && offer.status === "ACTIVE";
+    }
+    return true;
+  });
+
   const columns: Column<(typeof offers)[0]>[] = [
     {
       key: "name",
@@ -88,7 +212,7 @@ export default function OffersPage() {
         const TypeIcon = typeConfig[offer.offer_type]?.icon || Package;
         return (
           <div className="flex items-center gap-3">
-            <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
+            <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shrink-0">
               {offer.image_url ? (
                 <img
                   src={offer.image_url}
@@ -99,16 +223,16 @@ export default function OffersPage() {
                 <TypeIcon className="h-6 w-6 text-white" />
               )}
             </div>
-            <div>
+            <div className="min-w-0">
               <Link
                 href={`/admin/offers/${offer.id}`}
-                className="font-medium text-white hover:text-primary-400 transition-colors"
+                className="font-medium text-white hover:text-primary-400 transition-colors block truncate"
               >
                 {offer.name}
               </Link>
               <div className="flex items-center gap-2 text-sm text-slate-500">
-                <MapPin className="h-3 w-3" />
-                <span>{offer.city || offer.zone || "Sin ubicación"}</span>
+                <MapPin className="h-3 w-3 shrink-0" />
+                <span className="truncate">{offer.city || offer.zone || "Sin ubicación"}</span>
               </div>
             </div>
           </div>
@@ -131,11 +255,22 @@ export default function OffersPage() {
       key: "status",
       header: "Estado",
       cell: (offer) => {
-        const config = statusConfig[offer.status];
+        const approval = approvalStatusConfig[offer.approval_status || 'APPROVED'];
+        const status = statusConfig[offer.status];
+        
         return (
-          <Badge variant={config?.variant || "default"} dot>
-            {config?.label || offer.status}
-          </Badge>
+          <div className="flex flex-col gap-1">
+            {offer.approval_status && offer.approval_status !== 'APPROVED' && (
+              <Badge variant={approval?.variant || "default"} dot>
+                {approval?.label || offer.approval_status}
+              </Badge>
+            )}
+            {(offer.approval_status === 'APPROVED' || !offer.approval_status) && (
+              <Badge variant={status?.variant || "default"} dot>
+                {status?.label || offer.status}
+              </Badge>
+            )}
+          </div>
         );
       },
     },
@@ -157,10 +292,6 @@ export default function OffersPage() {
       header: "Stats",
       cell: (offer) => (
         <div className="flex items-center gap-4 text-sm">
-          <div className="flex items-center gap-1.5 text-slate-400" title="Variantes">
-            <Layers className="h-4 w-4" />
-            <span>{offer._count?.variants || 0}</span>
-          </div>
           <div className="flex items-center gap-1.5 text-slate-400" title="Leads">
             <Users className="h-4 w-4" />
             <span>{offer._count?.leads || 0}</span>
@@ -177,45 +308,67 @@ export default function OffersPage() {
       header: "",
       width: "60px",
       cell: (offer) => (
-        <ActionDropdown
-          items={[
-            {
-              label: "Ver detalles",
-              onClick: () => router.push(`/admin/offers/${offer.id}`),
-            },
-            {
-              label: "Editar",
-              onClick: () => router.push(`/admin/offers/${offer.id}/edit`),
-            },
-            { divider: true, label: "" },
-            offer.status === "ACTIVE"
-              ? {
-                  label: "Pausar",
-                  onClick: () => handleStatusChange(offer.id, "PAUSED"),
-                }
-              : offer.status === "DRAFT" || offer.status === "PAUSED"
-              ? {
-                  label: "Activar",
-                  onClick: () => handleStatusChange(offer.id, "ACTIVE"),
-                }
-              : {
-                  label: "Reactivar",
-                  onClick: () => handleStatusChange(offer.id, "ACTIVE"),
-                },
-            {
-              label: "Archivar",
-              onClick: () => handleStatusChange(offer.id, "ARCHIVED"),
-            },
-            { divider: true, label: "" },
-            {
-              label: "Eliminar",
-              onClick: () => setDeleteId(offer.id),
-              danger: true,
-            },
-          ]}
-        />
+        <div className="flex items-center gap-2">
+          {/* Quick action for pending approval */}
+          {offer.approval_status === "PENDING_APPROVAL" && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={(e) => {
+                e.stopPropagation();
+                setReviewingOffer(offer);
+              }}
+            >
+              Revisar
+            </Button>
+          )}
+          
+          <ActionDropdown
+            items={[
+              {
+                label: "Ver detalles",
+                onClick: () => router.push(`/admin/offers/${offer.id}`),
+              },
+              {
+                label: "Editar",
+                onClick: () => router.push(`/admin/offers/${offer.id}/edit`),
+              },
+              { divider: true, label: "" },
+              offer.status === "ACTIVE"
+                ? {
+                    label: "Pausar",
+                    onClick: () => handleStatusChange(offer.id, "PAUSED"),
+                  }
+                : offer.status === "DRAFT" || offer.status === "PAUSED"
+                ? {
+                    label: "Activar",
+                    onClick: () => handleStatusChange(offer.id, "ACTIVE"),
+                  }
+                : {
+                    label: "Reactivar",
+                    onClick: () => handleStatusChange(offer.id, "ACTIVE"),
+                  },
+              {
+                label: "Archivar",
+                onClick: () => handleStatusChange(offer.id, "ARCHIVED"),
+              },
+              { divider: true, label: "" },
+              {
+                label: "Eliminar",
+                onClick: () => setDeleteId(offer.id),
+                danger: true,
+              },
+            ]}
+          />
+        </div>
       ),
     },
+  ];
+
+  const tabs = [
+    { id: "all" as const, label: "Todas", count: total },
+    { id: "pending" as const, label: "Pendientes", count: pendingCount, highlight: pendingCount > 0 },
+    { id: "backlog" as const, label: "Sin campaña", count: backlogCount, highlight: backlogCount > 0 },
   ];
 
   return (
@@ -243,6 +396,35 @@ export default function OffersPage() {
         </div>
       )}
 
+      {/* Tabs */}
+      <div className="flex items-center gap-1 mb-4 p-1 bg-slate-800/50 rounded-lg w-fit">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => {
+              setActiveTab(tab.id);
+              setPage(1);
+            }}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
+              activeTab === tab.id
+                ? "bg-primary-500/20 text-primary-400"
+                : "text-slate-400 hover:text-white hover:bg-slate-700"
+            }`}
+          >
+            {tab.label}
+            {tab.count !== undefined && tab.count > 0 && (
+              <span className={`px-1.5 py-0.5 text-xs rounded-full ${
+                tab.highlight
+                  ? "bg-amber-500/20 text-amber-400"
+                  : "bg-slate-700 text-slate-400"
+              }`}>
+                {tab.count}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
       <Card>
         {/* Filters */}
         <div className="p-4 border-b border-card-border">
@@ -264,48 +446,66 @@ export default function OffersPage() {
                 className="w-48"
               />
 
-              {/* Status filters */}
-              <div className="flex items-center gap-1">
-                {["", "ACTIVE", "DRAFT", "PAUSED"].map((status) => (
-                  <button
-                    key={status}
-                    onClick={() => setStatusFilter(status)}
-                    className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                      statusFilter === status
-                        ? "bg-primary-500/20 text-primary-400 border border-primary-500/30"
-                        : "text-slate-400 hover:text-white hover:bg-card-border"
-                    }`}
-                  >
-                    {status === ""
-                      ? "Todos"
-                      : statusConfig[status]?.label || status}
-                  </button>
-                ))}
-              </div>
+              {/* Status filters - only show for "all" tab */}
+              {activeTab === "all" && (
+                <div className="flex items-center gap-1">
+                  {["", "ACTIVE", "DRAFT", "PAUSED"].map((status) => (
+                    <button
+                      key={status}
+                      onClick={() => setStatusFilter(status)}
+                      className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                        statusFilter === status
+                          ? "bg-primary-500/20 text-primary-400 border border-primary-500/30"
+                          : "text-slate-400 hover:text-white hover:bg-card-border"
+                      }`}
+                    >
+                      {status === ""
+                        ? "Todos"
+                        : statusConfig[status]?.label || status}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
 
         {/* Table */}
         <DataTable
-          data={offers}
+          data={activeTab === "all" ? offers : filteredOffers}
           columns={columns}
           keyExtractor={(o) => o.id}
           isLoading={isLoading}
           loadingRows={5}
           onRowClick={(offer) => router.push(`/admin/offers/${offer.id}`)}
           emptyState={
-            <NoOffersEmptyState
-              action={{
-                label: "Crear primera oferta",
-                onClick: () => router.push("/admin/offers/new"),
-              }}
-            />
+            activeTab === "pending" ? (
+              <EmptyState
+                icon={<CheckCircle />}
+                title="Sin ofertas pendientes"
+                description="No hay ofertas esperando aprobación."
+                size="sm"
+              />
+            ) : activeTab === "backlog" ? (
+              <EmptyState
+                icon={<Megaphone />}
+                title="Todo al día"
+                description="Todas las ofertas tienen campañas mapeadas."
+                size="sm"
+              />
+            ) : (
+              <NoOffersEmptyState
+                action={{
+                  label: "Crear primera oferta",
+                  onClick: () => router.push("/admin/offers/new"),
+                }}
+              />
+            )
           }
         />
 
         {/* Pagination */}
-        {total > 20 && (
+        {total > 20 && activeTab === "all" && (
           <div className="p-4 border-t border-card-border">
             <Pagination
               currentPage={page}
@@ -329,14 +529,80 @@ export default function OffersPage() {
         variant="danger"
         isLoading={isMutating}
       />
+
+      {/* Review Modal */}
+      <Modal
+        isOpen={!!reviewingOffer}
+        onClose={() => {
+          setReviewingOffer(null);
+          setRejectionReason("");
+        }}
+        title="Revisar oferta"
+        size="md"
+      >
+        {reviewingOffer && (
+          <div className="space-y-4">
+            <div className="p-4 bg-slate-800/50 rounded-lg">
+              <h3 className="font-semibold text-white text-lg">{reviewingOffer.name}</h3>
+              <p className="text-sm text-slate-400 mt-1">
+                {reviewingOffer.tenant?.name} • {reviewingOffer.city || "Sin ubicación"}
+              </p>
+              {reviewingOffer.price_from && (
+                <p className="text-primary-400 mt-2">
+                  {formatCurrency(reviewingOffer.price_from, reviewingOffer.currency)}
+                  {reviewingOffer.price_to && reviewingOffer.price_to !== reviewingOffer.price_from && 
+                    ` - ${formatCurrency(reviewingOffer.price_to, reviewingOffer.currency)}`
+                  }
+                </p>
+              )}
+              {reviewingOffer.submitted_at && (
+                <p className="text-xs text-slate-500 mt-2">
+                  Enviada {formatRelativeTime(reviewingOffer.submitted_at)}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Motivo de rechazo (opcional para aprobar)
+              </label>
+              <TextArea
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                placeholder="Indicá qué debe corregir el tenant..."
+                rows={3}
+              />
+            </div>
+
+            <div className="flex items-center gap-3 pt-4 border-t border-card-border">
+              <Button
+                variant="danger"
+                onClick={handleReject}
+                isLoading={isProcessing}
+                disabled={!rejectionReason.trim()}
+                leftIcon={<XCircle className="h-4 w-4" />}
+              >
+                Rechazar
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleApprove}
+                isLoading={isProcessing}
+                leftIcon={<CheckCircle className="h-4 w-4" />}
+              >
+                Aprobar
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => router.push(`/admin/offers/${reviewingOffer.id}`)}
+              >
+                Ver detalles
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </PageContainer>
   );
 }
-
-
-
-
-
-
-
 

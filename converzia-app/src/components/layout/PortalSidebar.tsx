@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
-  Users,
   Package,
   CreditCard,
   LogOut,
@@ -13,19 +12,17 @@ import {
   Building2,
   Menu,
   X,
-  Link2,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth/context";
 import { SelectDropdown } from "@/components/ui/Dropdown";
 
-// Navigation items
+// Navigation items - simplified for tenant portal
+// Leads are viewed within each offer, Integrations are managed by Converzia
 const navigation = [
   { name: "Dashboard", href: "/portal", icon: LayoutDashboard },
-  { name: "Leads", href: "/portal/leads", icon: Users },
-  { name: "Mis Ofertas", href: "/portal/offers", icon: Package },
-  { name: "Integraciones", href: "/portal/integrations", icon: Link2 },
+  { name: "Mis Proyectos", href: "/portal/offers", icon: Package },
   { name: "Facturación", href: "/portal/billing", icon: CreditCard },
   { name: "Equipo", href: "/portal/team", icon: UserCog },
 ];
