@@ -153,15 +153,15 @@ export default function PortalBillingPage() {
           CREDIT_ADJUSTMENT: { icon: CreditCard, color: "text-amber-400", label: "Ajuste" },
           CREDIT_BONUS: { icon: Sparkles, color: "text-purple-400", label: "Bonus" },
         };
-        const c = config[tx.entry_type] || { icon: CreditCard, color: "text-slate-400", label: tx.entry_type };
+        const c = config[tx.entry_type] || { icon: CreditCard, color: "text-[var(--text-tertiary)]", label: tx.entry_type };
         const Icon = c.icon;
 
         return (
           <div className="flex items-center gap-2">
-            <div className={`h-8 w-8 rounded-lg bg-slate-800 flex items-center justify-center`}>
+            <div className="h-8 w-8 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center">
               <Icon className={`h-4 w-4 ${c.color}`} />
             </div>
-            <span className="text-slate-300">{c.label}</span>
+            <span className="text-[var(--text-secondary)]">{c.label}</span>
           </div>
         );
       },
@@ -172,13 +172,13 @@ export default function PortalBillingPage() {
       cell: (tx) => (
         <div>
           {tx.lead_display_name && (
-            <p className="text-sm text-white">{tx.lead_display_name}</p>
+            <p className="text-sm text-[var(--text-primary)]">{tx.lead_display_name}</p>
           )}
           {tx.offer_name && (
-            <p className="text-xs text-slate-500">{tx.offer_name}</p>
+            <p className="text-xs text-[var(--text-tertiary)]">{tx.offer_name}</p>
           )}
           {!tx.lead_display_name && tx.description && (
-            <p className="text-sm text-slate-400">{tx.description}</p>
+            <p className="text-sm text-[var(--text-secondary)]">{tx.description}</p>
           )}
         </div>
       ),
@@ -196,14 +196,14 @@ export default function PortalBillingPage() {
       key: "balance",
       header: "Balance",
       cell: (tx) => (
-        <span className="text-slate-400">{tx.balance_after}</span>
+        <span className="text-[var(--text-tertiary)]">{tx.balance_after}</span>
       ),
     },
     {
       key: "date",
       header: "Fecha",
       cell: (tx) => (
-        <span className="text-slate-400 text-sm">{formatRelativeTime(tx.created_at)}</span>
+        <span className="text-[var(--text-tertiary)] text-sm">{formatRelativeTime(tx.created_at)}</span>
       ),
     },
   ];
@@ -230,10 +230,10 @@ export default function PortalBillingPage() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-slate-400 mb-1">Balance actual</p>
+                <p className="text-[var(--text-secondary)] mb-1">Balance actual</p>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold text-white">{balance}</span>
-                  <span className="text-slate-400">créditos</span>
+                  <span className="text-4xl font-bold text-[var(--text-primary)]">{balance}</span>
+                  <span className="text-[var(--text-secondary)]">créditos</span>
                 </div>
                 {balance < 10 && balance >= 0 && (
                   <p className="text-amber-400 text-sm mt-2 flex items-center gap-1">
@@ -257,8 +257,8 @@ export default function PortalBillingPage() {
                 <TrendingUp className="h-5 w-5 text-emerald-400" />
               </div>
               <div>
-                <p className="text-xs text-slate-500">Total comprado</p>
-                <p className="text-xl font-semibold text-white">{summary.totalPurchased}</p>
+                <p className="text-xs text-[var(--text-tertiary)]">Total comprado</p>
+                <p className="text-xl font-semibold text-[var(--text-primary)]">{summary.totalPurchased}</p>
               </div>
             </div>
           </CardContent>
@@ -271,8 +271,8 @@ export default function PortalBillingPage() {
                 <TrendingDown className="h-5 w-5 text-red-400" />
               </div>
               <div>
-                <p className="text-xs text-slate-500">Total consumido</p>
-                <p className="text-xl font-semibold text-white">{summary.totalConsumed}</p>
+                <p className="text-xs text-[var(--text-tertiary)]">Total consumido</p>
+                <p className="text-xl font-semibold text-[var(--text-primary)]">{summary.totalConsumed}</p>
               </div>
             </div>
           </CardContent>
@@ -282,7 +282,7 @@ export default function PortalBillingPage() {
       {/* Packages */}
       {canManageBilling && packages.length > 0 && (
         <div className="mb-6">
-          <h2 className="text-lg font-semibold text-white mb-4">Recargar créditos</h2>
+          <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-4">Recargar créditos</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {packages.map((pkg) => (
               <Card
@@ -295,10 +295,10 @@ export default function PortalBillingPage() {
                   </div>
                 )}
                 <CardContent className="p-6 text-center">
-                  <h3 className="text-xl font-bold text-white mb-2">{pkg.name}</h3>
+                  <h3 className="text-xl font-bold text-[var(--text-primary)] mb-2">{pkg.name}</h3>
                   <div className="flex items-baseline justify-center gap-1 mb-1">
-                    <span className="text-3xl font-bold text-white">{pkg.credits}</span>
-                    <span className="text-slate-400">créditos</span>
+                    <span className="text-3xl font-bold text-[var(--text-primary)]">{pkg.credits}</span>
+                    <span className="text-[var(--text-secondary)]">créditos</span>
                   </div>
                   <p className="text-2xl font-semibold text-primary-400 mb-4">
                     {formatCurrency(pkg.price)}

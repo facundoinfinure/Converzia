@@ -335,7 +335,11 @@ export default function AdsMappingPage() {
       cell: (offer) => (
         <Button
           size="sm"
-          onClick={() => setManualMappingOffer(offer)}
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            setManualMappingOffer(offer);
+          }}
           leftIcon={<Plus className="h-4 w-4" />}
         >
           Crear mapeo

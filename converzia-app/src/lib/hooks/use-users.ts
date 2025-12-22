@@ -15,7 +15,7 @@ interface UserWithMemberships extends UserProfile {
     tenant_id: string;
     role: string;
     status: string;
-    tenant: { id: string; name: string };
+    tenant: { id: string; name: string; vertical?: string };
   }>;
 }
 
@@ -26,6 +26,7 @@ interface UserWithMemberships extends UserProfile {
 interface UseUsersOptions {
   search?: string;
   isAdmin?: boolean;
+  vertical?: string; // Filter by tenant vertical
   page?: number;
   pageSize?: number;
 }
@@ -39,7 +40,7 @@ interface UseUsersResult {
 }
 
 export function useUsers(options: UseUsersOptions = {}): UseUsersResult {
-  const { search, isAdmin, page = 1, pageSize = 20 } = options;
+  const { search, isAdmin, vertical, page = 1, pageSize = 20 } = options;
   const [users, setUsers] = useState<UserWithMemberships[]>([]);
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -87,7 +88,7 @@ export function useUsers(options: UseUsersOptions = {}): UseUsersResult {
                 tenant_id,
                 role,
                 status,
-                tenant:tenants(id, name)
+                tenant:tenants(id, name, vertical)
               `)
               .eq("user_id", user.id),
             5000,
@@ -104,15 +105,29 @@ export function useUsers(options: UseUsersOptions = {}): UseUsersResult {
         })
       );
 
-      setUsers(usersWithMemberships);
-      setTotal(count || 0);
+      // Filter by vertical if specified
+      let filteredUsers = usersWithMemberships;
+      if (vertical) {
+        if (vertical === "CONVERZIA") {
+          // Show only Converzia admins (users with is_converzia_admin and no tenant memberships)
+          filteredUsers = usersWithMemberships.filter((u) => u.is_converzia_admin);
+        } else {
+          // Show users that have at least one membership in a tenant with this vertical
+          filteredUsers = usersWithMemberships.filter((u) =>
+            u.memberships.some((m) => m.tenant?.vertical === vertical)
+          );
+        }
+      }
+
+      setUsers(filteredUsers);
+      setTotal(vertical ? filteredUsers.length : (count || 0));
     } catch (err) {
       console.error("Error fetching users:", err);
       setError(err instanceof Error ? err.message : "Error al cargar usuarios");
     } finally {
       setIsLoading(false);
     }
-  }, [supabase, search, isAdmin, page, pageSize]);
+  }, [supabase, search, isAdmin, vertical, page, pageSize]);
 
   useEffect(() => {
     fetchUsers();

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Settings,
   Facebook,
@@ -14,6 +14,7 @@ import {
   EyeOff,
   Save,
   Palette,
+  RefreshCw,
 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/Card";
@@ -66,7 +67,12 @@ export default function SettingsPage() {
     extraction_system_prompt_md: "",
     conversation_summary_prompt_md: "",
     initial_greeting_template: "",
+    disqualification_reason_prompt_md: "",
   });
+
+  // Default prompts from files (for reference)
+  const [defaultPrompts, setDefaultPrompts] = useState<Record<string, string>>({});
+  const [loadingDefaults, setLoadingDefaults] = useState(false);
 
   // Show/hide secrets
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
@@ -74,8 +80,29 @@ export default function SettingsPage() {
   // Connection status
   const [connectionStatus, setConnectionStatus] = useState<Record<string, "success" | "error" | "testing" | null>>({});
 
+  // Fetch default prompts from files
+  const fetchDefaultPrompts = async () => {
+    setLoadingDefaults(true);
+    try {
+      const response = await fetch("/api/settings/default-prompts");
+      const result = await response.json();
+      if (result.success) {
+        setDefaultPrompts(result.data);
+      }
+    } catch (error) {
+      console.error("Error fetching default prompts:", error);
+    } finally {
+      setLoadingDefaults(false);
+    }
+  };
+
+  // Load default prompts on mount
+  useEffect(() => {
+    fetchDefaultPrompts();
+  }, []);
+
   // Initialize form values when settings load
-  useState(() => {
+  useEffect(() => {
     if (settings) {
       setMetaSettings({
         meta_app_id: settings.meta_app_id || "",
@@ -105,9 +132,21 @@ export default function SettingsPage() {
         extraction_system_prompt_md: (settings as any).extraction_system_prompt_md || "",
         conversation_summary_prompt_md: (settings as any).conversation_summary_prompt_md || "",
         initial_greeting_template: (settings as any).initial_greeting_template || "",
+        disqualification_reason_prompt_md: (settings as any).disqualification_reason_prompt_md || "",
       });
     }
-  });
+  }, [settings]);
+
+  // Load defaults into empty fields when both settings and defaults are loaded
+  const loadDefaultsIntoEmptyFields = () => {
+    setPromptSettings((prev) => ({
+      qualification_system_prompt_md: prev.qualification_system_prompt_md || defaultPrompts.qualification_system_prompt_md || "",
+      extraction_system_prompt_md: prev.extraction_system_prompt_md || defaultPrompts.extraction_system_prompt_md || "",
+      conversation_summary_prompt_md: prev.conversation_summary_prompt_md || defaultPrompts.conversation_summary_prompt_md || "",
+      initial_greeting_template: prev.initial_greeting_template || defaultPrompts.initial_greeting_template || "",
+      disqualification_reason_prompt_md: prev.disqualification_reason_prompt_md || defaultPrompts.disqualification_reason_prompt_md || "",
+    }));
+  };
 
   const handleSave = async (category: string) => {
     let updates: Record<string, any> = {};
@@ -247,11 +286,22 @@ export default function SettingsPage() {
             {/* Prompts */}
             <Card>
               <CardHeader>
-                <div>
-                  <CardTitle>Prompts del bot</CardTitle>
-                  <p className="text-sm text-[var(--text-tertiary)] mt-1">
-                    Configuración del comportamiento del bot para todos los tenants
-                  </p>
+                <div className="flex items-center justify-between w-full">
+                  <div>
+                    <CardTitle>Prompts del bot</CardTitle>
+                    <p className="text-sm text-[var(--text-tertiary)] mt-1">
+                      Configuración del comportamiento del bot para todos los tenants
+                    </p>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={loadDefaultsIntoEmptyFields}
+                    leftIcon={<RefreshCw className="h-4 w-4" />}
+                    disabled={loadingDefaults}
+                  >
+                    Cargar defaults
+                  </Button>
                 </div>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -294,6 +344,20 @@ export default function SettingsPage() {
                     rows={6}
                     placeholder="Prompt para generar resúmenes de conversaciones..."
                     hint="Se usa para generar notas automáticas para el equipo comercial."
+                  />
+                </div>
+
+                {/* Disqualification Reason Prompt */}
+                <div>
+                  <TextArea
+                    label="System prompt - Motivos de descalificación"
+                    value={promptSettings.disqualification_reason_prompt_md}
+                    onChange={(e) =>
+                      setPromptSettings({ ...promptSettings, disqualification_reason_prompt_md: e.target.value })
+                    }
+                    rows={8}
+                    placeholder="Prompt para determinar si un lead debe ser descalificado y por qué motivo..."
+                    hint="Define las categorías de descalificación (PRICE_TOO_HIGH, WRONG_ZONE, NOT_INTERESTED, etc.)"
                   />
                 </div>
 

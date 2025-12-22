@@ -12,6 +12,8 @@ import type { Tenant, TenantWithStats, TenantPricing } from "@/types";
 interface UseTenantsOptions {
   search?: string;
   status?: string;
+  vertical?: string;
+  minCredits?: number;
   page?: number;
   pageSize?: number;
 }
@@ -25,7 +27,7 @@ interface UseTenantsResult {
 }
 
 export function useTenants(options: UseTenantsOptions = {}): UseTenantsResult {
-  const { search, status, page = 1, pageSize = 20 } = options;
+  const { search, status, vertical, minCredits, page = 1, pageSize = 20 } = options;
   const [tenants, setTenants] = useState<TenantWithStats[]>([]);
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -49,6 +51,10 @@ export function useTenants(options: UseTenantsOptions = {}): UseTenantsResult {
 
       if (status) {
         query = query.eq("status", status);
+      }
+
+      if (vertical) {
+        query = query.eq("vertical", vertical);
       }
 
       // Pagination
@@ -137,7 +143,7 @@ export function useTenants(options: UseTenantsOptions = {}): UseTenantsResult {
     } finally {
       setIsLoading(false);
     }
-  }, [supabase, search, status, page, pageSize]);
+  }, [supabase, search, status, vertical, minCredits, page, pageSize]);
 
   useEffect(() => {
     fetchTenants();

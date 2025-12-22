@@ -47,6 +47,8 @@ export default function TenantsPage() {
   const { tenants, total, isLoading, error, refetch } = useTenants({
     search,
     status: statusFilter || undefined,
+    vertical: filterValues.vertical || undefined,
+    minCredits: filterValues.credits_min || undefined,
     page,
     pageSize: 20,
   });

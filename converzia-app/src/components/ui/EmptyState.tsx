@@ -71,18 +71,20 @@ export function EmptyState({
             sizes[size].iconWrapper
           )}
         >
-          <span className={cn("text-slate-500", sizes[size].icon)}>{icon}</span>
+          <div className={cn("text-slate-500 flex items-center justify-center [&>svg]:h-full [&>svg]:w-full", sizes[size].icon)}>
+            {icon}
+          </div>
         </div>
       )}
 
-      <h3 className={cn("font-semibold text-white", sizes[size].title)}>
+      <h3 className={cn("font-semibold text-[var(--text-primary)]", sizes[size].title)}>
         {title}
       </h3>
 
       {description && (
         <p
           className={cn(
-            "text-slate-400 mt-1 max-w-sm",
+            "text-[var(--text-secondary)] mt-1 max-w-sm",
             sizes[size].description
           )}
         >

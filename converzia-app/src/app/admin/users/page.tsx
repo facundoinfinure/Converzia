@@ -13,6 +13,10 @@ import {
   UserCog,
   Eye,
   Trash2,
+  Home,
+  Car,
+  Wallet,
+  ShieldCheck,
 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -20,6 +24,7 @@ import { Button } from "@/components/ui/Button";
 import { Tabs, TabsList, TabTrigger, TabContent } from "@/components/ui/Tabs";
 import { DataTable, Column } from "@/components/ui/Table";
 import { SearchInput } from "@/components/ui/SearchInput";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 import { Badge, RoleBadge } from "@/components/ui/Badge";
 import { Avatar, UserAvatar } from "@/components/ui/Avatar";
 import { ActionDropdown } from "@/components/ui/Dropdown";
@@ -31,6 +36,29 @@ import { useToast } from "@/components/ui/Toast";
 import { useUsers, usePendingApprovals, useUserMutations } from "@/lib/hooks/use-users";
 import { formatRelativeTime, formatDate } from "@/lib/utils";
 
+const VERTICAL_OPTIONS = [
+  { value: "", label: "Todas las verticales" },
+  { value: "CONVERZIA", label: "Converzia (Admins)" },
+  { value: "PROPERTY", label: "Inmobiliaria" },
+  { value: "AUTO", label: "Automotriz" },
+  { value: "LOAN", label: "Créditos" },
+  { value: "INSURANCE", label: "Seguros" },
+];
+
+const VERTICAL_LABELS: Record<string, string> = {
+  PROPERTY: "Inmobiliaria",
+  AUTO: "Automotriz",
+  LOAN: "Créditos",
+  INSURANCE: "Seguros",
+};
+
+const VERTICAL_ICONS: Record<string, React.ReactNode> = {
+  PROPERTY: <Home className="h-3 w-3" />,
+  AUTO: <Car className="h-3 w-3" />,
+  LOAN: <Wallet className="h-3 w-3" />,
+  INSURANCE: <ShieldCheck className="h-3 w-3" />,
+};
+
 export default function UsersPage() {
   const router = useRouter();
   const toast = useToast();
@@ -38,10 +66,12 @@ export default function UsersPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [adminFilter, setAdminFilter] = useState<boolean | undefined>(undefined);
+  const [verticalFilter, setVerticalFilter] = useState<string>("");
 
   const { users, total, isLoading, refetch } = useUsers({
     search,
     isAdmin: adminFilter,
+    vertical: verticalFilter || undefined,
     page,
     pageSize: 20,
   });
@@ -100,6 +130,17 @@ export default function UsersPage() {
     }
   };
 
+  // Helper to get unique verticals from user's memberships
+  const getUserVerticals = (u: (typeof users)[0]) => {
+    const verticals = new Set<string>();
+    u.memberships.forEach((m) => {
+      if (m.tenant?.vertical) {
+        verticals.add(m.tenant.vertical);
+      }
+    });
+    return Array.from(verticals);
+  };
+
   // Users table columns
   const userColumns: Column<(typeof users)[0]>[] = [
     {
@@ -114,20 +155,54 @@ export default function UsersPage() {
       ),
     },
     {
+      key: "profile",
+      header: "Perfil",
+      cell: (u) => {
+        if (u.is_converzia_admin) {
+          return (
+            <Badge variant="primary">
+              <Shield className="h-3 w-3 mr-1" />
+              Converzia Admin
+            </Badge>
+          );
+        }
+        if (u.memberships.length > 0) {
+          const verticals = getUserVerticals(u);
+          if (verticals.length === 0) {
+            return (
+              <Badge variant="secondary">
+                <Building2 className="h-3 w-3 mr-1" />
+                Usuario Tenant
+              </Badge>
+            );
+          }
+          return (
+            <div className="flex flex-wrap gap-1">
+              {verticals.map((v) => (
+                <Badge key={v} variant="secondary" size="sm">
+                  {VERTICAL_ICONS[v]}
+                  <span className="ml-1">{VERTICAL_LABELS[v] || v}</span>
+                </Badge>
+              ))}
+            </div>
+          );
+        }
+        return <span className="text-[var(--text-tertiary)] text-sm">Sin asignar</span>;
+      },
+    },
+    {
       key: "role",
       header: "Rol",
       cell: (u) => (
         <div className="flex items-center gap-2">
-          {u.is_converzia_admin && (
-            <Badge variant="primary">
-              <Shield className="h-3 w-3 mr-1" />
-              Admin
-            </Badge>
-          )}
-          {u.memberships.length > 0 && (
-            <span className="text-sm text-[var(--text-tertiary)]">
+          {u.memberships.length > 0 ? (
+            <span className="text-sm text-[var(--text-secondary)]">
               {u.memberships.length} tenant{u.memberships.length > 1 ? "s" : ""}
             </span>
+          ) : u.is_converzia_admin ? (
+            <span className="text-sm text-[var(--text-tertiary)]">Admin global</span>
+          ) : (
+            <span className="text-sm text-[var(--text-tertiary)]">-</span>
           )}
         </div>
       ),
@@ -315,24 +390,35 @@ export default function UsersPage() {
                   placeholder="Buscar por nombre o email..."
                   className="flex-1 max-w-md"
                 />
-                <div className="flex items-center gap-2">
-                  {[
-                    { value: undefined, label: "Todos" },
-                    { value: true, label: "Admins" },
-                    { value: false, label: "Usuarios" },
-                  ].map((opt) => (
-                    <button
-                      key={String(opt.value)}
-                      onClick={() => setAdminFilter(opt.value)}
-                      className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                        adminFilter === opt.value
-                          ? "bg-primary-500/20 text-primary-400 border border-primary-500/30"
-                          : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-card-border"
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Vertical filter */}
+                  <CustomSelect
+                    value={verticalFilter}
+                    onChange={setVerticalFilter}
+                    options={VERTICAL_OPTIONS}
+                    placeholder="Vertical"
+                    className="w-48"
+                  />
+                  {/* Admin filter buttons */}
+                  <div className="flex items-center gap-1">
+                    {[
+                      { value: undefined, label: "Todos" },
+                      { value: true, label: "Admins" },
+                      { value: false, label: "Usuarios" },
+                    ].map((opt) => (
+                      <button
+                        key={String(opt.value)}
+                        onClick={() => setAdminFilter(opt.value)}
+                        className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                          adminFilter === opt.value
+                            ? "bg-primary-500/20 text-primary-400 border border-primary-500/30"
+                            : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-card-border"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>

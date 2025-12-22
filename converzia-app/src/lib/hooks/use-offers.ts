@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import type { Offer, OfferVariant, Unit, AdOfferMap } from "@/types";
@@ -47,7 +47,8 @@ export function useOffers(options: UseOffersOptions = {}): UseOffersResult {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const supabase = createClient();
+  // Create a stable supabase client reference
+  const supabase = useMemo(() => createClient(), []);
 
   const fetchOffers = useCallback(async () => {
     setIsLoading(true);

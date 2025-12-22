@@ -60,6 +60,9 @@ export default function EditTenantPage({ params }: Props) {
   const [pricingForm, setPricingForm] = useState({
     charge_model: "PER_LEAD" as "PER_LEAD" | "PER_SALE" | "SUBSCRIPTION",
     cost_per_lead: 10,
+    success_fee_percentage: 0,
+    success_fee_flat: 0,
+    monthly_fee: 0,
     low_credit_threshold: 10,
     auto_refund_duplicates: true,
     auto_refund_spam: true,
@@ -100,6 +103,9 @@ export default function EditTenantPage({ params }: Props) {
       setPricingForm({
         charge_model: pricing.charge_model || "PER_LEAD",
         cost_per_lead: pricing.cost_per_lead || 10,
+        success_fee_percentage: (pricing as any).success_fee_percentage || 0,
+        success_fee_flat: (pricing as any).success_fee_flat || 0,
+        monthly_fee: (pricing as any).monthly_fee || 0,
         low_credit_threshold: pricing.low_credit_threshold || 10,
         auto_refund_duplicates: pricing.auto_refund_duplicates ?? true,
         auto_refund_spam: pricing.auto_refund_spam ?? true,
@@ -331,19 +337,75 @@ export default function EditTenantPage({ params }: Props) {
                 }
               />
 
-              <Input
-                label="Costo por lead (USD)"
-                type="number"
-                min={0}
-                step={0.01}
-                value={pricingForm.cost_per_lead}
-                onChange={(e) =>
-                  setPricingForm((prev) => ({
-                    ...prev,
-                    cost_per_lead: parseFloat(e.target.value) || 0,
-                  }))
-                }
-              />
+              {/* PER_LEAD: Show cost per lead */}
+              {pricingForm.charge_model === "PER_LEAD" && (
+                <Input
+                  label="Costo por lead (USD)"
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={pricingForm.cost_per_lead}
+                  onChange={(e) =>
+                    setPricingForm((prev) => ({
+                      ...prev,
+                      cost_per_lead: parseFloat(e.target.value) || 0,
+                    }))
+                  }
+                />
+              )}
+
+              {/* PER_SALE: Show success fee fields */}
+              {pricingForm.charge_model === "PER_SALE" && (
+                <>
+                  <Input
+                    label="Comisión de éxito (%)"
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.1}
+                    value={pricingForm.success_fee_percentage}
+                    onChange={(e) =>
+                      setPricingForm((prev) => ({
+                        ...prev,
+                        success_fee_percentage: parseFloat(e.target.value) || 0,
+                      }))
+                    }
+                    hint="Porcentaje sobre el valor de la venta"
+                  />
+                  <Input
+                    label="Fee fijo por venta (USD)"
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={pricingForm.success_fee_flat}
+                    onChange={(e) =>
+                      setPricingForm((prev) => ({
+                        ...prev,
+                        success_fee_flat: parseFloat(e.target.value) || 0,
+                      }))
+                    }
+                    hint="Monto fijo adicional por venta cerrada"
+                  />
+                </>
+              )}
+
+              {/* SUBSCRIPTION: Show monthly fee */}
+              {pricingForm.charge_model === "SUBSCRIPTION" && (
+                <Input
+                  label="Valor mensual (USD)"
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={pricingForm.monthly_fee}
+                  onChange={(e) =>
+                    setPricingForm((prev) => ({
+                      ...prev,
+                      monthly_fee: parseFloat(e.target.value) || 0,
+                    }))
+                  }
+                  hint="Costo mensual de la suscripción"
+                />
+              )}
 
               <Input
                 label="Umbral bajo de créditos"

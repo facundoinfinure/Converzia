@@ -1,15 +1,19 @@
-import { forwardRef, InputHTMLAttributes } from "react";
+import { forwardRef, InputHTMLAttributes, ChangeEvent } from "react";
 import { cn } from "@/lib/utils";
 
 // ============================================
 // Switch Component
 // ============================================
 
-export interface SwitchProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "size"> {
+export interface SwitchProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "size" | "onChange"> {
   label?: string;
   description?: string;
   size?: "sm" | "md" | "lg";
   labelPosition?: "left" | "right";
+  /** Callback when checked state changes - provides boolean directly */
+  onCheckedChange?: (checked: boolean) => void;
+  /** Native onChange handler */
+  onChange?: (e: ChangeEvent<HTMLInputElement>) => void;
 }
 
 export const Switch = forwardRef<HTMLInputElement, SwitchProps>(
@@ -22,11 +26,18 @@ export const Switch = forwardRef<HTMLInputElement, SwitchProps>(
       labelPosition = "right",
       id,
       checked,
+      onCheckedChange,
+      onChange,
       ...props
     },
     ref
   ) => {
     const switchId = id || label?.toLowerCase().replace(/\s+/g, "-");
+
+    const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
+      onChange?.(e);
+      onCheckedChange?.(e.target.checked);
+    };
 
     const sizes = {
       sm: {
@@ -55,7 +66,7 @@ export const Switch = forwardRef<HTMLInputElement, SwitchProps>(
           <label
             htmlFor={switchId}
             className={cn(
-              "font-medium text-slate-300 cursor-pointer",
+              "font-medium text-[var(--text-secondary)] cursor-pointer",
               props.disabled && "cursor-not-allowed opacity-50",
               sizes[size].label
             )}
@@ -64,7 +75,7 @@ export const Switch = forwardRef<HTMLInputElement, SwitchProps>(
           </label>
         )}
         {description && (
-          <p className="text-slate-500 text-sm mt-0.5">{description}</p>
+          <p className="text-[var(--text-tertiary)] text-sm mt-0.5">{description}</p>
         )}
       </div>
     );
@@ -77,12 +88,13 @@ export const Switch = forwardRef<HTMLInputElement, SwitchProps>(
           className
         )}
       >
-        <div className="relative">
+        <div className="relative cursor-pointer" onClick={() => !props.disabled && onCheckedChange?.(!checked)}>
           <input
             ref={ref}
             type="checkbox"
             id={switchId}
             checked={checked}
+            onChange={handleChange}
             className="sr-only peer"
             {...props}
           />
@@ -94,7 +106,7 @@ export const Switch = forwardRef<HTMLInputElement, SwitchProps>(
               sizes[size].track,
               checked
                 ? "bg-primary-500"
-                : "bg-card-border peer-hover:bg-slate-600"
+                : "bg-[var(--border-primary)] peer-hover:bg-[var(--border-secondary)]"
             )}
           />
           <div
@@ -113,6 +125,7 @@ export const Switch = forwardRef<HTMLInputElement, SwitchProps>(
 );
 
 Switch.displayName = "Switch";
+
 
 
 

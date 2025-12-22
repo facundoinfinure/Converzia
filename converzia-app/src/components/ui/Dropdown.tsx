@@ -45,42 +45,53 @@ export function Dropdown({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const handleTriggerClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setIsOpen(!isOpen);
+  };
+
+  const handleItemClick = (e: React.MouseEvent, item: DropdownItem) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!item.disabled) {
+      item.onClick?.();
+      setIsOpen(false);
+    }
+  };
+
   return (
-    <div className={cn("relative inline-block", className)} ref={containerRef}>
-      <div onClick={() => setIsOpen(!isOpen)}>{trigger}</div>
+    <div className={cn("relative inline-block", className)} ref={containerRef} onClick={(e) => e.stopPropagation()}>
+      <div onClick={handleTriggerClick}>{trigger}</div>
 
       {isOpen && (
         <div
           className={cn(
-            "absolute z-50 mt-2 min-w-[12rem] py-1 bg-card border border-card-border rounded-lg shadow-xl",
+            "absolute z-[100] mt-2 min-w-[12rem] py-1 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-lg shadow-xl",
             "animate-in fade-in zoom-in-95 duration-150",
             align === "right" ? "right-0" : "left-0"
           )}
+          onClick={(e) => e.stopPropagation()}
         >
           {items.map((item, index) =>
             item.divider ? (
               <div
                 key={`divider-${index}`}
-                className="my-1 h-px bg-card-border"
+                className="my-1 h-px bg-[var(--border-primary)]"
               />
             ) : (
               <button
                 key={item.value || item.label}
                 type="button"
-                onClick={() => {
-                  if (!item.disabled) {
-                    item.onClick?.();
-                    setIsOpen(false);
-                  }
-                }}
+                onClick={(e) => handleItemClick(e, item)}
                 disabled={item.disabled}
                 className={cn(
                   "w-full flex items-center gap-3 px-4 py-2 text-sm text-left transition-colors",
                   item.disabled
-                    ? "text-slate-600 cursor-not-allowed"
+                    ? "text-[var(--text-tertiary)] cursor-not-allowed"
                     : item.danger
                     ? "text-red-400 hover:bg-red-500/10"
-                    : "text-slate-300 hover:bg-card-border hover:text-white"
+                    : "text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]"
                 )}
               >
                 {item.icon && <span className="h-4 w-4 flex-shrink-0">{item.icon}</span>}
@@ -125,7 +136,7 @@ export function ActionDropdown({
         <button
           type="button"
           className={cn(
-            "rounded-lg text-slate-400 hover:text-white hover:bg-card-border transition-colors",
+            "rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors",
             buttonSize
           )}
         >
@@ -188,13 +199,13 @@ export function SelectDropdown({
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
         className={cn(
-          "w-full flex items-center justify-between gap-2 px-4 py-2.5 rounded-lg border bg-card text-left",
+          "w-full flex items-center justify-between gap-2 px-4 py-2.5 rounded-lg border bg-[var(--bg-primary)] text-left",
           "transition-all duration-200",
           disabled
-            ? "opacity-50 cursor-not-allowed border-card-border"
+            ? "opacity-50 cursor-not-allowed border-[var(--border-primary)]"
             : isOpen
             ? "border-primary-500 ring-2 ring-primary-500"
-            : "border-card-border hover:border-slate-600"
+            : "border-[var(--border-primary)] hover:border-[var(--border-secondary)]"
         )}
       >
         <div className="flex items-center gap-3 min-w-0">
@@ -204,7 +215,7 @@ export function SelectDropdown({
           <span
             className={cn(
               "truncate",
-              selectedOption ? "text-white" : "text-slate-500"
+              selectedOption ? "text-[var(--text-primary)]" : "text-[var(--text-tertiary)]"
             )}
           >
             {selectedOption?.label || placeholder}
@@ -212,14 +223,14 @@ export function SelectDropdown({
         </div>
         <ChevronDown
           className={cn(
-            "h-4 w-4 text-slate-500 transition-transform flex-shrink-0",
+            "h-4 w-4 text-[var(--text-tertiary)] transition-transform flex-shrink-0",
             isOpen && "rotate-180"
           )}
         />
       </button>
 
       {isOpen && (
-        <div className="absolute z-50 w-full mt-2 py-1 bg-card border border-card-border rounded-lg shadow-xl max-h-60 overflow-auto">
+        <div className="absolute z-[100] w-full mt-2 py-1 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-lg shadow-xl max-h-60 overflow-auto">
           {options.map((option) => (
             <button
               key={option.value}
@@ -234,10 +245,10 @@ export function SelectDropdown({
               className={cn(
                 "w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors",
                 option.disabled
-                  ? "text-slate-600 cursor-not-allowed"
+                  ? "text-[var(--text-tertiary)] cursor-not-allowed"
                   : option.value === value
                   ? "bg-primary-500/10 text-primary-400"
-                  : "text-slate-300 hover:bg-card-border hover:text-white"
+                  : "text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]"
               )}
             >
               {option.icon && (
@@ -246,7 +257,7 @@ export function SelectDropdown({
               <div className="flex-1 min-w-0">
                 <p className="truncate">{option.label}</p>
                 {option.description && (
-                  <p className="text-xs text-slate-500 truncate mt-0.5">
+                  <p className="text-xs text-[var(--text-tertiary)] truncate mt-0.5">
                     {option.description}
                   </p>
                 )}
@@ -261,6 +272,7 @@ export function SelectDropdown({
     </div>
   );
 }
+
 
 
 
