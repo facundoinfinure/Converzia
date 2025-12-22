@@ -197,98 +197,101 @@ export async function processDelivery(deliveryId: string): Promise<DeliveryResul
     finalStatus = "PARTIAL";
     creditConsumed = true;
   } else {
-    // All failed
+    // All failed - don't consume credit, increment retry
     finalStatus = "FAILED";
     creditConsumed = false;
+    
+    // Update delivery with failure details
+    await queryWithTimeout(
+      supabase.from("deliveries").update({
+        status: finalStatus,
+        integrations_attempted: integrationsAttempted,
+        integrations_succeeded: integrationsSucceeded,
+        integrations_failed: integrationsFailed,
+        error_message: errors.join("; "),
+        retry_count: (delivery.retry_count || 0) + 1,
+      }).eq("id", deliveryId),
+      10000,
+      "update delivery status (failed)"
+    );
   }
 
-  // Update delivery with results
-  const updateData: Record<string, unknown> = {
-    status: finalStatus,
-    integrations_attempted: integrationsAttempted,
-    integrations_succeeded: integrationsSucceeded,
-    integrations_failed: integrationsFailed,
-    error_message: errors.length > 0 ? errors.join("; ") : null,
-    retry_count: finalStatus === "FAILED" ? (delivery.retry_count || 0) + 1 : delivery.retry_count,
-  };
-
-  if (finalStatus === "DELIVERED" || finalStatus === "PARTIAL") {
-    updateData.delivered_at = new Date().toISOString();
-    updateData.sheets_delivered_at = integrationsSucceeded.includes("GOOGLE_SHEETS")
-      ? new Date().toISOString()
-      : delivery.sheets_delivered_at;
-    updateData.crm_delivered_at = integrationsSucceeded.includes("TOKKO")
-      ? new Date().toISOString()
-      : delivery.crm_delivered_at;
-  }
-
-  await queryWithTimeout(
-    supabase.from("deliveries").update(updateData).eq("id", deliveryId),
-    10000,
-    "update delivery status"
-  );
-
-  // Consume credit if delivery succeeded (even partial)
+  // If delivery succeeded (DELIVERED or PARTIAL), use atomic function
   if (creditConsumed) {
     try {
-      await consumeCredit(delivery.tenant_id, delivery.lead_offer_id, deliveryId);
-      Metrics.creditConsumed(delivery.tenant_id);
-
-      // Update lead offer status
-      await queryWithTimeout(
-        supabase
-          .from("lead_offers")
-          .update({
-            status: "SENT_TO_DEVELOPER",
-            billing_eligibility: "CHARGEABLE",
-            status_changed_at: new Date().toISOString(),
-          })
-          .eq("id", delivery.lead_offer_id),
-        10000,
-        "update lead offer to SENT_TO_DEVELOPER"
+      // Use atomic function for delivery completion + credit consumption
+      // This ensures both operations succeed or neither does
+      const { data: atomicResult, error: atomicError } = await supabase.rpc(
+        "complete_delivery_and_consume_credit",
+        {
+          p_delivery_id: deliveryId,
+          p_integrations_succeeded: integrationsSucceeded,
+          p_integrations_failed: integrationsFailed,
+          p_final_status: finalStatus,
+        }
       );
 
-      // Log event
-      await queryWithTimeout(
-        supabase.from("lead_events").insert({
-          lead_id: delivery.lead_id,
-          lead_offer_id: delivery.lead_offer_id,
-          tenant_id: delivery.tenant_id,
-          event_type: "DELIVERY_COMPLETED",
-          details: {
-            delivery_id: deliveryId,
-            status: finalStatus,
-            integrations_succeeded: integrationsSucceeded,
-            integrations_failed: integrationsFailed,
-          },
-          actor_type: "SYSTEM",
-        }),
-        10000,
-        "insert delivery completed event"
-      );
+      if (atomicError) {
+        throw new Error(atomicError.message);
+      }
+
+      const result = Array.isArray(atomicResult) ? atomicResult[0] : atomicResult;
+
+      if (!result?.success) {
+        throw new Error(result?.message || "Atomic delivery completion failed");
+      }
+
+      creditConsumed = result.credit_consumed || false;
+
+      if (creditConsumed) {
+        Metrics.creditConsumed(delivery.tenant_id);
+        logger.billing("credit_consumed", delivery.tenant_id, { 
+          deliveryId, 
+          newBalance: result.new_balance 
+        });
+      }
+
+      // Update sheets/CRM delivery timestamps if applicable
+      if (integrationsSucceeded.includes("GOOGLE_SHEETS") || integrationsSucceeded.includes("TOKKO")) {
+        const timestampUpdate: Record<string, unknown> = {};
+        if (integrationsSucceeded.includes("GOOGLE_SHEETS")) {
+          timestampUpdate.sheets_delivered_at = new Date().toISOString();
+        }
+        if (integrationsSucceeded.includes("TOKKO")) {
+          timestampUpdate.crm_delivered_at = new Date().toISOString();
+        }
+        await queryWithTimeout(
+          supabase.from("deliveries").update(timestampUpdate).eq("id", deliveryId),
+          10000,
+          "update integration timestamps"
+        );
+      }
+
     } catch (err) {
-      // Credit consumption failed - critical error
-      logger.exception("Credit consumption failed", err, { deliveryId, tenantId: delivery.tenant_id });
+      // Atomic operation failed - critical error
+      logger.exception("Atomic delivery completion failed", err, { 
+        deliveryId, 
+        tenantId: delivery.tenant_id 
+      });
       Alerts.creditConsumptionFailed(
         delivery.tenant_id,
         deliveryId,
         err instanceof Error ? err.message : "Unknown"
       );
 
-      // Still mark delivery as completed but log the billing issue
+      // Mark delivery as failed so it can be retried
       await queryWithTimeout(
-        supabase
-          .from("lead_offers")
-          .update({
-            billing_eligibility: "PENDING",
-            billing_notes: `Delivery succeeded but credit consumption failed: ${err instanceof Error ? err.message : "Unknown"}`,
-          })
-          .eq("id", delivery.lead_offer_id),
+        supabase.from("deliveries").update({
+          status: "FAILED",
+          error_message: `Atomic completion failed: ${err instanceof Error ? err.message : "Unknown"}`,
+          retry_count: (delivery.retry_count || 0) + 1,
+        }).eq("id", deliveryId),
         10000,
-        "update lead offer billing issue"
+        "update delivery after atomic failure"
       );
 
       creditConsumed = false;
+      finalStatus = "FAILED";
     }
   }
 

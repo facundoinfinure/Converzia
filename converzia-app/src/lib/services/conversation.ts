@@ -12,7 +12,7 @@ import {
 import { calculateLeadScore, checkMinimumFieldsForScoring } from "./scoring";
 import type { LeadOffer, QualificationFields, Offer } from "@/types";
 import { normalizePhoneForDb } from "@/lib/utils";
-import { logger, Metrics } from "@/lib/monitoring";
+import { logger, Metrics, getTraceId } from "@/lib/monitoring";
 
 // ============================================
 // Conversation Flow Service
@@ -589,7 +589,8 @@ async function triggerDelivery(leadOfferId: string, scoreSummary?: string): Prom
     }
   }
 
-  // Create delivery record with complete data
+  // Create delivery record with complete data and trace_id
+  const currentTraceId = getTraceId();
   await queryWithTimeout(
     supabase.from("deliveries").insert({
       lead_offer_id: leadOfferId,
@@ -597,6 +598,7 @@ async function triggerDelivery(leadOfferId: string, scoreSummary?: string): Prom
       tenant_id: (leadOffer as any).tenant_id,
       offer_id: offer?.id,
       status: "PENDING",
+      trace_id: currentTraceId || null,
       payload: {
       lead: {
         name: lead.full_name || lead.first_name || "Sin nombre",
@@ -624,7 +626,7 @@ async function triggerDelivery(leadOfferId: string, scoreSummary?: string): Prom
     "create delivery record"
   );
 
-  // Log delivery event
+  // Log delivery event with trace_id
   await queryWithTimeout(
     supabase.from("lead_events").insert({
       lead_id: (lead as any).id,
@@ -636,6 +638,7 @@ async function triggerDelivery(leadOfferId: string, scoreSummary?: string): Prom
         offer_name: offer?.name,
       },
       actor_type: "SYSTEM",
+      trace_id: currentTraceId || null,
     }),
     10000,
     "insert delivery event"

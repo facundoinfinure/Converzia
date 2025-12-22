@@ -166,37 +166,42 @@ export async function POST(request: NextRequest) {
 
         Metrics.leadCreated("meta");
 
-        // Idempotency: if we've already processed this leadgen_id for this tenant, ignore
-        const { data: existingSource } = await (supabase as any)
-          .from("lead_sources")
-          .select("id")
-          .eq("tenant_id", adMapping.tenant_id)
-          .eq("leadgen_id", leadgenId)
-          .maybeSingle();
+        // Idempotency: Use atomic upsert function to handle race conditions
+        // This prevents duplicate lead_sources when Meta retries the webhook
+        const { data: sourceResult, error: sourceError } = await (supabase as any)
+          .rpc("upsert_lead_source", {
+            p_lead_id: lead.id,
+            p_tenant_id: adMapping.tenant_id,
+            p_leadgen_id: leadgenId,
+            p_platform: "META",
+            p_ad_id: adId,
+            p_campaign_id: leadgenData.campaign_id || null,
+            p_adset_id: leadgenData.adset_id || null,
+            p_form_id: formId || null,
+            p_form_data: {
+              leadgen: leadgenData,
+              lead: leadData,
+              received_at: new Date().toISOString(),
+            },
+          });
 
-        const leadSourceId =
-          existingSource?.id ||
-          (
-            await (supabase as any)
-              .from("lead_sources")
-              .insert({
-                lead_id: lead.id,
-                tenant_id: adMapping.tenant_id,
-                platform: "META",
-                ad_id: adId,
-                campaign_id: leadgenData.campaign_id || null,
-                adset_id: leadgenData.adset_id || null,
-                form_id: formId || null,
-                leadgen_id: leadgenId,
-                form_data: {
-                  leadgen: leadgenData,
-                  lead: leadData,
-                  received_at: new Date().toISOString(),
-                },
-              })
-              .select("id")
-              .single()
-          ).data?.id;
+        if (sourceError) {
+          logger.error("Error upserting lead source", { error: sourceError.message, leadgenId });
+          continue;
+        }
+
+        const sourceRow = Array.isArray(sourceResult) ? sourceResult[0] : sourceResult;
+        const leadSourceId = sourceRow?.lead_source_id;
+        const wasNewSource = sourceRow?.was_created || false;
+
+        // If source already existed, this is a duplicate webhook - skip processing
+        if (!wasNewSource && leadSourceId) {
+          logger.info("Duplicate leadgen_id received (idempotent skip)", { 
+            leadgenId, 
+            tenantId: adMapping.tenant_id 
+          });
+          continue;
+        }
 
         const offerId = adMapping.offer_id || null;
         const status = offerId ? "TO_BE_CONTACTED" : "PENDING_MAPPING";
@@ -264,7 +269,8 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // Log event
+        // Log event with trace_id for audit trail
+        const { getTraceId } = await import("@/lib/monitoring");
         await (supabase as any).from("lead_events").insert({
           lead_id: lead.id,
           lead_offer_id: leadOffer?.id,
@@ -277,6 +283,7 @@ export async function POST(request: NextRequest) {
             leadgen_id: leadgenId,
           },
           actor_type: "SYSTEM",
+          trace_id: getTraceId() || null,
         });
 
         // If mapped, trigger initial conversation

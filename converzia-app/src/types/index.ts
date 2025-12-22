@@ -410,6 +410,7 @@ export interface Delivery {
   integrations_attempted: string[];
   integrations_succeeded: string[];
   integrations_failed: string[];
+  trace_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -536,8 +537,13 @@ export interface LeadEvent {
   id: string;
   lead_id: string;
   lead_offer_id: string | null;
+  tenant_id: string | null;
   event_type: string;
   event_data: Record<string, unknown>;
+  details: Record<string, unknown> | null;
+  actor_type: string | null;
+  actor_id: string | null;
+  trace_id: string | null;
   created_at: string;
 }
 

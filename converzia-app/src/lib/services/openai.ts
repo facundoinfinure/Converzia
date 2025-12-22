@@ -322,72 +322,30 @@ export async function generateQualificationResponse(
 }
 
 // ============================================
-// Calculate Lead Score
+// Calculate Lead Score - DEPRECATED
 // ============================================
+// NOTE: This function is deprecated. Use calculateLeadScore from scoring.ts instead.
+// Keeping for backwards compatibility but will be removed in next major version.
+// The scoring.ts implementation is more complete with configurable templates.
 
+/**
+ * @deprecated Use calculateLeadScore from scoring.ts instead
+ */
 export async function calculateScore(
   fields: QualificationFields,
   offer?: Offer
 ): Promise<{ score: number; breakdown: ScoreBreakdown }> {
-  const breakdown: ScoreBreakdown = {};
-  let totalScore = 0;
-
-  // Budget score (0-25 points)
-  if (fields.budget?.min || fields.budget?.max) {
-    const budgetScore = 25;
-    if (offer?.price_from && fields.budget.min && fields.budget.min < offer.price_from * 0.5) {
-      // Budget too low
-      breakdown.budget = Math.round(budgetScore * 0.3);
-    } else {
-      breakdown.budget = budgetScore;
-    }
-    totalScore += breakdown.budget;
-  }
-
-  // Zone score (0-25 points)
-  if (fields.zone && fields.zone.length > 0) {
-    breakdown.zone = 25;
-    totalScore += breakdown.zone;
-  }
-
-  // Timing score (0-25 points)
-  if (fields.timing) {
-    const timingScores: Record<string, number> = {
-      inmediato: 25,
-      immediate: 25,
-      "1_mes": 25,
-      "3_meses": 20,
-      "6_meses": 15,
-      "1_year": 10,
-      no_definido: 5,
-    };
-    breakdown.timing = timingScores[fields.timing.toLowerCase()] || 15;
-    totalScore += breakdown.timing;
-  }
-
-  // Completeness score (0-25 points)
-  const completenessFields = [
-    !!fields.name,
-    !!(fields.budget?.min || fields.budget?.max),
-    !!(fields.zone && fields.zone.length > 0),
-    !!fields.timing,
-    !!fields.bedrooms,
-    !!fields.property_type,
-  ];
-  const filledCount = completenessFields.filter(Boolean).length;
-  breakdown.completeness = Math.round((filledCount / completenessFields.length) * 25);
-  totalScore += breakdown.completeness;
-
-  // Bonus for investors
-  if (fields.is_investor) {
-    breakdown.investor_bonus = 10;
-    totalScore += 10;
-  }
-
-  // Cap at 100
+  // Import dynamically to avoid circular deps, but prefer direct usage of scoring.ts
+  const { calculateLeadScore } = await import("./scoring");
+  
+  // Fallback tenant ID - this should be passed explicitly in real usage
+  const tenantId = offer?.tenant_id || "default";
+  
+  const result = await calculateLeadScore(fields, offer || null, tenantId);
+  
   return {
-    score: Math.min(totalScore, 100),
-    breakdown,
+    score: result.score,
+    breakdown: result.breakdown,
   };
 }
 
