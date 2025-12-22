@@ -1,28 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
 
 // ============================================
-// In-Memory Rate Limiter
-// For production, use Redis (Upstash) or similar
+// Distributed Rate Limiter with Upstash Redis
+// Falls back to in-memory for local development
 // ============================================
-
-interface RateLimitEntry {
-  count: number;
-  resetAt: number;
-}
-
-// In-memory store (works for single-instance deployments)
-// For Vercel with multiple instances, use Upstash Redis
-const rateLimitStore = new Map<string, RateLimitEntry>();
-
-// Cleanup old entries every 5 minutes
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, entry] of rateLimitStore.entries()) {
-    if (entry.resetAt < now) {
-      rateLimitStore.delete(key);
-    }
-  }
-}, 5 * 60 * 1000);
 
 export interface RateLimitConfig {
   windowMs: number; // Time window in milliseconds
@@ -37,19 +20,100 @@ export interface RateLimitResult {
   retryAfter?: number;
 }
 
-/**
- * Check rate limit for a given key
- */
-export function checkRateLimit(
+// ============================================
+// Check if Upstash Redis is configured
+// ============================================
+
+const useRedis = !!(
+  process.env.UPSTASH_REDIS_REST_URL && 
+  process.env.UPSTASH_REDIS_REST_TOKEN
+);
+
+// ============================================
+// Upstash Redis Client (Production)
+// ============================================
+
+let redis: Redis | null = null;
+
+function getRedis(): Redis {
+  if (!redis && useRedis) {
+    redis = new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL!,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+    });
+  }
+  return redis!;
+}
+
+// ============================================
+// Upstash Rate Limiters (Production)
+// Using sliding window algorithm for accuracy
+// ============================================
+
+type RateLimiterType = "webhook" | "api" | "login" | "billing" | "heavy";
+
+const upstashLimiters: Map<RateLimiterType, Ratelimit> = new Map();
+
+function getUpstashLimiter(type: RateLimiterType): Ratelimit {
+  if (!upstashLimiters.has(type)) {
+    const redisClient = getRedis();
+    
+    const configs: Record<RateLimiterType, { requests: number; window: string }> = {
+      webhook: { requests: 100, window: "1m" },
+      api: { requests: 60, window: "1m" },
+      login: { requests: 5, window: "1m" },
+      billing: { requests: 10, window: "1m" },
+      heavy: { requests: 5, window: "1m" },
+    };
+    
+    const config = configs[type];
+    
+    upstashLimiters.set(
+      type,
+      new Ratelimit({
+        redis: redisClient,
+        limiter: Ratelimit.slidingWindow(config.requests, config.window as any),
+        analytics: true,
+        prefix: `ratelimit:${type}`,
+      })
+    );
+  }
+  
+  return upstashLimiters.get(type)!;
+}
+
+// ============================================
+// In-Memory Rate Limiter (Development Fallback)
+// ============================================
+
+interface RateLimitEntry {
+  count: number;
+  resetAt: number;
+}
+
+const inMemoryStore = new Map<string, RateLimitEntry>();
+
+// Cleanup old entries every 5 minutes
+if (typeof setInterval !== "undefined") {
+  setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of inMemoryStore.entries()) {
+      if (entry.resetAt < now) {
+        inMemoryStore.delete(key);
+      }
+    }
+  }, 5 * 60 * 1000);
+}
+
+function checkInMemoryRateLimit(
   key: string,
   config: RateLimitConfig
 ): RateLimitResult {
   const now = Date.now();
   const fullKey = config.keyPrefix ? `${config.keyPrefix}:${key}` : key;
 
-  let entry = rateLimitStore.get(fullKey);
+  let entry = inMemoryStore.get(fullKey);
 
-  // Create new entry if doesn't exist or has expired
   if (!entry || entry.resetAt < now) {
     entry = {
       count: 0,
@@ -57,9 +121,8 @@ export function checkRateLimit(
     };
   }
 
-  // Increment count
   entry.count++;
-  rateLimitStore.set(fullKey, entry);
+  inMemoryStore.set(fullKey, entry);
 
   const remaining = Math.max(0, config.maxRequests - entry.count);
   const success = entry.count <= config.maxRequests;
@@ -72,9 +135,10 @@ export function checkRateLimit(
   };
 }
 
-/**
- * Get client identifier from request
- */
+// ============================================
+// Get client identifier from request
+// ============================================
+
 export function getClientIdentifier(request: NextRequest): string {
   // Try to get real IP from various headers (Vercel, Cloudflare, etc.)
   const forwardedFor = request.headers.get("x-forwarded-for");
@@ -90,17 +154,55 @@ export function getClientIdentifier(request: NextRequest): string {
   return vercelForwardedFor || cfConnectingIp || realIp || "unknown";
 }
 
-/**
- * Middleware-style rate limit check that returns a response if limited
- */
-export function withRateLimit(
+// ============================================
+// Check rate limit (unified interface)
+// ============================================
+
+export async function checkRateLimit(
+  key: string,
+  config: RateLimitConfig
+): Promise<RateLimitResult> {
+  const fullKey = config.keyPrefix ? `${config.keyPrefix}:${key}` : key;
+  
+  if (useRedis) {
+    // Use Upstash in production
+    const type = (config.keyPrefix || "api") as RateLimiterType;
+    const limiter = getUpstashLimiter(type);
+    
+    const result = await limiter.limit(fullKey);
+    
+    return {
+      success: result.success,
+      remaining: result.remaining,
+      resetAt: result.reset,
+      retryAfter: result.success ? undefined : Math.ceil((result.reset - Date.now()) / 1000),
+    };
+  } else {
+    // Fallback to in-memory for development
+    return checkInMemoryRateLimit(key, config);
+  }
+}
+
+// ============================================
+// Middleware-style rate limit check
+// Returns NextResponse if limited, null otherwise
+// ============================================
+
+export async function withRateLimit(
   request: NextRequest,
   config: RateLimitConfig
-): NextResponse | null {
+): Promise<NextResponse | null> {
   const clientId = getClientIdentifier(request);
-  const result = checkRateLimit(clientId, config);
+  const result = await checkRateLimit(clientId, config);
 
   if (!result.success) {
+    // Log rate limit hit for security monitoring
+    console.warn(`Rate limit exceeded for ${config.keyPrefix || "api"}`, {
+      clientId: clientId.substring(0, 8) + "...", // Partial IP for privacy
+      remaining: result.remaining,
+      retryAfter: result.retryAfter,
+    });
+    
     return NextResponse.json(
       {
         error: "Too many requests",
@@ -138,7 +240,7 @@ export const RATE_LIMITS = {
     maxRequests: 60,
     keyPrefix: "api",
   },
-  // Login attempts: 5 per minute
+  // Login attempts: 5 per minute (strict for brute-force protection)
   login: {
     windowMs: 60 * 1000,
     maxRequests: 5,
@@ -159,31 +261,21 @@ export const RATE_LIMITS = {
 } as const;
 
 // ============================================
-// Upstash Redis Rate Limiter (for production)
+// Health check for Redis connection
 // ============================================
 
-// If using Upstash Redis, uncomment and configure:
-/*
-import { Ratelimit } from "@upstash/ratelimit";
-import { Redis } from "@upstash/redis";
-
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL!,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-});
-
-export const upstashRateLimiter = new Ratelimit({
-  redis,
-  limiter: Ratelimit.slidingWindow(100, "1 m"),
-  analytics: true,
-});
-
-export async function checkUpstashRateLimit(key: string) {
-  const { success, limit, remaining, reset } = await upstashRateLimiter.limit(key);
-  return { success, limit, remaining, reset };
+export async function checkRedisHealth(): Promise<boolean> {
+  if (!useRedis) {
+    return false; // Using in-memory fallback
+  }
+  
+  try {
+    const redisClient = getRedis();
+    await redisClient.ping();
+    return true;
+  } catch (error) {
+    console.error("Redis health check failed:", error);
+    return false;
+  }
 }
-*/
-
-
-
 

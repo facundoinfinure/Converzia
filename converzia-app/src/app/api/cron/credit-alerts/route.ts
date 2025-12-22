@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
+import { withCronAuth } from "@/lib/security/cron-auth";
 
 // ============================================
 // Cron Job: Credit Alerts
@@ -11,13 +12,9 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 
 export async function GET(request: NextRequest) {
-  // Verify cron secret
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  // SECURITY: Validate cron secret - REQUIRED
+  const authError = withCronAuth(request);
+  if (authError) return authError;
 
   try {
     const supabase = createAdminClient();
@@ -45,17 +42,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    if (!lowCreditTenants || lowCreditTenants.length === 0) {
+    const tenants = (lowCreditTenants as any) || [];
+    if (tenants.length === 0) {
       return NextResponse.json({ alerted: 0, message: "No tenants with low credits" });
     }
 
-    console.log(`Found ${lowCreditTenants.length} tenants with low credits`);
+    console.log(`Found ${tenants.length} tenants with low credits`);
 
     // In production, send emails to tenant admins
     // For now, just log and track in events
     let alertCount = 0;
 
-    for (const tenant of lowCreditTenants) {
+    for (const tenant of tenants) {
       const tenantInfo = tenant.tenants as any;
 
       // Log event
@@ -86,7 +84,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       alerted: alertCount,
-      details: lowCreditTenants.map((t: { tenant_id: string; current_balance: number }) => ({
+      details: tenants.map((t: { tenant_id: string; current_balance: number }) => ({
         tenant_id: t.tenant_id,
         balance: t.current_balance,
       })),

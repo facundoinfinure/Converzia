@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { processIncomingMessage } from "@/lib/services/conversation";
 import { sendMessage } from "@/lib/services/chatwoot";
 import { validateChatwootSignature } from "@/lib/security/webhook-validation";
-import { withRateLimit, RATE_LIMITS } from "@/lib/security/rate-limit";
+import { withRateLimit, RATE_LIMITS, getClientIdentifier } from "@/lib/security/rate-limit";
 
 // ============================================
 // Chatwoot Webhook Handler
@@ -10,7 +10,7 @@ import { withRateLimit, RATE_LIMITS } from "@/lib/security/rate-limit";
 
 export async function POST(request: NextRequest) {
   // Rate limiting
-  const rateLimitResponse = withRateLimit(request, RATE_LIMITS.webhook);
+  const rateLimitResponse = await withRateLimit(request, RATE_LIMITS.webhook);
   if (rateLimitResponse) {
     return rateLimitResponse;
   }
@@ -19,16 +19,25 @@ export async function POST(request: NextRequest) {
     // Get raw body for signature verification
     const rawBody = await request.text();
     
-    // Validate webhook signature if secret is configured
+    // Validate webhook signature - REQUIRED for security
     const signature = request.headers.get("x-chatwoot-signature");
     const webhookSecret = process.env.CHATWOOT_WEBHOOK_SECRET;
     
-    if (webhookSecret) {
-      const isValid = validateChatwootSignature(rawBody, signature, webhookSecret);
-      if (!isValid) {
-        console.warn("Invalid Chatwoot webhook signature");
-        return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
-      }
+    if (!webhookSecret) {
+      console.error("SECURITY: CHATWOOT_WEBHOOK_SECRET not configured - webhook rejected");
+      return NextResponse.json(
+        { error: "Server configuration error" },
+        { status: 500 }
+      );
+    }
+    
+    const isValid = validateChatwootSignature(rawBody, signature, webhookSecret);
+    if (!isValid) {
+      console.error("SECURITY: Invalid Chatwoot webhook signature", {
+        ip: getClientIdentifier(request).substring(0, 8) + "...",
+        hasSignature: !!signature,
+      });
+      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
 
     // Parse payload

@@ -1,23 +1,42 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
+import { withRateLimit, RATE_LIMITS } from "@/lib/security/rate-limit";
 import Stripe from "stripe";
 
 // ============================================
 // Billing Checkout - Create Stripe Session
+// SECURITY: Prices are validated from server-side data, NOT from client
 // ============================================
 
-function getStripe() {
-  return new Stripe(process.env.STRIPE_SECRET_KEY || "", {
+function getStripe(): Stripe {
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  if (!secretKey) {
+    throw new Error("STRIPE_SECRET_KEY is not configured");
+  }
+  return new Stripe(secretKey, {
     apiVersion: "2025-02-24.acacia" as any,
   });
 }
 
+// Default packages if tenant has no custom pricing
+const DEFAULT_PACKAGES = [
+  { id: "starter", name: "Starter", credits: 50, price: 99 },
+  { id: "professional", name: "Professional", credits: 150, price: 249 },
+  { id: "enterprise", name: "Enterprise", credits: 500, price: 699 },
+];
+
 export async function POST(request: NextRequest) {
-  const stripe = getStripe();
+  // Rate limiting for billing operations
+  const rateLimitResponse = await withRateLimit(request, RATE_LIMITS.billing);
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+
   try {
     const supabase = await createClient();
     const admin = createAdminClient();
+    const stripe = getStripe();
 
     // Verify user is authenticated
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -26,9 +45,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { tenant_id, package_id, credits, price } = body;
+    const { tenant_id, package_id } = body;
 
-    if (!tenant_id || !credits || !price) {
+    // SECURITY: Only accept tenant_id and package_id from client
+    // Price and credits are determined server-side
+    if (!tenant_id || !package_id) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
@@ -63,6 +84,36 @@ export async function POST(request: NextRequest) {
     if (!tenant) {
       return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
     }
+
+    // SECURITY: Get pricing from server-side data, NOT from client
+    const { data: tenantPricing } = await queryWithTimeout(
+      (admin as any)
+        .from("tenant_pricing")
+        .select("packages")
+        .eq("tenant_id", tenant_id)
+        .maybeSingle(),
+      10000,
+      "get tenant pricing"
+    );
+
+    // Use tenant-specific packages or fallback to defaults
+    const packages = (tenantPricing as any)?.packages || DEFAULT_PACKAGES;
+    
+    // Find the requested package from SERVER data
+    const selectedPackage = packages.find((p: any) => p.id === package_id);
+    
+    if (!selectedPackage) {
+      console.warn("SECURITY: Invalid package_id requested", {
+        tenant_id,
+        package_id,
+        user_id: user.id,
+      });
+      return NextResponse.json({ error: "Invalid package" }, { status: 400 });
+    }
+
+    // Use SERVER-SIDE values, not client-provided values
+    const serverPrice = selectedPackage.price;
+    const serverCredits = selectedPackage.credits;
 
     // Create or get Stripe customer (stored in stripe_customers table)
     let customerId: string | null = null;
@@ -100,18 +151,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create billing order (pending)
+    // Create billing order (pending) with SERVER-SIDE prices
     const { data: billingOrder, error: orderError } = await queryWithTimeout(
       (supabase as any)
         .from("billing_orders")
         .insert({
           tenant_id,
-          package_name: package_id || "custom",
-          credits_purchased: credits,
-          subtotal: price,
+          package_name: package_id,
+          credits_purchased: serverCredits, // Server value
+          subtotal: serverPrice, // Server value
           discount_amount: 0,
           tax_amount: 0,
-          total: price,
+          total: serverPrice, // Server value
           currency: "USD",
           status: "pending",
         })
@@ -122,10 +173,11 @@ export async function POST(request: NextRequest) {
     );
 
     if (orderError || !billingOrder) {
+      console.error("Failed to create billing order:", orderError);
       return NextResponse.json({ error: "Failed to create billing order" }, { status: 500 });
     }
 
-    // Create checkout session
+    // Create checkout session with SERVER-SIDE prices
     const session = await stripe.checkout.sessions.create({
       customer: customerId!,
       mode: "payment",
@@ -134,22 +186,22 @@ export async function POST(request: NextRequest) {
           price_data: {
             currency: "usd",
             product_data: {
-              name: `${credits} Créditos Converzia`,
-              description: `Paquete de ${credits} créditos para calificación de leads`,
+              name: `${serverCredits} Créditos Converzia`,
+              description: `Paquete ${selectedPackage.name}: ${serverCredits} créditos para calificación de leads`,
             },
-            unit_amount: Math.round(price * 100), // Stripe uses cents
+            unit_amount: Math.round(serverPrice * 100), // Stripe uses cents - SERVER VALUE
           },
           quantity: 1,
         },
       ],
       metadata: {
         tenant_id,
-        package_id: package_id || "custom",
-        credits: String(credits),
+        package_id,
+        credits: String(serverCredits), // Server value
         user_id: user.id,
-        billing_order_id: billingOrder.id,
+        billing_order_id: (billingOrder as any).id,
       },
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/portal/billing?success=true&credits=${credits}`,
+      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/portal/billing?success=true&credits=${serverCredits}`,
       cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/portal/billing?canceled=true`,
     });
 
@@ -160,7 +212,7 @@ export async function POST(request: NextRequest) {
         .update({
           stripe_checkout_session_id: session.id,
         })
-        .eq("id", billingOrder.id),
+        .eq("id", (billingOrder as any).id),
       10000,
       "update billing order with session"
     );
@@ -174,4 +226,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

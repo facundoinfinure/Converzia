@@ -1,25 +1,48 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
+import { withRateLimit, RATE_LIMITS, getClientIdentifier } from "@/lib/security/rate-limit";
 import Stripe from "stripe";
 
 // ============================================
 // Stripe Webhook Handler
 // ============================================
 
-function getStripe() {
-  return new Stripe(process.env.STRIPE_SECRET_KEY || "", {
+function getStripe(): Stripe {
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  if (!secretKey) {
+    throw new Error("STRIPE_SECRET_KEY is not configured");
+  }
+  return new Stripe(secretKey, {
     apiVersion: "2025-02-24.acacia" as any,
   });
 }
 
 export async function POST(request: NextRequest) {
+  // Rate limiting
+  const rateLimitResponse = await withRateLimit(request, RATE_LIMITS.webhook);
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+
+  // Validate required configuration
+  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!endpointSecret) {
+    console.error("SECURITY: STRIPE_WEBHOOK_SECRET not configured - webhook rejected");
+    return NextResponse.json(
+      { error: "Server configuration error" },
+      { status: 500 }
+    );
+  }
+
   const stripe = getStripe();
-  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
   const body = await request.text();
   const signature = request.headers.get("stripe-signature");
 
   if (!signature) {
+    console.error("SECURITY: Stripe webhook missing signature", {
+      ip: getClientIdentifier(request).substring(0, 8) + "...",
+    });
     return NextResponse.json({ error: "No signature" }, { status: 400 });
   }
 
@@ -28,7 +51,10 @@ export async function POST(request: NextRequest) {
   try {
     event = stripe.webhooks.constructEvent(body, signature, endpointSecret);
   } catch (err) {
-    console.error("Webhook signature verification failed:", err);
+    console.error("SECURITY: Stripe webhook signature verification failed", {
+      ip: getClientIdentifier(request).substring(0, 8) + "...",
+      error: err instanceof Error ? err.message : "Unknown error",
+    });
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
@@ -64,7 +90,7 @@ export async function POST(request: NextRequest) {
         break;
       }
 
-      if (existingOrder.status === "completed") {
+      if ((existingOrder as any).status === "completed") {
         console.log("Stripe webhook already processed:", session.id);
         break;
       }
@@ -126,4 +152,3 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({ received: true });
 }
-

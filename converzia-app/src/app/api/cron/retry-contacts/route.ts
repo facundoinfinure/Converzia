@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { retryContact, sendReactivation } from "@/lib/services/conversation";
+import { withCronAuth } from "@/lib/security/cron-auth";
 
 // ============================================
 // Cron Job: Retry Contacts & Reactivations
@@ -12,13 +13,9 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
-  // Verify cron secret
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  // SECURITY: Validate cron secret - REQUIRED
+  const authError = withCronAuth(request);
+  if (authError) return authError;
 
   try {
     const supabase = createAdminClient();
@@ -44,10 +41,11 @@ export async function GET(request: NextRequest) {
     let retryCount = 0;
     let retryErrors = 0;
 
-    if (contactsToRetry && contactsToRetry.length > 0) {
-      console.log(`Retrying ${contactsToRetry.length} contacts`);
+    const contacts = (contactsToRetry as any) || [];
+    if (contacts.length > 0) {
+      console.log(`Retrying ${contacts.length} contacts`);
 
-      for (const leadOffer of contactsToRetry) {
+      for (const leadOffer of contacts) {
         try {
           await retryContact(leadOffer.id);
           retryCount++;
@@ -82,10 +80,11 @@ export async function GET(request: NextRequest) {
     let reactivationCount = 0;
     let reactivationErrors = 0;
 
-    if (leadsToReactivate && leadsToReactivate.length > 0) {
-      console.log(`Reactivating ${leadsToReactivate.length} leads`);
+    const reactivations = (leadsToReactivate as any) || [];
+    if (reactivations.length > 0) {
+      console.log(`Reactivating ${reactivations.length} leads`);
 
-      for (const leadOffer of leadsToReactivate) {
+      for (const leadOffer of reactivations) {
         try {
           await sendReactivation(leadOffer.id);
           reactivationCount++;
@@ -121,16 +120,16 @@ export async function GET(request: NextRequest) {
       "move stale leads to COOLING"
     );
 
-    const movedToCooling = staleLeads?.length || 0;
+    const movedToCooling = ((staleLeads as any) || []).length;
 
     return NextResponse.json({
       retries: {
-        processed: contactsToRetry?.length || 0,
+        processed: contacts.length,
         success: retryCount,
         errors: retryErrors,
       },
       reactivations: {
-        processed: leadsToReactivate?.length || 0,
+        processed: reactivations.length,
         success: reactivationCount,
         errors: reactivationErrors,
       },

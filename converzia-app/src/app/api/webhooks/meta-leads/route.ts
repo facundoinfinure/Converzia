@@ -3,7 +3,8 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { startInitialConversation } from "@/lib/services/conversation";
 import { validateMetaSignature } from "@/lib/security/webhook-validation";
-import { withRateLimit, RATE_LIMITS } from "@/lib/security/rate-limit";
+import { withRateLimit, RATE_LIMITS, getClientIdentifier } from "@/lib/security/rate-limit";
+import { encryptPII, isPIIEncryptionEnabled } from "@/lib/security/crypto";
 import { fetchWithTimeout } from "@/lib/utils/fetch-with-timeout";
 import { normalizePhone } from "@/lib/utils";
 
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest) {
 // Handle incoming leads
 export async function POST(request: NextRequest) {
   // Rate limiting
-  const rateLimitResponse = withRateLimit(request, RATE_LIMITS.webhook);
+  const rateLimitResponse = await withRateLimit(request, RATE_LIMITS.webhook);
   if (rateLimitResponse) {
     return rateLimitResponse;
   }
@@ -48,18 +49,25 @@ export async function POST(request: NextRequest) {
     // Get raw body for signature verification
     const rawBody = await request.text();
     
-    // Validate Meta signature
+    // Validate Meta signature - REQUIRED for security
     const signature = request.headers.get("x-hub-signature-256");
     const appSecret = process.env.META_APP_SECRET;
     
-    if (appSecret) {
-      const isValid = validateMetaSignature(rawBody, signature, appSecret);
-      if (!isValid) {
-        console.warn("Invalid Meta webhook signature");
-        return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
-      }
-    } else {
-      console.warn("META_APP_SECRET not configured - skipping signature validation");
+    if (!appSecret) {
+      console.error("SECURITY: META_APP_SECRET not configured - webhook rejected");
+      return NextResponse.json(
+        { error: "Server configuration error" },
+        { status: 500 }
+      );
+    }
+    
+    const isValid = validateMetaSignature(rawBody, signature, appSecret);
+    if (!isValid) {
+      console.error("SECURITY: Invalid Meta webhook signature", {
+        ip: getClientIdentifier(request).substring(0, 8) + "...",
+        hasSignature: !!signature,
+      });
+      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
 
     // Parse payload
@@ -348,8 +356,15 @@ function extractLeadFields(fields: Array<{ name: string; values: string[] }>) {
       // Custom question (example: "¿Cuál es el propósito de tu compra?")
       result.purpose = value;
     } else if (name === "dni" || name.includes("dni")) {
-      // Sensitive: do NOT store in leads. Keep only inside lead_sources.form_data
-      result.dni = value;
+      // SECURITY: Encrypt DNI before storing
+      // Stored only in lead_sources.form_data, never in leads table
+      if (isPIIEncryptionEnabled()) {
+        result.dni = encryptPII(value);
+      } else {
+        // Fallback: store as-is but log warning
+        console.warn("PII_ENCRYPTION_KEY not configured - DNI stored unencrypted");
+        result.dni = value;
+      }
     }
   }
 

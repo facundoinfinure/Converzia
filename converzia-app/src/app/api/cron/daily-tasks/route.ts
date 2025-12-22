@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { processDelivery } from "@/lib/services/delivery";
 import { retryContact, sendReactivation } from "@/lib/services/conversation";
+import { withCronAuth } from "@/lib/security/cron-auth";
 
 // ============================================
 // Cron Job: Daily Tasks (Combined)
@@ -13,13 +14,9 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
-  // Verify cron secret to prevent unauthorized access
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  // SECURITY: Validate cron secret - REQUIRED
+  const authError = withCronAuth(request);
+  if (authError) return authError;
 
   const results = {
     deliveries: { processed: 0, success: 0, errors: 0 },
@@ -48,11 +45,12 @@ export async function GET(request: NextRequest) {
       "fetch pending deliveries for daily tasks"
     );
 
-    if (pendingDeliveries && pendingDeliveries.length > 0) {
-      console.log(`Processing ${pendingDeliveries.length} pending deliveries`);
-      results.deliveries.processed = pendingDeliveries.length;
+    const deliveries = (pendingDeliveries as any) || [];
+    if (deliveries.length > 0) {
+      console.log(`Processing ${deliveries.length} pending deliveries`);
+      results.deliveries.processed = deliveries.length;
 
-      for (const delivery of pendingDeliveries) {
+      for (const delivery of deliveries) {
         try {
           await processDelivery(delivery.id);
           results.deliveries.success++;
@@ -92,11 +90,12 @@ export async function GET(request: NextRequest) {
       "fetch contacts to retry for daily tasks"
     );
 
-    if (contactsToRetry && contactsToRetry.length > 0) {
-      console.log(`Retrying ${contactsToRetry.length} contacts`);
-      results.retries.processed = contactsToRetry.length;
+    const contacts = (contactsToRetry as any) || [];
+    if (contacts.length > 0) {
+      console.log(`Retrying ${contacts.length} contacts`);
+      results.retries.processed = contacts.length;
 
-      for (const leadOffer of contactsToRetry) {
+      for (const leadOffer of contacts) {
         try {
           await retryContact(leadOffer.id);
           results.retries.success++;
@@ -127,11 +126,12 @@ export async function GET(request: NextRequest) {
       "fetch leads to reactivate for daily tasks"
     );
 
-    if (leadsToReactivate && leadsToReactivate.length > 0) {
-      console.log(`Reactivating ${leadsToReactivate.length} leads`);
-      results.reactivations.processed = leadsToReactivate.length;
+    const reactivations = (leadsToReactivate as any) || [];
+    if (reactivations.length > 0) {
+      console.log(`Reactivating ${reactivations.length} leads`);
+      results.reactivations.processed = reactivations.length;
 
-      for (const leadOffer of leadsToReactivate) {
+      for (const leadOffer of reactivations) {
         try {
           await sendReactivation(leadOffer.id);
           results.reactivations.success++;
@@ -166,7 +166,7 @@ export async function GET(request: NextRequest) {
       "move stale leads to COOLING for daily tasks"
     );
 
-    results.movedToCooling = staleLeads?.length || 0;
+    results.movedToCooling = ((staleLeads as any) || []).length;
 
     console.log("Daily tasks completed:", results);
     return NextResponse.json(results);

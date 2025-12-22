@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { processDelivery } from "@/lib/services/delivery";
+import { withCronAuth } from "@/lib/security/cron-auth";
 
 // ============================================
 // Cron Job: Process Pending Deliveries
@@ -12,13 +13,9 @@ export const runtime = "nodejs";
 export const maxDuration = 60; // 60 seconds max
 
 export async function GET(request: NextRequest) {
-  // Verify cron secret to prevent unauthorized access
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  // SECURITY: Validate cron secret - REQUIRED
+  const authError = withCronAuth(request);
+  if (authError) return authError;
 
   try {
     const supabase = createAdminClient();
@@ -41,17 +38,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    if (!pendingDeliveries || pendingDeliveries.length === 0) {
+    const deliveries = (pendingDeliveries as any) || [];
+    if (deliveries.length === 0) {
       return NextResponse.json({ processed: 0, message: "No pending deliveries" });
     }
 
-    console.log(`Processing ${pendingDeliveries.length} pending deliveries`);
+    console.log(`Processing ${deliveries.length} pending deliveries`);
 
     let successCount = 0;
     let errorCount = 0;
 
     // Process each delivery
-    for (const delivery of pendingDeliveries) {
+    for (const delivery of deliveries) {
       try {
         await processDelivery(delivery.id);
         successCount++;
@@ -75,7 +73,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({
-      processed: pendingDeliveries.length,
+      processed: deliveries.length,
       success: successCount,
       errors: errorCount,
     });
