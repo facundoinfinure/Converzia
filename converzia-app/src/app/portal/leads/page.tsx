@@ -18,6 +18,7 @@ import { usePortalLeads } from "@/lib/hooks/use-portal";
 import { useAuth } from "@/lib/auth/context";
 import { useToast } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { formatRelativeTime, formatDate, formatPhone, downloadCSV } from "@/lib/utils";
 import type { LeadOffer, QualificationFields, ScoreBreakdown } from "@/types";
 

@@ -3,13 +3,28 @@ import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import type { Delivery, TenantIntegration } from "@/types";
 import { createTokkoLead, TokkoConfig } from "./tokko";
 import { appendToGoogleSheets, GoogleSheetsConfig } from "./google-sheets";
+import { logger, Metrics, Alerts, startTimer } from "@/lib/monitoring";
 
 // ============================================
 // Delivery Pipeline Service
 // ============================================
 
-export async function processDelivery(deliveryId: string): Promise<void> {
+const MAX_RETRY_COUNT = 3;
+
+interface DeliveryResult {
+  success: boolean;
+  status: "DELIVERED" | "PARTIAL" | "FAILED" | "DEAD_LETTER";
+  integrationsSucceeded: string[];
+  integrationsFailed: string[];
+  creditConsumed: boolean;
+  error?: string;
+}
+
+export async function processDelivery(deliveryId: string): Promise<DeliveryResult> {
+  const timer = startTimer();
   const supabase = createAdminClient();
+
+  logger.delivery("processing", deliveryId);
 
   // Get delivery with related data
   const { data: delivery, error } = await queryWithTimeout(
@@ -28,26 +43,68 @@ export async function processDelivery(deliveryId: string): Promise<void> {
   );
 
   if (error || !delivery) {
+    logger.error("Delivery not found", { deliveryId, error: error?.message });
     throw new Error(`Delivery not found: ${deliveryId}`);
+  }
+
+  // Check if already processed (idempotency)
+  if (delivery.status === "DELIVERED" || delivery.status === "DEAD_LETTER") {
+    logger.info("Delivery already processed", { deliveryId, status: delivery.status });
+    return {
+      success: delivery.status === "DELIVERED",
+      status: delivery.status as "DELIVERED" | "DEAD_LETTER",
+      integrationsSucceeded: delivery.integrations_succeeded || [],
+      integrationsFailed: delivery.integrations_failed || [],
+      creditConsumed: !!delivery.credit_ledger_id,
+    };
+  }
+
+  // Check if max retries exceeded - move to dead letter
+  if ((delivery.retry_count || 0) >= MAX_RETRY_COUNT) {
+    logger.warn("Delivery max retries exceeded, moving to dead letter", { 
+      deliveryId, 
+      retryCount: delivery.retry_count 
+    });
+
+    await moveToDeadLetter(
+      deliveryId,
+      delivery.tenant_id,
+      delivery.lead_offer_id,
+      `Max retries (${MAX_RETRY_COUNT}) exceeded. Last error: ${delivery.error_message || "Unknown"}`
+    );
+
+    Metrics.deliveryAttempted("dead_letter");
+    Metrics.deliveryLatency(timer());
+
+    return {
+      success: false,
+      status: "DEAD_LETTER",
+      integrationsSucceeded: delivery.integrations_succeeded || [],
+      integrationsFailed: delivery.integrations_failed || [],
+      creditConsumed: false,
+      error: "Max retries exceeded",
+    };
   }
 
   // Check billing eligibility
   const canDeliver = await checkBillingEligibility(delivery.tenant_id);
 
   if (!canDeliver) {
+    logger.warn("Insufficient credits for delivery", { deliveryId, tenantId: delivery.tenant_id });
+
     await queryWithTimeout(
       supabase
         .from("deliveries")
         .update({
           status: "FAILED",
           error_message: "Insufficient credits",
+          retry_count: (delivery.retry_count || 0) + 1,
         })
         .eq("id", deliveryId),
       10000,
-      "update delivery to FAILED"
+      "update delivery to FAILED (no credits)"
     );
 
-    // Update lead offer
     await queryWithTimeout(
       supabase
         .from("lead_offers")
@@ -60,7 +117,20 @@ export async function processDelivery(deliveryId: string): Promise<void> {
       "update lead offer billing"
     );
 
-    return;
+    // Alert on low credits
+    Alerts.lowCredits(delivery.tenant_id, 0, 1);
+
+    Metrics.deliveryAttempted("failed");
+    Metrics.deliveryLatency(timer());
+
+    return {
+      success: false,
+      status: "FAILED",
+      integrationsSucceeded: [],
+      integrationsFailed: [],
+      creditConsumed: false,
+      error: "Insufficient credits",
+    };
   }
 
   // Get tenant integrations
@@ -74,83 +144,204 @@ export async function processDelivery(deliveryId: string): Promise<void> {
     "get tenant integrations"
   );
 
+  const integrationsAttempted: string[] = [];
+  const integrationsSucceeded: string[] = [];
+  const integrationsFailed: string[] = [];
   const errors: string[] = [];
-  let sheetsDelivered = false;
-  let crmDelivered = false;
 
   // Deliver to each integration
   for (const integration of integrations || []) {
+    integrationsAttempted.push(integration.integration_type);
+
     try {
       switch (integration.integration_type) {
         case "GOOGLE_SHEETS":
-          await deliverToGoogleSheets(delivery, integration);
-          sheetsDelivered = true;
+          await deliverToGoogleSheets(delivery as Delivery, integration);
+          integrationsSucceeded.push("GOOGLE_SHEETS");
           break;
         case "TOKKO":
-          await deliverToTokko(delivery, integration);
-          crmDelivered = true;
+          await deliverToTokko(delivery as Delivery, integration);
+          integrationsSucceeded.push("TOKKO");
           break;
         case "WEBHOOK":
-          await deliverToWebhook(delivery, integration);
+          await deliverToWebhook(delivery as Delivery, integration);
+          integrationsSucceeded.push("WEBHOOK");
           break;
       }
     } catch (err) {
-      errors.push(`${integration.integration_type}: ${err instanceof Error ? err.message : "Unknown error"}`);
+      const errorMsg = err instanceof Error ? err.message : "Unknown error";
+      integrationsFailed.push(integration.integration_type);
+      errors.push(`${integration.integration_type}: ${errorMsg}`);
+      logger.error("Integration delivery failed", {
+        deliveryId,
+        integration: integration.integration_type,
+        error: errorMsg,
+      });
     }
   }
 
-  // Update delivery status
-  const allSucceeded = errors.length === 0 && (sheetsDelivered || crmDelivered || (integrations || []).length === 0);
+  // Determine final status based on integration results
+  let finalStatus: DeliveryResult["status"];
+  let creditConsumed = false;
+
+  if (integrationsAttempted.length === 0) {
+    // No integrations configured - mark as delivered (tenant setup issue)
+    finalStatus = "DELIVERED";
+    creditConsumed = true;
+  } else if (integrationsFailed.length === 0) {
+    // All succeeded
+    finalStatus = "DELIVERED";
+    creditConsumed = true;
+  } else if (integrationsSucceeded.length > 0) {
+    // Some succeeded, some failed - PARTIAL (still charge, but flag for review)
+    finalStatus = "PARTIAL";
+    creditConsumed = true;
+  } else {
+    // All failed
+    finalStatus = "FAILED";
+    creditConsumed = false;
+  }
+
+  // Update delivery with results
+  const updateData: Record<string, unknown> = {
+    status: finalStatus,
+    integrations_attempted: integrationsAttempted,
+    integrations_succeeded: integrationsSucceeded,
+    integrations_failed: integrationsFailed,
+    error_message: errors.length > 0 ? errors.join("; ") : null,
+    retry_count: finalStatus === "FAILED" ? (delivery.retry_count || 0) + 1 : delivery.retry_count,
+  };
+
+  if (finalStatus === "DELIVERED" || finalStatus === "PARTIAL") {
+    updateData.delivered_at = new Date().toISOString();
+    updateData.sheets_delivered_at = integrationsSucceeded.includes("GOOGLE_SHEETS")
+      ? new Date().toISOString()
+      : delivery.sheets_delivered_at;
+    updateData.crm_delivered_at = integrationsSucceeded.includes("TOKKO")
+      ? new Date().toISOString()
+      : delivery.crm_delivered_at;
+  }
 
   await queryWithTimeout(
-    supabase
-      .from("deliveries")
-      .update({
-        status: allSucceeded ? "DELIVERED" : errors.length > 0 ? "FAILED" : "DELIVERED",
-        delivered_at: allSucceeded ? new Date().toISOString() : null,
-        sheets_delivered_at: sheetsDelivered ? new Date().toISOString() : null,
-        crm_delivered_at: crmDelivered ? new Date().toISOString() : null,
-        error_message: errors.length > 0 ? errors.join("; ") : null,
-      })
-      .eq("id", deliveryId),
+    supabase.from("deliveries").update(updateData).eq("id", deliveryId),
     10000,
     "update delivery status"
   );
 
-  // If delivered, consume credit
-  if (allSucceeded) {
-    await consumeCredit(delivery.tenant_id, delivery.lead_offer_id, deliveryId);
+  // Consume credit if delivery succeeded (even partial)
+  if (creditConsumed) {
+    try {
+      await consumeCredit(delivery.tenant_id, delivery.lead_offer_id, deliveryId);
+      Metrics.creditConsumed(delivery.tenant_id);
 
-    // Update lead offer status
-    await queryWithTimeout(
-      supabase
-        .from("lead_offers")
-        .update({
-          status: "SENT_TO_DEVELOPER",
-          billing_eligibility: "CHARGEABLE",
-          status_changed_at: new Date().toISOString(),
-        })
-        .eq("id", delivery.lead_offer_id),
-      10000,
-      "update lead offer to SENT_TO_DEVELOPER"
-    );
+      // Update lead offer status
+      await queryWithTimeout(
+        supabase
+          .from("lead_offers")
+          .update({
+            status: "SENT_TO_DEVELOPER",
+            billing_eligibility: "CHARGEABLE",
+            status_changed_at: new Date().toISOString(),
+          })
+          .eq("id", delivery.lead_offer_id),
+        10000,
+        "update lead offer to SENT_TO_DEVELOPER"
+      );
 
-    // Log event
-    await queryWithTimeout(
-      supabase.from("lead_events").insert({
-        lead_id: delivery.lead_id,
-        lead_offer_id: delivery.lead_offer_id,
-        event_type: "DELIVERY_COMPLETED",
-        details: {
-          delivery_id: deliveryId,
-          integrations: (integrations || []).map((i: any) => i.integration_type),
-        },
-        actor_type: "SYSTEM",
-      }),
-      10000,
-      "insert delivery completed event"
-    );
+      // Log event
+      await queryWithTimeout(
+        supabase.from("lead_events").insert({
+          lead_id: delivery.lead_id,
+          lead_offer_id: delivery.lead_offer_id,
+          tenant_id: delivery.tenant_id,
+          event_type: "DELIVERY_COMPLETED",
+          details: {
+            delivery_id: deliveryId,
+            status: finalStatus,
+            integrations_succeeded: integrationsSucceeded,
+            integrations_failed: integrationsFailed,
+          },
+          actor_type: "SYSTEM",
+        }),
+        10000,
+        "insert delivery completed event"
+      );
+    } catch (err) {
+      // Credit consumption failed - critical error
+      logger.exception("Credit consumption failed", err, { deliveryId, tenantId: delivery.tenant_id });
+      Alerts.creditConsumptionFailed(
+        delivery.tenant_id,
+        deliveryId,
+        err instanceof Error ? err.message : "Unknown"
+      );
+
+      // Still mark delivery as completed but log the billing issue
+      await queryWithTimeout(
+        supabase
+          .from("lead_offers")
+          .update({
+            billing_eligibility: "PENDING",
+            billing_notes: `Delivery succeeded but credit consumption failed: ${err instanceof Error ? err.message : "Unknown"}`,
+          })
+          .eq("id", delivery.lead_offer_id),
+        10000,
+        "update lead offer billing issue"
+      );
+
+      creditConsumed = false;
+    }
   }
+
+  // Log metrics
+  Metrics.deliveryAttempted(
+    finalStatus === "DELIVERED" ? "success" :
+    finalStatus === "PARTIAL" ? "partial" :
+    finalStatus === "DEAD_LETTER" ? "dead_letter" : "failed"
+  );
+  Metrics.deliveryLatency(timer());
+
+  logger.delivery("completed", deliveryId, {
+    status: finalStatus,
+    integrationsSucceeded,
+    integrationsFailed,
+    creditConsumed,
+  });
+
+  return {
+    success: finalStatus === "DELIVERED" || finalStatus === "PARTIAL",
+    status: finalStatus,
+    integrationsSucceeded,
+    integrationsFailed,
+    creditConsumed,
+    error: errors.length > 0 ? errors.join("; ") : undefined,
+  };
+}
+
+// ============================================
+// Move to Dead Letter Queue
+// ============================================
+
+async function moveToDeadLetter(
+  deliveryId: string,
+  tenantId: string,
+  leadOfferId: string,
+  reason: string
+): Promise<void> {
+  const supabase = createAdminClient();
+
+  await queryWithTimeout(
+    supabase.rpc("move_to_dead_letter", {
+      p_delivery_id: deliveryId,
+      p_reason: reason,
+    }),
+    10000,
+    "move to dead letter"
+  );
+
+  // Alert on dead letter
+  Alerts.deliveryDeadLetter(deliveryId, reason, tenantId);
+
+  logger.error("Delivery moved to dead letter", { deliveryId, reason, tenantId });
 }
 
 // ============================================
@@ -175,7 +366,7 @@ async function checkBillingEligibility(tenantId: string): Promise<boolean> {
 }
 
 // ============================================
-// Consume Credit
+// Consume Credit (Idempotent)
 // ============================================
 
 async function consumeCredit(
@@ -185,10 +376,26 @@ async function consumeCredit(
 ): Promise<void> {
   const supabase = createAdminClient();
 
+  // Idempotency check: see if we already consumed credit for this delivery
+  const { data: existingLedger } = await queryWithTimeout(
+    supabase
+      .from("credit_ledger")
+      .select("id")
+      .eq("delivery_id", deliveryId)
+      .eq("transaction_type", "CREDIT_CONSUMPTION")
+      .maybeSingle(),
+    5000,
+    "check existing credit consumption"
+  );
+
+  if (existingLedger) {
+    logger.info("Credit already consumed for delivery (idempotent)", { deliveryId });
+    return;
+  }
+
   // Atomic credit consumption (locks per-tenant)
-  // Wrap RPC call with timeout
   const rpcTimeoutPromise = new Promise((_, reject) => {
-    setTimeout(() => reject(new Error("Timeout: La operación RPC tardó más de 10 segundos")), 10000);
+    setTimeout(() => reject(new Error("Timeout: RPC operation took more than 10 seconds")), 10000);
   });
 
   const { data, error } = await Promise.race([
@@ -199,7 +406,7 @@ async function consumeCredit(
       p_description: "Lead delivery",
     }),
     rpcTimeoutPromise,
-  ]) as any;
+  ]) as { data: unknown; error: { message: string } | null };
 
   if (error) {
     throw new Error(error.message);
@@ -207,13 +414,13 @@ async function consumeCredit(
 
   // `consume_credit` returns table(success, new_balance, message)
   const row = Array.isArray(data) ? data[0] : data;
-  if (!row?.success) {
-    throw new Error(row?.message || "Insufficient credits");
+  if (!(row as { success?: boolean })?.success) {
+    throw new Error((row as { message?: string })?.message || "Insufficient credits");
   }
 
   // Backfill delivery.credit_ledger_id for traceability
   const { data: ledger } = await queryWithTimeout(
-    (supabase as any)
+    supabase
       .from("credit_ledger")
       .select("id")
       .eq("tenant_id", tenantId)
@@ -228,7 +435,7 @@ async function consumeCredit(
 
   if (ledger?.id) {
     await queryWithTimeout(
-      (supabase as any)
+      supabase
         .from("deliveries")
         .update({ credit_ledger_id: ledger.id })
         .eq("id", deliveryId),
@@ -236,6 +443,8 @@ async function consumeCredit(
       "update delivery credit ledger"
     );
   }
+
+  logger.billing("credit_consumed", tenantId, { deliveryId, newBalance: (row as { new_balance?: number })?.new_balance });
 }
 
 // ============================================
@@ -248,11 +457,10 @@ async function deliverToGoogleSheets(
 ): Promise<void> {
   const config = integration.config as GoogleSheetsConfig;
 
-  if (!config.spreadsheet_id || !config.sheet_name || !config.service_account_json) {
+  if (!config.spreadsheet_id || !config.sheet_name || !(config as { service_account_json?: string }).service_account_json) {
     throw new Error("Google Sheets not properly configured - missing required fields");
   }
 
-  // Use real Google Sheets API
   const result = await appendToGoogleSheets(delivery, config);
 
   if (!result.success) {
@@ -273,7 +481,7 @@ async function deliverToGoogleSheets(
     "update delivery with Sheets row info"
   );
 
-  console.log("Successfully delivered to Google Sheets, row:", result.row_number);
+  logger.info("Delivered to Google Sheets", { deliveryId: delivery.id, rowNumber: result.row_number });
 }
 
 // ============================================
@@ -290,7 +498,6 @@ async function deliverToTokko(
     throw new Error("Tokko not properly configured - missing API key");
   }
 
-  // Use real Tokko API
   const result = await createTokkoLead(delivery, config);
 
   if (!result.success) {
@@ -311,7 +518,7 @@ async function deliverToTokko(
     "update delivery with Tokko contact info"
   );
 
-  console.log("Successfully delivered to Tokko, contact_id:", result.contact_id);
+  logger.info("Delivered to Tokko", { deliveryId: delivery.id, contactId: result.contact_id });
 }
 
 // ============================================
@@ -346,14 +553,15 @@ async function deliverToWebhook(
     headers["X-API-Key"] = config.auth_value;
   }
 
-  console.log("Delivering to webhook:", {
-    url: config.url,
-    method: config.method,
-    payload: delivery.payload,
+  const response = await fetch(config.url, {
+    method: config.method || "POST",
+    headers,
+    body: JSON.stringify(delivery.payload),
   });
 
-  // In production:
-  // await fetch(config.url, { method: config.method, headers, body: JSON.stringify(delivery.payload) });
+  if (!response.ok) {
+    throw new Error(`Webhook returned ${response.status}: ${await response.text()}`);
+  }
 
   const supabase = createAdminClient();
   await queryWithTimeout(
@@ -364,6 +572,8 @@ async function deliverToWebhook(
     10000,
     "update integration last sync"
   );
+
+  logger.info("Delivered to webhook", { deliveryId: delivery.id, url: config.url });
 }
 
 // ============================================
@@ -390,10 +600,9 @@ export async function refundCredit(
     throw new Error("Cannot refund this delivery");
   }
 
-  // Atomic refund (and delivery status update) via DB function
-  // RPC calls need manual timeout
+  // Atomic refund via DB function
   const rpcTimeoutPromise = new Promise((_, reject) => {
-    setTimeout(() => reject(new Error("Timeout: La operación RPC tardó más de 10 segundos")), 10000);
+    setTimeout(() => reject(new Error("Timeout: RPC operation took more than 10 seconds")), 10000);
   });
 
   const { error: refundError } = await Promise.race([
@@ -405,7 +614,7 @@ export async function refundCredit(
       p_created_by: null,
     }),
     rpcTimeoutPromise,
-  ]) as any;
+  ]) as { error: { message: string } | null };
 
   if (refundError) {
     throw new Error(refundError.message);
@@ -423,13 +632,63 @@ export async function refundCredit(
     10000,
     "update lead offer after refund"
   );
+
+  Metrics.creditRefunded(delivery.tenant_id);
+  logger.billing("credit_refunded", delivery.tenant_id, { deliveryId, reason });
 }
 
 // ============================================
-// Helper Functions
+// Get Dead Letter Queue Items
 // ============================================
 
-function getNestedValue(obj: any, path: string): unknown {
-  return path.split(".").reduce((current, key) => current?.[key], obj);
+export async function getDeadLetterQueue(tenantId?: string): Promise<Delivery[]> {
+  const supabase = createAdminClient();
+
+  let query = supabase
+    .from("deliveries")
+    .select(`
+      *,
+      lead:leads(id, phone, full_name),
+      offer:offers(id, name)
+    `)
+    .eq("status", "DEAD_LETTER")
+    .order("dead_letter_at", { ascending: false });
+
+  if (tenantId) {
+    query = query.eq("tenant_id", tenantId);
+  }
+
+  const { data } = await queryWithTimeout(query, 10000, "get dead letter queue");
+
+  return (data || []) as Delivery[];
 }
 
+// ============================================
+// Retry Dead Letter Delivery
+// ============================================
+
+export async function retryDeadLetterDelivery(deliveryId: string): Promise<DeliveryResult> {
+  const supabase = createAdminClient();
+
+  // Reset the delivery to PENDING
+  await queryWithTimeout(
+    supabase
+      .from("deliveries")
+      .update({
+        status: "PENDING",
+        retry_count: 0,
+        dead_letter_at: null,
+        dead_letter_reason: null,
+        error_message: null,
+      })
+      .eq("id", deliveryId)
+      .eq("status", "DEAD_LETTER"),
+    10000,
+    "reset dead letter delivery"
+  );
+
+  logger.info("Retrying dead letter delivery", { deliveryId });
+
+  // Process again
+  return processDelivery(deliveryId);
+}

@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       "get user profile for RAG ingest"
     );
 
-    if (!profile?.is_converzia_admin) {
+    if (!(profile as any)?.is_converzia_admin) {
       return NextResponse.json({ error: "Admin access required" }, { status: 403 });
     }
 
@@ -190,7 +190,8 @@ async function handlePdfUpload(request: NextRequest): Promise<NextResponse> {
     const buffer = Buffer.from(arrayBuffer);
 
     // Upload to Supabase Storage
-    const storagePath = `${tenantId}/${source.id}/${file.name}`;
+    const sourceId = (source as any).id;
+    const storagePath = `${tenantId}/${sourceId}/${file.name}`;
     const { error: uploadError } = await supabase.storage
       .from("rag-documents")
       .upload(storagePath, buffer, {
@@ -201,7 +202,7 @@ async function handlePdfUpload(request: NextRequest): Promise<NextResponse> {
     if (uploadError) {
       // Clean up the source if upload fails
       await queryWithTimeout(
-        supabase.from("rag_sources").delete().eq("id", source.id),
+        supabase.from("rag_sources").delete().eq("id", sourceId),
         10000,
         "cleanup failed RAG source"
       );
@@ -216,14 +217,14 @@ async function handlePdfUpload(request: NextRequest): Promise<NextResponse> {
       supabase
         .from("rag_sources")
         .update({ storage_path: storagePath })
-        .eq("id", source.id),
+        .eq("id", sourceId),
       10000,
       "update RAG source storage path"
     );
 
     // Ingest the PDF content
     const result = await ingestFromPdf(
-      source.id,
+      sourceId,
       buffer,
       title || file.name.replace(".pdf", "")
     );
@@ -231,13 +232,13 @@ async function handlePdfUpload(request: NextRequest): Promise<NextResponse> {
     if (result.success) {
       return NextResponse.json({
         success: true,
-        sourceId: source.id,
+        sourceId: sourceId,
         chunkCount: result.chunkCount,
       });
     } else {
       return NextResponse.json({
         success: false,
-        sourceId: source.id,
+        sourceId: sourceId,
         error: result.error,
       });
     }

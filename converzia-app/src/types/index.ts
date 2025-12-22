@@ -388,7 +388,7 @@ export interface UnmappedAd {
 // Delivery Types
 // ============================================
 
-export type DeliveryStatus = "PENDING" | "DELIVERED" | "FAILED" | "REFUNDED";
+export type DeliveryStatus = "PENDING" | "DELIVERED" | "PARTIAL" | "FAILED" | "DEAD_LETTER" | "REFUNDED";
 
 export interface Delivery {
   id: string;
@@ -405,6 +405,11 @@ export interface Delivery {
   credit_ledger_id: string | null;
   error_message: string | null;
   retry_count: number;
+  dead_letter_at: string | null;
+  dead_letter_reason: string | null;
+  integrations_attempted: string[];
+  integrations_succeeded: string[];
+  integrations_failed: string[];
   created_at: string;
   updated_at: string;
 }

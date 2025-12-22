@@ -1,10 +1,18 @@
 import { createAdminClient } from "@/lib/supabase/server";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
-import { sendMessage, sendTemplateMessage, findOrCreateContact } from "./chatwoot";
-import { extractQualificationFields, generateQualificationResponse, generateConversationSummary } from "./openai";
+import { sendMessageWithRetry, sendTemplateMessage, findOrCreateContact } from "./chatwoot";
+import { 
+  extractQualificationFields, 
+  generateQualificationResponse, 
+  generateConversationSummary,
+  generateRollingSummary,
+  shouldGenerateRollingSummary,
+  getMessagesToKeep
+} from "./openai";
 import { calculateLeadScore, checkMinimumFieldsForScoring } from "./scoring";
 import type { LeadOffer, QualificationFields, Offer } from "@/types";
 import { normalizePhoneForDb } from "@/lib/utils";
+import { logger, Metrics } from "@/lib/monitoring";
 
 // ============================================
 // Conversation Flow Service
@@ -53,6 +61,7 @@ export async function startInitialConversation(leadOfferId: string): Promise<voi
   const tenant = Array.isArray(lo.tenant) ? lo.tenant[0] : lo.tenant;
 
   if (!lead?.phone) {
+    logger.error("Lead has no phone number", { leadOfferId });
     throw new Error("Lead has no phone number");
   }
 
@@ -97,15 +106,16 @@ export async function startInitialConversation(leadOfferId: string): Promise<voi
       },
       "es_AR"
     );
+    Metrics.messageSent("success");
   } catch (templateError) {
-    console.error("Template message failed, trying regular message:", templateError);
+    logger.warn("Template message failed, trying regular message", { error: templateError });
     // Fallback to regular message (only works if user messaged first)
     const initialMessage = generateInitialMessage({
       leadName,
       offerName,
       tenantName,
     });
-    await sendMessage(chatwootConversationId, initialMessage);
+    await sendMessageWithRetry(chatwootConversationId, initialMessage);
   }
   
   const initialMessage = `[Template: lead_bienvenida] Hola ${leadName}, gracias por tu interés en ${offerName}.`;
@@ -162,7 +172,7 @@ export async function processIncomingMessage(
   );
 
   if (!lead) {
-    console.log("No lead found for phone:", senderPhone);
+    logger.info("No lead found for phone", { phone: senderPhone.substring(0, 6) + "..." });
     return null;
   }
 
@@ -184,9 +194,11 @@ export async function processIncomingMessage(
   );
 
   if (!leadOffer) {
-    console.log("No active lead offer for lead:", (lead as any).id);
+    logger.info("No active lead offer for lead", { leadId: (lead as any).id });
     return null;
   }
+
+  logger.conversation("message_received", (leadOffer as any).id);
 
   const offer = Array.isArray((leadOffer as any).offer) ? (leadOffer as any).offer[0] : (leadOffer as any).offer;
 
@@ -253,22 +265,59 @@ export async function processIncomingMessage(
     );
   }
 
-  // Get conversation history
-  const { data: history } = await queryWithTimeout(
+  // Get conversation history with count for rolling summary
+  const { data: history, count: messageCount } = await queryWithTimeout(
     supabase
       .from("messages")
-      .select("direction, sender, content")
+      .select("direction, sender, content", { count: "exact" })
       .eq("conversation_id", (conversationRow as any).id)
-      .order("created_at", { ascending: true })
-      .limit(20),
+      .order("created_at", { ascending: true }),
     10000,
     "get conversation history"
   );
 
-  const messageHistory = ((history as any[] || []) as any[]).map((m: any) => ({
+  const allMessages = ((history as any[] || []) as any[]).map((m: any) => ({
     role: m.sender === "LEAD" ? "user" as const : "assistant" as const,
     content: m.content,
   }));
+
+  // Use rolling summary for long conversations
+  let messageHistory = allMessages;
+  let conversationSummaryContext: string | null = null;
+
+  if (shouldGenerateRollingSummary(messageCount || 0)) {
+    // Get existing summary from conversation record
+    const { data: convoData } = await queryWithTimeout(
+      supabase
+        .from("conversations")
+        .select("summary")
+        .eq("id", (conversationRow as any).id)
+        .single(),
+      5000,
+      "get conversation summary"
+    );
+
+    const existingSummary = (convoData as any)?.summary || null;
+    
+    // Keep only last N messages, summarize the rest
+    const messagesToSummarize = allMessages.slice(0, -getMessagesToKeep());
+    messageHistory = allMessages.slice(-getMessagesToKeep());
+
+    if (messagesToSummarize.length > 0) {
+      // Update rolling summary
+      conversationSummaryContext = await generateRollingSummary(existingSummary, messagesToSummarize);
+      
+      // Store updated summary
+      await queryWithTimeout(
+        supabase
+          .from("conversations")
+          .update({ summary: conversationSummaryContext })
+          .eq("id", (conversationRow as any).id),
+        5000,
+        "update conversation summary"
+      );
+    }
+  }
 
   // Extract qualification fields from new message
   const currentFields = ((leadOffer as any).qualification_fields as QualificationFields) || {};
@@ -414,7 +463,7 @@ export async function retryContact(leadOfferId: string): Promise<void> {
   });
 
   const contact = await findOrCreateContact(lead.phone, lead.full_name || undefined);
-  await sendMessage(contact.conversation_id || contact.id, followUpMessage);
+  await sendMessageWithRetry(contact.conversation_id || contact.id, followUpMessage);
 
   // Update lead offer
   await queryWithTimeout(
@@ -468,7 +517,7 @@ export async function sendReactivation(leadOfferId: string): Promise<void> {
   });
 
   const contact = await findOrCreateContact(lead.phone, lead.full_name || undefined);
-  await sendMessage(contact.conversation_id || contact.id, reactivationMessage);
+  await sendMessageWithRetry(contact.conversation_id || contact.id, reactivationMessage);
 
   await queryWithTimeout(
     supabase
@@ -592,7 +641,53 @@ async function triggerDelivery(leadOfferId: string, scoreSummary?: string): Prom
     "insert delivery event"
   );
 
-  console.log(`Delivery created for lead ${(lead as any).id}, score: ${(leadOffer as any).score_total}`);
+  logger.delivery("created", "pending", { 
+    leadId: (lead as any).id, 
+    score: (leadOffer as any).score_total 
+  });
+}
+
+// ============================================
+// Handle Message Status Updates
+// ============================================
+
+export async function handleMessageStatusUpdate(
+  chatwootMessageId: string,
+  status: string
+): Promise<void> {
+  const supabase = createAdminClient();
+
+  // Map Chatwoot status to our fields
+  const updateData: Record<string, unknown> = {};
+  
+  switch (status) {
+    case "delivered":
+      updateData.delivered_at = new Date().toISOString();
+      break;
+    case "read":
+      updateData.read_at = new Date().toISOString();
+      break;
+    case "failed":
+      updateData.failed_at = new Date().toISOString();
+      logger.error("Message delivery failed", { chatwootMessageId });
+      break;
+    default:
+      // Ignore other statuses
+      return;
+  }
+
+  if (Object.keys(updateData).length > 0) {
+    await queryWithTimeout(
+      supabase
+        .from("messages")
+        .update(updateData)
+        .eq("chatwoot_message_id", chatwootMessageId),
+      5000,
+      "update message status"
+    );
+    
+    logger.info("Message status updated", { chatwootMessageId, status });
+  }
 }
 
 // ============================================

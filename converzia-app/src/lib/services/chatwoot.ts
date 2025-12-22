@@ -1,9 +1,26 @@
 import { createAdminClient } from "@/lib/supabase/server";
 import { fetchWithTimeout } from "@/lib/utils/fetch-with-timeout";
+import { logger, Metrics, Alerts } from "@/lib/monitoring";
 
 // ============================================
 // Chatwoot API Service
 // ============================================
+
+// Retry configuration
+const MAX_RETRIES = 3;
+const BASE_DELAY_MS = 1000;
+const MAX_DELAY_MS = 10000;
+
+// Sleep utility
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Calculate exponential backoff delay
+function getBackoffDelay(attempt: number): number {
+  const delay = BASE_DELAY_MS * Math.pow(2, attempt);
+  // Add jitter (±20%)
+  const jitter = delay * 0.2 * (Math.random() - 0.5);
+  return Math.min(delay + jitter, MAX_DELAY_MS);
+}
 
 interface ChatwootConfig {
   baseUrl: string;
@@ -174,7 +191,10 @@ async function getOrCreateConversation(contactId: number) {
   );
 
   if (!createResponse.ok) {
-    console.error("Failed to create conversation:", await createResponse.text());
+    logger.error("Failed to create conversation", { 
+      contactId, 
+      status: createResponse.status 
+    });
     return null;
   }
 
@@ -189,7 +209,7 @@ export async function sendMessage(
   conversationIdOrContactId: string | number,
   content: string,
   privateNote: boolean = false
-): Promise<void> {
+): Promise<{ messageId?: string }> {
   const config = await getConfig();
 
   // If we got a contact ID, we need to find their conversation
@@ -221,6 +241,70 @@ export async function sendMessage(
   if (!response.ok) {
     throw new Error(`Failed to send message: ${await response.text()}`);
   }
+
+  const data = await response.json();
+  return { messageId: data.id?.toString() };
+}
+
+// ============================================
+// Send Message with Exponential Backoff Retry
+// ============================================
+
+export async function sendMessageWithRetry(
+  conversationIdOrContactId: string | number,
+  content: string,
+  privateNote: boolean = false
+): Promise<{ messageId?: string }> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      const result = await sendMessage(conversationIdOrContactId, content, privateNote);
+      
+      if (attempt > 0) {
+        logger.info("Chatwoot message sent after retry", { 
+          conversationId: conversationIdOrContactId, 
+          attempt 
+        });
+      }
+      
+      return result;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      
+      logger.warn("Chatwoot send failed, retrying", {
+        conversationId: conversationIdOrContactId,
+        attempt: attempt + 1,
+        maxRetries: MAX_RETRIES,
+        error: lastError.message,
+      });
+
+      // Check if error is retryable
+      const isRetryable = 
+        lastError.message.includes("timeout") ||
+        lastError.message.includes("502") ||
+        lastError.message.includes("503") ||
+        lastError.message.includes("504") ||
+        lastError.message.includes("ECONNRESET") ||
+        lastError.message.includes("ETIMEDOUT");
+
+      if (!isRetryable) {
+        // Don't retry non-retryable errors
+        break;
+      }
+
+      if (attempt < MAX_RETRIES - 1) {
+        const delay = getBackoffDelay(attempt);
+        await sleep(delay);
+      }
+    }
+  }
+
+  // All retries failed
+  Metrics.messageSent("error");
+  Alerts.chatwootSendFailed(String(conversationIdOrContactId), lastError?.message || "Unknown");
+  
+  throw lastError || new Error("Failed to send message after retries");
 }
 
 // ============================================
@@ -276,11 +360,11 @@ export async function sendTemplateMessage(
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error("Template message failed:", errorText);
+    logger.error("Template message failed", { templateName, conversationId, error: errorText });
     throw new Error(`Failed to send template message: ${errorText}`);
   }
   
-  console.log(`Template message sent: ${templateName} to conversation ${conversationId}`);
+  logger.info("Template message sent", { templateName, conversationId });
 }
 
 // ============================================

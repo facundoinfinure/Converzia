@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
       "get user profile for RAG reindex"
     );
 
-    if (!profile?.is_converzia_admin) {
+    if (!(profile as any)?.is_converzia_admin) {
       return NextResponse.json({ error: "Admin access required" }, { status: 403 });
     }
 

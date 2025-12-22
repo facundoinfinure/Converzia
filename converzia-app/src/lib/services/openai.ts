@@ -4,6 +4,8 @@ import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import type { QualificationFields, Offer, ScoreBreakdown } from "@/types";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { logger, Metrics, Alerts, startTimer } from "@/lib/monitoring";
+import { embeddingCache } from "./rag-cache";
 
 // ============================================
 // OpenAI Service
@@ -237,6 +239,8 @@ Reglas:
 
 Respondé SOLO con JSON válido.`;
 
+  const timer = startTimer();
+
   try {
     const completion = await openai.chat.completions.create({
       model,
@@ -248,10 +252,17 @@ Respondé SOLO con JSON válido.`;
       temperature: 0.1,
     });
 
+    Metrics.openaiRequest(model, "extraction");
+    Metrics.openaiLatency(model, timer());
+
     const content = completion.choices[0]?.message?.content || "{}";
     return JSON.parse(content);
   } catch (error) {
-    console.error("Error extracting fields:", error);
+    logger.exception("Error extracting fields", error);
+    Metrics.errorOccurred("openai", "extraction");
+    if ((error as Error).message?.includes("rate limit")) {
+      Alerts.openaiRateLimited(model);
+    }
     return {};
   }
 }
@@ -277,6 +288,8 @@ export async function generateQualificationResponse(
     missingFields,
   });
 
+  const timer = startTimer();
+
   try {
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       { role: "system", content: systemPrompt },
@@ -294,9 +307,16 @@ export async function generateQualificationResponse(
       max_tokens: 200,
     });
 
+    Metrics.openaiRequest(model, "response");
+    Metrics.openaiLatency(model, timer());
+
     return completion.choices[0]?.message?.content || "Gracias por tu mensaje. ¿En qué puedo ayudarte?";
   } catch (error) {
-    console.error("Error generating response:", error);
+    logger.exception("Error generating response", error);
+    Metrics.errorOccurred("openai", "response");
+    if ((error as Error).message?.includes("rate limit")) {
+      Alerts.openaiRateLimited(model);
+    }
     return "Gracias por tu mensaje. Un asesor te contactará pronto.";
   }
 }
@@ -410,25 +430,106 @@ Respondé directamente con el resumen, sin introducciones.`;
 
     return completion.choices[0]?.message?.content || "Conversación de calificación realizada.";
   } catch (error) {
-    console.error("Error generating conversation summary:", error);
+    logger.exception("Error generating conversation summary", error);
     return `Conversación con ${messageHistory.length} mensajes intercambiados.`;
   }
 }
 
 // ============================================
-// Generate Embeddings for RAG
+// Generate Rolling Summary for Long Conversations
+// ============================================
+
+const ROLLING_SUMMARY_THRESHOLD = 20; // Start summarizing after this many messages
+const MESSAGES_TO_KEEP = 6; // Keep last N messages in full
+
+export async function generateRollingSummary(
+  existingSummary: string | null,
+  newMessages: Array<{ role: "user" | "assistant"; content: string }>
+): Promise<string> {
+  const openai = await getOpenAI();
+  const model = await getModel("extraction");
+
+  const newMessagesText = newMessages
+    .map((m) => `${m.role === "user" ? "Lead" : "Bot"}: ${m.content}`)
+    .join("\n");
+
+  const systemPrompt = `Actualizá el resumen de conversación incorporando los nuevos mensajes.
+Mantené la información importante:
+- Datos de calificación del lead (presupuesto, zona, timing, etc.)
+- Preferencias mencionadas
+- Preguntas pendientes o temas de interés
+- Estado general de la conversación
+
+El resumen debe ser conciso (máximo 5 oraciones).
+Respondé directamente con el resumen actualizado.`;
+
+  const userContent = existingSummary
+    ? `RESUMEN ANTERIOR:\n${existingSummary}\n\nNUEVOS MENSAJES:\n${newMessagesText}`
+    : `NUEVOS MENSAJES:\n${newMessagesText}`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent },
+      ],
+      temperature: 0.3,
+      max_tokens: 300,
+    });
+
+    return completion.choices[0]?.message?.content || existingSummary || "";
+  } catch (error) {
+    logger.exception("Error generating rolling summary", error);
+    return existingSummary || "";
+  }
+}
+
+export function shouldGenerateRollingSummary(messageCount: number): boolean {
+  return messageCount >= ROLLING_SUMMARY_THRESHOLD;
+}
+
+export function getMessagesToKeep(): number {
+  return MESSAGES_TO_KEEP;
+}
+
+// ============================================
+// Generate Embeddings for RAG (with cache)
 // ============================================
 
 export async function generateEmbedding(text: string): Promise<number[]> {
+  // Check cache first
+  const cached = embeddingCache.get(text);
+  if (cached) {
+    return cached;
+  }
+
+  const timer = startTimer();
   const openai = await getOpenAI();
   const model = await getModel("embedding");
 
-  const response = await openai.embeddings.create({
-    model,
-    input: text,
-  });
+  try {
+    const response = await openai.embeddings.create({
+      model,
+      input: text,
+    });
 
-  return response.data[0].embedding;
+    const embedding = response.data[0].embedding;
+
+    // Cache the result
+    embeddingCache.set(text, embedding);
+
+    Metrics.openaiRequest(model, "embedding");
+    Metrics.openaiLatency(model, timer());
+
+    return embedding;
+  } catch (error) {
+    if ((error as Error).message?.includes("rate limit")) {
+      Alerts.openaiRateLimited(model);
+    }
+    Metrics.errorOccurred("openai", "embedding");
+    throw error;
+  }
 }
 
 // ============================================

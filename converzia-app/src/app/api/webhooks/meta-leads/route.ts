@@ -7,6 +7,7 @@ import { withRateLimit, RATE_LIMITS, getClientIdentifier } from "@/lib/security/
 import { encryptPII, isPIIEncryptionEnabled } from "@/lib/security/crypto";
 import { fetchWithTimeout } from "@/lib/utils/fetch-with-timeout";
 import { normalizePhone } from "@/lib/utils";
+import { logger, Metrics, Alerts, generateTraceId, setTraceId } from "@/lib/monitoring";
 
 // ============================================
 // Meta Lead Ads Webhook Handler
@@ -39,6 +40,9 @@ export async function GET(request: NextRequest) {
 
 // Handle incoming leads
 export async function POST(request: NextRequest) {
+  // Set trace ID for this request
+  setTraceId(generateTraceId());
+
   // Rate limiting
   const rateLimitResponse = await withRateLimit(request, RATE_LIMITS.webhook);
   if (rateLimitResponse) {
@@ -54,7 +58,8 @@ export async function POST(request: NextRequest) {
     const appSecret = process.env.META_APP_SECRET;
     
     if (!appSecret) {
-      console.error("SECURITY: META_APP_SECRET not configured - webhook rejected");
+      logger.security("META_APP_SECRET not configured - webhook rejected");
+      Metrics.webhookReceived("meta", "error");
       return NextResponse.json(
         { error: "Server configuration error" },
         { status: 500 }
@@ -63,10 +68,12 @@ export async function POST(request: NextRequest) {
     
     const isValid = validateMetaSignature(rawBody, signature, appSecret);
     if (!isValid) {
-      console.error("SECURITY: Invalid Meta webhook signature", {
+      logger.security("Invalid Meta webhook signature", {
         ip: getClientIdentifier(request).substring(0, 8) + "...",
         hasSignature: !!signature,
       });
+      Alerts.webhookSignatureInvalid("meta", getClientIdentifier(request));
+      Metrics.webhookReceived("meta", "error");
       return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
 
@@ -83,7 +90,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ status: "ignored" });
     }
 
-    console.log("Meta webhook received:", payload.object, "entries:", payload.entry?.length || 0);
+    logger.webhook("meta", { object: payload.object, entries: payload.entry?.length || 0 });
 
     const supabase = createAdminClient();
 
@@ -99,7 +106,7 @@ export async function POST(request: NextRequest) {
         const createdTime = new Date(leadgenData.created_time * 1000);
 
         if (!adId || !leadgenId) {
-          console.warn("Meta leadgen change missing ad_id or leadgen_id");
+          logger.warn("Meta leadgen change missing ad_id or leadgen_id");
           continue;
         }
 
@@ -112,7 +119,7 @@ export async function POST(request: NextRequest) {
           .maybeSingle();
 
         if (!adMapping?.tenant_id) {
-          console.warn("Unknown ad_id (no tenant mapping). Ignoring lead.", { adId });
+          logger.warn("Unknown ad_id (no tenant mapping)", { adId });
           continue;
         }
 
@@ -120,7 +127,7 @@ export async function POST(request: NextRequest) {
         const leadData = await fetchLeadDetails(leadgenId);
 
         if (!leadData) {
-          console.error("Could not fetch lead details for:", leadgenId);
+          logger.error("Could not fetch lead details", { leadgenId });
           continue;
         }
 
@@ -132,7 +139,7 @@ export async function POST(request: NextRequest) {
         const phoneE164 = normalizePhone(extractedData.phone || "");
 
         if (!phoneE164) {
-          console.error("Lead has no valid phone:", leadgenId);
+          logger.error("Lead has no valid phone", { leadgenId });
           continue;
         }
 
@@ -153,9 +160,11 @@ export async function POST(request: NextRequest) {
           .single();
 
         if (leadError || !lead) {
-          console.error("Error upserting lead:", leadError);
+          logger.error("Error upserting lead", { error: leadError?.message });
           continue;
         }
+
+        Metrics.leadCreated("meta");
 
         // Idempotency: if we've already processed this leadgen_id for this tenant, ignore
         const { data: existingSource } = await (supabase as any)
@@ -275,15 +284,18 @@ export async function POST(request: NextRequest) {
           try {
             await startInitialConversation(leadOffer.id);
           } catch (err) {
-            console.error("Error starting conversation:", err);
+            logger.exception("Error starting conversation", err, { leadOfferId: leadOffer.id });
           }
         }
       }
     }
 
+    Metrics.webhookReceived("meta", "success");
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Meta webhook error:", error);
+    logger.exception("Meta webhook error", error);
+    Metrics.webhookReceived("meta", "error");
+    Metrics.errorOccurred("webhook", "meta");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -312,7 +324,7 @@ async function fetchLeadDetails(leadgenId: string): Promise<any> {
   const accessToken = (setting as any)?.value || process.env.META_PAGE_ACCESS_TOKEN;
 
   if (!accessToken) {
-    console.error("No Meta access token configured");
+    logger.error("No Meta access token configured");
     return null;
   }
 
@@ -324,13 +336,13 @@ async function fetchLeadDetails(leadgenId: string): Promise<any> {
     );
 
     if (!response.ok) {
-      console.error("Facebook API error:", await response.text());
+      logger.error("Facebook API error", { status: response.status });
       return null;
     }
 
     return await response.json();
   } catch (error) {
-    console.error("Error fetching lead from Facebook:", error);
+    logger.exception("Error fetching lead from Facebook", error, { leadgenId });
     return null;
   }
 }
@@ -356,15 +368,16 @@ function extractLeadFields(fields: Array<{ name: string; values: string[] }>) {
       // Custom question (example: "¿Cuál es el propósito de tu compra?")
       result.purpose = value;
     } else if (name === "dni" || name.includes("dni")) {
-      // SECURITY: Encrypt DNI before storing
+      // SECURITY: Encrypt DNI before storing - REQUIRED
       // Stored only in lead_sources.form_data, never in leads table
-      if (isPIIEncryptionEnabled()) {
-        result.dni = encryptPII(value);
-      } else {
-        // Fallback: store as-is but log warning
-        console.warn("PII_ENCRYPTION_KEY not configured - DNI stored unencrypted");
-        result.dni = value;
+      if (!isPIIEncryptionEnabled()) {
+        // P0 FIX: Block processing if DNI present without encryption
+        logger.security("PII_ENCRYPTION_KEY not configured - DNI field rejected");
+        Alerts.piiEncryptionMissing("dni");
+        // Skip DNI field instead of storing unencrypted
+        continue;
       }
+      result.dni = encryptPII(value);
     }
   }
 
