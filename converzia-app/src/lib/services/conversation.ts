@@ -94,8 +94,9 @@ export async function startInitialConversation(leadOfferId: string): Promise<voi
 
   // Send WhatsApp template message (required for initiating conversations)
   // Template: lead_bienvenida
-  // Header: ¡Hola {{1}}!
-  // Body: Gracias por tu interés en {{1}}. Soy el asistente virtual de {{2}}.
+  // Header: {{1}} (lead name)
+  // Body: {{1}} (offer name), {{2}} (tenant name)
+  // Note: Template is currently in English ("en"), should be migrated to es_AR
   try {
     await sendTemplateMessage(
       chatwootConversationId,
@@ -104,7 +105,7 @@ export async function startInitialConversation(leadOfferId: string): Promise<voi
         header: [leadName],
         body: [offerName, tenantName],
       },
-      "es_AR"
+      "en" // TODO: Change to "es_AR" when Spanish template is approved
     );
     Metrics.messageSent("success");
   } catch (templateError) {
