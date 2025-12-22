@@ -19,25 +19,26 @@ export async function POST(request: NextRequest) {
     // Get raw body for signature verification
     const rawBody = await request.text();
     
-    // Validate webhook signature - REQUIRED for security
+    // Validate webhook signature if configured
+    // Note: Some Chatwoot installations don't send signatures
     const signature = request.headers.get("x-chatwoot-signature");
     const webhookSecret = process.env.CHATWOOT_WEBHOOK_SECRET;
     
-    if (!webhookSecret) {
-      console.error("SECURITY: CHATWOOT_WEBHOOK_SECRET not configured - webhook rejected");
-      return NextResponse.json(
-        { error: "Server configuration error" },
-        { status: 500 }
-      );
-    }
-    
-    const isValid = validateChatwootSignature(rawBody, signature, webhookSecret);
-    if (!isValid) {
-      console.error("SECURITY: Invalid Chatwoot webhook signature", {
-        ip: getClientIdentifier(request).substring(0, 8) + "...",
-        hasSignature: !!signature,
-      });
-      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+    if (webhookSecret && signature) {
+      // Both secret and signature present - validate
+      const isValid = validateChatwootSignature(rawBody, signature, webhookSecret);
+      if (!isValid) {
+        console.error("SECURITY: Invalid Chatwoot webhook signature", {
+          ip: getClientIdentifier(request).substring(0, 8) + "...",
+        });
+        return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+      }
+    } else if (webhookSecret && !signature) {
+      // Secret configured but no signature received - Chatwoot might not support it
+      console.warn("SECURITY: Chatwoot webhook received without signature - proceeding with caution");
+    } else if (!webhookSecret) {
+      // No secret configured - log warning
+      console.warn("SECURITY: CHATWOOT_WEBHOOK_SECRET not configured - signature validation skipped");
     }
 
     // Parse payload
