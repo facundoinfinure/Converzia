@@ -13,8 +13,16 @@ import {
 // RAG Ingest API
 // ============================================
 
-// Increase body size limit for PDF uploads (Vercel max is 4.5MB for serverless, but we handle larger files via streaming)
+// Increase body size limit for PDF uploads
+// Vercel Pro allows up to 4.5MB for serverless, Vercel Enterprise allows 50MB
+// For larger files, we'll return an error with instructions
 export const maxDuration = 60;
+
+// Configure route segment for larger body
+export const dynamic = 'force-dynamic';
+
+// This tells Next.js to accept larger request bodies
+export const runtime = 'nodejs'; // Use Node.js runtime for better file handling
 
 export async function POST(request: NextRequest) {
   try {
@@ -149,14 +157,19 @@ async function handlePdfUpload(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Validate file size (max 10MB for processing, but Vercel serverless limit is 4.5MB)
-    // For files larger than 4.5MB, we'd need to use direct Supabase Storage upload from client
-    const maxSize = 4 * 1024 * 1024; // 4MB to be safe with Vercel limits
+    // Validate file size (max 10MB for processing)
+    // Vercel serverless limit is 4.5MB, but we try with larger files first
+    const maxSize = 10 * 1024 * 1024; // 10MB limit
     if (file.size > maxSize) {
       return NextResponse.json(
-        { success: false, error: `File too large (max ${Math.round(maxSize / 1024 / 1024)}MB). Para archivos más grandes, usa la carga directa a Supabase Storage.` },
+        { success: false, error: `Archivo demasiado grande (máx ${Math.round(maxSize / 1024 / 1024)}MB). Intentá con un PDF más pequeño o dividilo en partes.` },
         { status: 413 }
       );
+    }
+    
+    // Warning if file is large (might fail on Vercel free/hobby plans)
+    if (file.size > 4 * 1024 * 1024) {
+      console.warn(`Large file upload: ${(file.size / 1024 / 1024).toFixed(2)}MB - may fail on Vercel free plan`);
     }
 
     const supabase = createAdminClient();

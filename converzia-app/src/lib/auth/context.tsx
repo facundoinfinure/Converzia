@@ -287,6 +287,10 @@ export function AuthProvider({ children, initialUser = null }: AuthProviderProps
     setProfile(null);
     setMemberships([]);
     setActiveTenantId(null);
+    // Redirect to login page
+    if (typeof window !== "undefined") {
+      window.location.href = "/login";
+    }
   }, [supabase]);
 
   const value: AuthContextType = {
@@ -360,6 +364,7 @@ export function useRequireTenant() {
 
   return auth;
 }
+
 
 
 

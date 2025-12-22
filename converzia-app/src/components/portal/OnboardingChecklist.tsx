@@ -5,8 +5,6 @@ import Link from "next/link";
 import {
   CheckCircle2,
   Circle,
-  Megaphone,
-  Link2,
   BookOpen,
   CreditCard,
   ChevronDown,
@@ -46,22 +44,11 @@ export function OnboardingChecklist({ tenantId }: OnboardingChecklistProps) {
     const supabase = createClient();
 
     // Check each onboarding milestone in parallel
+    // Solo verificamos pasos que el tenant controla
     const [
-      { count: adsCount },
-      { count: integrationsCount },
       { count: ragCount },
       { data: creditsData },
     ] = await Promise.all([
-      supabase
-        .from("ad_offer_map")
-        .select("id", { count: "exact", head: true })
-        .eq("tenant_id", tenantId)
-        .eq("is_active", true),
-      supabase
-        .from("tenant_integrations")
-        .select("id", { count: "exact", head: true })
-        .eq("tenant_id", tenantId)
-        .eq("is_active", true),
       supabase
         .from("rag_sources")
         .select("id", { count: "exact", head: true })
@@ -74,33 +61,17 @@ export function OnboardingChecklist({ tenantId }: OnboardingChecklistProps) {
         .maybeSingle(),
     ]);
 
-    const hasAds = (adsCount || 0) > 0;
-    const hasIntegration = (integrationsCount || 0) > 0;
     const hasKnowledge = (ragCount || 0) > 0;
     const hasCredits = (creditsData?.current_balance || 0) > 0;
 
+    // Solo mostramos pasos que el tenant puede completar por sí mismo
+    // Mapeo de anuncios e integraciones son gestionados por Converzia
     setSteps([
-      {
-        id: "ads",
-        title: "Mapear anuncios",
-        description: "Conectá tus anuncios de Meta con las ofertas de Converzia",
-        href: "/portal/ads",
-        icon: Megaphone,
-        isCompleted: hasAds,
-      },
-      {
-        id: "integrations",
-        title: "Configurar integraciones",
-        description: "Activa Google Sheets, Tokko, o un webhook para recibir leads",
-        href: "/portal/integrations",
-        icon: Link2,
-        isCompleted: hasIntegration,
-      },
       {
         id: "knowledge",
         title: "Cargar información del proyecto",
         description: "Subí PDFs o URLs con info del desarrollo para mejorar las respuestas",
-        href: "/portal/knowledge",
+        href: "/portal/offers",
         icon: BookOpen,
         isCompleted: hasKnowledge,
       },

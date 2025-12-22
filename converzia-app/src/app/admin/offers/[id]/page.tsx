@@ -185,7 +185,7 @@ export default function OfferDetailPage({ params }: Props) {
     {
       key: "name",
       header: "Nombre",
-      cell: (v) => <span className="font-medium text-white">{v.name}</span>,
+      cell: (v) => <span className="font-medium text-[var(--text-primary)]">{v.name}</span>,
     },
     {
       key: "specs",
@@ -240,7 +240,7 @@ export default function OfferDetailPage({ params }: Props) {
     {
       key: "unit",
       header: "Unidad",
-      cell: (u) => <span className="font-medium text-white">{u.unit_number}</span>,
+      cell: (u) => <span className="font-medium text-[var(--text-primary)]">{u.unit_number}</span>,
     },
     {
       key: "variant",
@@ -496,9 +496,9 @@ export default function OfferDetailPage({ params }: Props) {
               {adMappings.length > 0 ? (
                 <div className="space-y-3">
                   {adMappings.map((ad) => (
-                    <div key={ad.id} className="flex items-center justify-between p-3 rounded-lg bg-card-border/50">
+                    <div key={ad.id} className="flex items-center justify-between p-3 rounded-lg bg-[var(--bg-tertiary)]">
                       <div>
-                        <p className="font-medium text-white">{ad.ad_name || ad.ad_id}</p>
+                        <p className="font-medium text-[var(--text-primary)]">{ad.ad_name || ad.ad_id}</p>
                         <p className="text-sm text-slate-500">
                           {ad.campaign_name && `Campaña: ${ad.campaign_name}`}
                           {ad.form_id && ` • Form: ${ad.form_id}`}
@@ -659,11 +659,11 @@ export default function OfferDetailPage({ params }: Props) {
 function InfoRow({ icon, label, value }: { icon?: React.ReactNode; label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between py-2">
-      <div className="flex items-center gap-3 text-slate-400">
+      <div className="flex items-center gap-3 text-[var(--text-secondary)]">
         {icon && <span className="h-5 w-5">{icon}</span>}
         <span>{label}</span>
       </div>
-      <div className="text-white">{value}</div>
+      <div className="text-[var(--text-primary)]">{value}</div>
     </div>
   );
 }

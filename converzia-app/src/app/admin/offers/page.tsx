@@ -226,11 +226,11 @@ export default function OffersPage() {
             <div className="min-w-0">
               <Link
                 href={`/admin/offers/${offer.id}`}
-                className="font-medium text-white hover:text-primary-400 transition-colors block truncate"
+                className="font-medium text-[var(--text-primary)] hover:text-[var(--accent-primary)] transition-colors block truncate"
               >
                 {offer.name}
               </Link>
-              <div className="flex items-center gap-2 text-sm text-slate-500">
+              <div className="flex items-center gap-2 text-sm text-[var(--text-tertiary)]">
                 <MapPin className="h-3 w-3 shrink-0" />
                 <span className="truncate">{offer.city || offer.zone || "Sin ubicación"}</span>
               </div>
@@ -245,7 +245,7 @@ export default function OffersPage() {
       cell: (offer) => (
         <Link
           href={`/admin/tenants/${offer.tenant?.id}`}
-          className="text-slate-400 hover:text-white transition-colors"
+          className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
         >
           {offer.tenant?.name || "Sin tenant"}
         </Link>
@@ -278,7 +278,7 @@ export default function OffersPage() {
       key: "price",
       header: "Precio",
       cell: (offer) => (
-        <span className="text-slate-300">
+        <span className="text-[var(--text-secondary)]">
           {offer.price_from
             ? offer.price_to && offer.price_to !== offer.price_from
               ? `${formatCurrency(offer.price_from, offer.currency)} - ${formatCurrency(offer.price_to, offer.currency)}`
@@ -292,11 +292,11 @@ export default function OffersPage() {
       header: "Stats",
       cell: (offer) => (
         <div className="flex items-center gap-4 text-sm">
-          <div className="flex items-center gap-1.5 text-slate-400" title="Leads">
+          <div className="flex items-center gap-1.5 text-[var(--text-secondary)]" title="Leads">
             <Users className="h-4 w-4" />
             <span>{offer._count?.leads || 0}</span>
           </div>
-          <div className="flex items-center gap-1.5 text-slate-400" title="Ads mapeados">
+          <div className="flex items-center gap-1.5 text-[var(--text-secondary)]" title="Ads mapeados">
             <Megaphone className="h-4 w-4" />
             <span>{offer._count?.ads || 0}</span>
           </div>
@@ -397,7 +397,7 @@ export default function OffersPage() {
       )}
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 mb-4 p-1 bg-slate-800/50 rounded-lg w-fit">
+      <div className="flex items-center gap-1 mb-4 p-1 bg-[var(--bg-tertiary)] rounded-lg w-fit">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -407,16 +407,16 @@ export default function OffersPage() {
             }}
             className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
               activeTab === tab.id
-                ? "bg-primary-500/20 text-primary-400"
-                : "text-slate-400 hover:text-white hover:bg-slate-700"
+                ? "bg-[var(--accent-primary-light)] text-[var(--accent-primary)]"
+                : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]"
             }`}
           >
             {tab.label}
             {tab.count !== undefined && tab.count > 0 && (
               <span className={`px-1.5 py-0.5 text-xs rounded-full ${
                 tab.highlight
-                  ? "bg-amber-500/20 text-amber-400"
-                  : "bg-slate-700 text-slate-400"
+                  ? "bg-[var(--warning-light)] text-[var(--warning-dark)]"
+                  : "bg-[var(--bg-secondary)] text-[var(--text-tertiary)]"
               }`}>
                 {tab.count}
               </span>
@@ -427,7 +427,7 @@ export default function OffersPage() {
 
       <Card>
         {/* Filters */}
-        <div className="p-4 border-b border-card-border">
+        <div className="p-4 border-b border-[var(--border-primary)]">
           <div className="flex flex-col lg:flex-row gap-4">
             <SearchInput
               value={search}
@@ -455,8 +455,8 @@ export default function OffersPage() {
                       onClick={() => setStatusFilter(status)}
                       className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
                         statusFilter === status
-                          ? "bg-primary-500/20 text-primary-400 border border-primary-500/30"
-                          : "text-slate-400 hover:text-white hover:bg-card-border"
+                          ? "bg-[var(--accent-primary-light)] text-[var(--accent-primary)] border border-[var(--accent-primary-muted)]"
+                          : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
                       }`}
                     >
                       {status === ""
@@ -506,7 +506,7 @@ export default function OffersPage() {
 
         {/* Pagination */}
         {total > 20 && activeTab === "all" && (
-          <div className="p-4 border-t border-card-border">
+          <div className="p-4 border-t border-[var(--border-primary)]">
             <Pagination
               currentPage={page}
               totalPages={Math.ceil(total / 20)}
@@ -542,13 +542,13 @@ export default function OffersPage() {
       >
         {reviewingOffer && (
           <div className="space-y-4">
-            <div className="p-4 bg-slate-800/50 rounded-lg">
-              <h3 className="font-semibold text-white text-lg">{reviewingOffer.name}</h3>
-              <p className="text-sm text-slate-400 mt-1">
+            <div className="p-4 bg-[var(--bg-tertiary)] rounded-lg">
+              <h3 className="font-semibold text-[var(--text-primary)] text-lg">{reviewingOffer.name}</h3>
+              <p className="text-sm text-[var(--text-secondary)] mt-1">
                 {reviewingOffer.tenant?.name} • {reviewingOffer.city || "Sin ubicación"}
               </p>
               {reviewingOffer.price_from && (
-                <p className="text-primary-400 mt-2">
+                <p className="text-[var(--accent-primary)] mt-2">
                   {formatCurrency(reviewingOffer.price_from, reviewingOffer.currency)}
                   {reviewingOffer.price_to && reviewingOffer.price_to !== reviewingOffer.price_from && 
                     ` - ${formatCurrency(reviewingOffer.price_to, reviewingOffer.currency)}`
@@ -556,14 +556,14 @@ export default function OffersPage() {
                 </p>
               )}
               {reviewingOffer.submitted_at && (
-                <p className="text-xs text-slate-500 mt-2">
+                <p className="text-xs text-[var(--text-tertiary)] mt-2">
                   Enviada {formatRelativeTime(reviewingOffer.submitted_at)}
                 </p>
               )}
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
+              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
                 Motivo de rechazo (opcional para aprobar)
               </label>
               <TextArea
@@ -574,7 +574,7 @@ export default function OffersPage() {
               />
             </div>
 
-            <div className="flex items-center gap-3 pt-4 border-t border-card-border">
+            <div className="flex items-center gap-3 pt-4 border-t border-[var(--border-primary)]">
               <Button
                 variant="danger"
                 onClick={handleReject}
