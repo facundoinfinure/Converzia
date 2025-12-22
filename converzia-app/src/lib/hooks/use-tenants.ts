@@ -296,44 +296,31 @@ export function useTenantMutations() {
   }) => {
     setIsLoading(true);
     try {
-      const { data: tenant, error } = await queryWithTimeout(
-        supabase
-          .from("tenants")
-          .insert(data)
-          .select()
-          .single(),
-        30000,
-        "create tenant"
-      );
+      // Use API endpoint to create tenant with storage initialization
+      const response = await fetch("/api/tenants", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+      });
 
-      if (error) throw error;
-      if (!tenant || typeof tenant !== "object" || !("id" in tenant)) {
-        throw new Error("Failed to create tenant");
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Error al crear tenant");
       }
 
-      // Create default pricing
-      const { error: pricingError } = await queryWithTimeout(
-        supabase.from("tenant_pricing").insert({
-          tenant_id: (tenant as any).id,
-          charge_model: "PER_LEAD",
-          cost_per_lead: 10,
-          packages: [
-            { id: "starter", name: "Starter", credits: 50, price: 400 },
-            { id: "growth", name: "Growth", credits: 100, price: 700, discount_pct: 12.5, is_popular: true },
-            { id: "scale", name: "Scale", credits: 250, price: 1500, discount_pct: 25 },
-          ],
-        }),
-        10000,
-        "create default pricing",
-        false // Don't retry pricing creation
-      );
-
-      if (pricingError) {
-        console.error("Error creating default pricing:", pricingError);
-        // Don't throw here - tenant is created, pricing can be added later
+      if (!result.success || !result.tenant) {
+        throw new Error("No se recibió respuesta del servidor");
       }
 
-      return tenant;
+      // Log storage initialization status
+      if (!result.storage_initialized) {
+        console.warn("Storage was not initialized for tenant:", result.tenant.id);
+      }
+
+      return result.tenant;
     } catch (error) {
       console.error("Error creating tenant:", error);
       throw error; // Re-throw to let component handle it
@@ -561,6 +548,7 @@ export function useTenantMutations() {
     isLoading,
   };
 }
+
 
 
 

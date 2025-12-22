@@ -341,79 +341,38 @@ export function useOfferMutations() {
         throw new Error("slug es requerido");
       }
 
-      console.log("Inserting offer into Supabase...");
-      
-      // Verify user is admin before attempting insert
-      const authTimeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error("Timeout: La verificación de autenticación tardó más de 5 segundos")), 5000);
+      console.log("Creating offer via API...");
+
+      // Use API endpoint to create offer with storage initialization
+      const response = await fetch("/api/offers", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(cleanData),
       });
 
-      const { data: { user: currentUser }, error: authError } = await Promise.race([
-        supabase.auth.getUser(),
-        authTimeoutPromise,
-      ]) as any;
+      const result = await response.json();
 
-      if (authError || !currentUser) {
-        console.error("Auth error before insert:", authError);
-        throw new Error("Error de autenticación. Por favor, recargá la página.");
+      if (!response.ok) {
+        console.error("API error creating offer:", result);
+        throw new Error(result.error || "Error al crear la oferta");
       }
 
-      // Check if user is Converzia admin
-      const { data: profile, error: profileError } = await queryWithTimeout(
-        supabase
-          .from("user_profiles")
-          .select("is_converzia_admin")
-          .eq("id", currentUser.id)
-          .single(),
-        5000,
-        "admin check",
-        false // Don't retry admin check
-      );
-
-      if (profileError) {
-        console.error("Error checking admin status:", profileError);
-        throw new Error("Error al verificar permisos de administrador");
-      }
-
-      if (!profile || !(profile as any)?.is_converzia_admin) {
-        console.error("User is not Converzia admin:", (currentUser as any)?.id);
-        throw new Error("No tenés permisos de administrador para crear ofertas");
-      }
-
-      console.log("User verified as admin, proceeding with insert...");
-
-      // Insert with timeout and retry
-      const { data: offer, error } = await queryWithTimeout(
-        supabase
-          .from("offers")
-          .insert(cleanData)
-          .select()
-          .single(),
-        30000, // 30 second timeout for inserts
-        "insert offer"
-      );
-
-      if (error) {
-        console.error("Supabase error creating offer:", error);
-        console.error("Error code:", error.code);
-        console.error("Error details:", JSON.stringify(error, null, 2));
-        console.error("Error hint:", error.hint);
-        throw new Error(error.message || `Error al crear la oferta (${error.code || "unknown"})`);
-      }
-
-      if (!offer) {
+      if (!result.success || !result.offer) {
         throw new Error("No se recibió respuesta del servidor");
       }
 
-      console.log("Offer created successfully:", offer);
-      return offer;
+      // Log storage initialization status
+      if (!result.storage_initialized) {
+        console.warn("Storage was not initialized for offer:", result.offer.id);
+      }
+
+      console.log("Offer created successfully:", result.offer);
+      return result.offer;
     } catch (error: any) {
       console.error("❌ Error in createOffer:", error);
-      console.error("Error type:", typeof error);
-      console.error("Error name:", error?.name);
       console.error("Error message:", error?.message);
-      console.error("Error code:", error?.code);
-      console.error("Error stack:", error?.stack);
       
       // Ensure we always throw a proper Error object
       const finalError = error instanceof Error 

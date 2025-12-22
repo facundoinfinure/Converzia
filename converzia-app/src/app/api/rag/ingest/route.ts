@@ -8,6 +8,7 @@ import {
   ingestDocument,
   ingestFromPdf 
 } from "@/lib/services/rag";
+import { ensureRagBucketExists } from "@/lib/services/storage";
 
 // ============================================
 // RAG Ingest API
@@ -228,6 +229,15 @@ async function handlePdfUpload(request: NextRequest): Promise<NextResponse> {
 
     const supabase = createAdminClient();
 
+    // Ensure storage bucket exists before upload
+    const bucketResult = await ensureRagBucketExists();
+    if (!bucketResult.success) {
+      return NextResponse.json(
+        { success: false, error: `Error al inicializar storage: ${bucketResult.error}` },
+        { status: 500 }
+      );
+    }
+
     // Create RAG source record
     const { data: source, error: sourceError } = await queryWithTimeout(
       supabase
@@ -257,8 +267,11 @@ async function handlePdfUpload(request: NextRequest): Promise<NextResponse> {
     const buffer = Buffer.from(arrayBuffer);
 
     // Upload to Supabase Storage
+    // Structure: tenant_id/[offer_id/]source_id/filename
     const sourceId = (source as any).id;
-    const storagePath = `${tenantId}/${sourceId}/${file.name}`;
+    const storagePath = offerId 
+      ? `${tenantId}/${offerId}/${sourceId}/${file.name}`
+      : `${tenantId}/${sourceId}/${file.name}`;
     const { error: uploadError } = await supabase.storage
       .from("rag-documents")
       .upload(storagePath, buffer, {

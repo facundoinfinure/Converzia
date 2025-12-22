@@ -269,6 +269,21 @@ export default function KnowledgePage() {
     setIsUploading(true);
 
     try {
+      // Step 0: Initialize storage bucket before upload
+      const initResponse = await fetch("/api/storage/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenant_id: newSource.tenant_id,
+          offer_id: newSource.offer_id || undefined,
+        }),
+      });
+
+      if (!initResponse.ok) {
+        const initError = await initResponse.json();
+        throw new Error(`Error al inicializar storage: ${initError.error}`);
+      }
+
       // Step 1: Create RAG source record first
       const { data: source, error: sourceError } = await supabase
         .from("rag_sources")
@@ -285,7 +300,10 @@ export default function KnowledgePage() {
       if (sourceError) throw sourceError;
 
       // Step 2: Upload PDF directly to Supabase Storage (bypasses Vercel 4.5MB limit)
-      const storagePath = `${newSource.tenant_id}/${source.id}/${pdfFile.name}`;
+      // Structure: tenant_id/[offer_id/]source_id/filename
+      const storagePath = newSource.offer_id 
+        ? `${newSource.tenant_id}/${newSource.offer_id}/${source.id}/${pdfFile.name}`
+        : `${newSource.tenant_id}/${source.id}/${pdfFile.name}`;
       
       const { error: uploadError } = await supabase.storage
         .from("rag-documents")
