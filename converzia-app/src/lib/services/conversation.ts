@@ -35,15 +35,15 @@ interface ConversationContext {
 export async function startInitialConversation(leadOfferId: string): Promise<void> {
   const supabase = createAdminClient();
 
-  // Get lead offer with related data
+  // Get lead offer with related data - specify FK relationships explicitly
   const { data: leadOffer, error } = await queryWithTimeout(
     supabase
       .from("lead_offers")
       .select(`
         *,
-        lead:leads(*),
-        offer:offers(*),
-        tenant:tenants(*)
+        lead:leads!lead_id(*),
+        offer:offers!offer_id(*),
+        tenant:tenants!tenant_id(*)
       `)
       .eq("id", leadOfferId)
       .single(),
@@ -183,7 +183,7 @@ export async function processIncomingMessage(
       .from("lead_offers")
       .select(`
         *,
-        offer:offers(*)
+        offer:offers!offer_id(*)
       `)
       .eq("lead_id", (lead as any).id)
       .in("status", ["CONTACTED", "ENGAGED", "QUALIFYING"])
@@ -423,7 +423,7 @@ export async function retryContact(leadOfferId: string): Promise<void> {
       .select(`
         *,
         lead:leads(*),
-        offer:offers(*),
+        offer:offers!offer_id(*),
         tenant:tenants(*)
       `)
       .eq("id", leadOfferId)
@@ -494,7 +494,7 @@ export async function sendReactivation(leadOfferId: string): Promise<void> {
       .select(`
         *,
         lead:leads(*),
-        offer:offers(*),
+        offer:offers!offer_id(*),
         tenant:tenants(*)
       `)
       .eq("id", leadOfferId)
@@ -547,7 +547,7 @@ async function triggerDelivery(leadOfferId: string, scoreSummary?: string): Prom
       .select(`
         *,
         lead:leads(*),
-        offer:offers(*),
+        offer:offers!offer_id(*),
         lead_source:lead_sources(*)
       `)
       .eq("id", leadOfferId)
