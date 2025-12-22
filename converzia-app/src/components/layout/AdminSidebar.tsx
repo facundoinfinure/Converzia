@@ -40,52 +40,20 @@ interface NavItem {
 }
 
 // Navigation items without badges (badges are added dynamically)
+// Simplified: removed sub-menus to reduce complexity
 const baseNavigation: Omit<NavItem, "badge">[] = [
   { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
-  { 
-    name: "Tenants", 
-    href: "/admin/tenants", 
-    icon: Building2,
-    children: [
-      { name: "Todos los tenants", href: "/admin/tenants" },
-      { name: "Crear tenant", href: "/admin/tenants/new" },
-    ]
-  },
-  { 
-    name: "Ofertas", 
-    href: "/admin/offers", 
-    icon: Package,
-    children: [
-      { name: "Todas las ofertas", href: "/admin/offers" },
-      { name: "Crear oferta", href: "/admin/offers/new" },
-    ]
-  },
+  { name: "Tenants", href: "/admin/tenants", icon: Building2 },
+  { name: "Ofertas", href: "/admin/offers", icon: Package },
   { name: "Mapeo de Ads", href: "/admin/ads-mapping", icon: Megaphone },
-  { 
-    name: "Knowledge (RAG)", 
-    href: "/admin/knowledge", 
-    icon: Brain,
-    children: [
-      { name: "Fuentes", href: "/admin/knowledge" },
-      { name: "Documentos", href: "/admin/knowledge/documents" },
-    ]
-  },
+  { name: "Knowledge", href: "/admin/knowledge", icon: Brain },
   { name: "Usuarios", href: "/admin/users", icon: Users },
   { name: "Operaciones", href: "/admin/operations", icon: Activity },
-  { name: "Billing", href: "/admin/billing", icon: CreditCard },
+  { name: "Facturación", href: "/admin/billing", icon: CreditCard },
 ];
 
 const bottomNavigation: NavItem[] = [
-  { 
-    name: "Configuración", 
-    href: "/admin/settings", 
-    icon: Settings,
-    children: [
-      { name: "General", href: "/admin/settings" },
-      { name: "Integraciones", href: "/admin/settings/integrations" },
-      { name: "WhatsApp Templates", href: "/admin/settings/templates" },
-    ]
-  },
+  { name: "Configuración", href: "/admin/settings", icon: Settings },
 ];
 
 // ============================================

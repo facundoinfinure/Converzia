@@ -4,14 +4,13 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   CheckCircle2,
-  Circle,
-  Megaphone,
   Link2,
-  BookOpen,
   CreditCard,
   ChevronDown,
   ChevronUp,
   Sparkles,
+  Clock,
+  Megaphone,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -22,9 +21,10 @@ interface OnboardingStep {
   id: string;
   title: string;
   description: string;
-  href: string;
+  href: string | null; // null means not actionable by tenant
   icon: React.ElementType;
   isCompleted: boolean;
+  isPending?: boolean; // Waiting on Converzia
 }
 
 interface OnboardingChecklistProps {
@@ -50,7 +50,6 @@ export function OnboardingChecklist({ tenantId }: OnboardingChecklistProps) {
     const [
       { count: adsCount },
       { count: integrationsCount },
-      { count: ragCount },
       { data: creditsData },
     ] = await Promise.all([
       supabase
@@ -64,11 +63,6 @@ export function OnboardingChecklist({ tenantId }: OnboardingChecklistProps) {
         .eq("tenant_id", tenantId)
         .eq("is_active", true),
       supabase
-        .from("rag_sources")
-        .select("id", { count: "exact", head: true })
-        .eq("tenant_id", tenantId)
-        .eq("is_active", true),
-      supabase
         .from("tenant_credit_balance")
         .select("current_balance")
         .eq("tenant_id", tenantId)
@@ -77,33 +71,17 @@ export function OnboardingChecklist({ tenantId }: OnboardingChecklistProps) {
 
     const hasAds = (adsCount || 0) > 0;
     const hasIntegration = (integrationsCount || 0) > 0;
-    const hasKnowledge = (ragCount || 0) > 0;
     const hasCredits = (creditsData?.current_balance || 0) > 0;
 
+    // Only show tenant-actionable steps + status of Converzia-managed steps
     setSteps([
-      {
-        id: "ads",
-        title: "Mapear anuncios",
-        description: "Conectá tus anuncios de Meta con las ofertas de Converzia",
-        href: "/portal/ads",
-        icon: Megaphone,
-        isCompleted: hasAds,
-      },
       {
         id: "integrations",
         title: "Configurar integraciones",
-        description: "Activa Google Sheets, Tokko, o un webhook para recibir leads",
+        description: "Conectá Google Sheets, Tokko o un webhook para recibir leads",
         href: "/portal/integrations",
         icon: Link2,
         isCompleted: hasIntegration,
-      },
-      {
-        id: "knowledge",
-        title: "Cargar información del proyecto",
-        description: "Subí PDFs o URLs con info del desarrollo para mejorar las respuestas",
-        href: "/portal/knowledge",
-        icon: BookOpen,
-        isCompleted: hasKnowledge,
       },
       {
         id: "credits",
@@ -113,17 +91,31 @@ export function OnboardingChecklist({ tenantId }: OnboardingChecklistProps) {
         icon: CreditCard,
         isCompleted: hasCredits,
       },
+      {
+        id: "ads",
+        title: "Anuncios mapeados",
+        description: hasAds 
+          ? "Tus anuncios de Meta están conectados" 
+          : "Converzia está configurando tus anuncios",
+        href: null, // Not actionable by tenant
+        icon: hasAds ? Megaphone : Clock,
+        isCompleted: hasAds,
+        isPending: !hasAds,
+      },
     ]);
 
     setIsLoading(false);
   }
 
-  const completedCount = steps.filter((s) => s.isCompleted).length;
-  const totalSteps = steps.length;
-  const isAllCompleted = completedCount === totalSteps && totalSteps > 0;
+  // Only count actionable steps for completion
+  const actionableSteps = steps.filter((s) => s.href !== null);
+  const completedActionable = actionableSteps.filter((s) => s.isCompleted).length;
+  const totalActionable = actionableSteps.length;
+  const isAllCompleted = completedActionable === totalActionable && totalActionable > 0;
 
-  // Hide if dismissed or all completed
-  if (isDismissed || isAllCompleted) {
+  // Hide if dismissed or all completed (including pending Converzia steps)
+  const allDone = steps.every((s) => s.isCompleted);
+  if (isDismissed || allDone) {
     return null;
   }
 
@@ -154,7 +146,7 @@ export function OnboardingChecklist({ tenantId }: OnboardingChecklistProps) {
             <div>
               <CardTitle>Configurá tu cuenta</CardTitle>
               <p className="text-sm text-slate-400 mt-0.5">
-                {completedCount} de {totalSteps} pasos completados
+                {completedActionable} de {totalActionable} pasos completados
               </p>
             </div>
           </div>
@@ -184,7 +176,7 @@ export function OnboardingChecklist({ tenantId }: OnboardingChecklistProps) {
         <div className="mt-4 h-2 bg-slate-700 rounded-full overflow-hidden">
           <div
             className="h-full bg-gradient-to-r from-primary-500 to-primary-400 transition-all duration-500"
-            style={{ width: `${(completedCount / totalSteps) * 100}%` }}
+            style={{ width: `${totalActionable > 0 ? (completedActionable / totalActionable) * 100 : 0}%` }}
           />
         </div>
       </CardHeader>
@@ -193,6 +185,76 @@ export function OnboardingChecklist({ tenantId }: OnboardingChecklistProps) {
           <div className="space-y-3">
             {steps.map((step) => {
               const Icon = step.icon;
+              const content = (
+                <>
+                  <div
+                    className={cn(
+                      "h-10 w-10 rounded-full flex items-center justify-center shrink-0",
+                      step.isCompleted
+                        ? "bg-emerald-500/20"
+                        : step.isPending
+                        ? "bg-amber-500/20"
+                        : "bg-slate-700"
+                    )}
+                  >
+                    {step.isCompleted ? (
+                      <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                    ) : (
+                      <Icon className={cn(
+                        "h-5 w-5",
+                        step.isPending ? "text-amber-400" : "text-slate-400"
+                      )} />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p
+                      className={cn(
+                        "font-medium",
+                        step.isCompleted 
+                          ? "text-emerald-400" 
+                          : step.isPending
+                          ? "text-amber-400"
+                          : "text-white"
+                      )}
+                    >
+                      {step.title}
+                    </p>
+                    <p className="text-sm text-slate-500 truncate">
+                      {step.description}
+                    </p>
+                  </div>
+                  {!step.isCompleted && !step.isPending && step.href && (
+                    <Button size="sm" variant="secondary" className="shrink-0">
+                      Comenzar
+                    </Button>
+                  )}
+                  {step.isPending && (
+                    <span className="text-xs text-amber-400 bg-amber-500/10 px-2 py-1 rounded shrink-0">
+                      En proceso
+                    </span>
+                  )}
+                </>
+              );
+
+              // Non-actionable steps render as div, actionable as Link
+              if (!step.href) {
+                return (
+                  <div
+                    key={step.id}
+                    className={cn(
+                      "flex items-center gap-4 p-3 rounded-lg",
+                      step.isCompleted
+                        ? "bg-emerald-500/10 border border-emerald-500/20"
+                        : step.isPending
+                        ? "bg-amber-500/5 border border-amber-500/20"
+                        : "bg-slate-800/50 border border-transparent"
+                    )}
+                  >
+                    {content}
+                  </div>
+                );
+              }
+
               return (
                 <Link
                   key={step.id}
@@ -204,38 +266,7 @@ export function OnboardingChecklist({ tenantId }: OnboardingChecklistProps) {
                       : "bg-slate-800/50 hover:bg-slate-800 border border-transparent"
                   )}
                 >
-                  <div
-                    className={cn(
-                      "h-10 w-10 rounded-full flex items-center justify-center shrink-0",
-                      step.isCompleted
-                        ? "bg-emerald-500/20"
-                        : "bg-slate-700"
-                    )}
-                  >
-                    {step.isCompleted ? (
-                      <CheckCircle2 className="h-5 w-5 text-emerald-400" />
-                    ) : (
-                      <Icon className="h-5 w-5 text-slate-400" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p
-                      className={cn(
-                        "font-medium",
-                        step.isCompleted ? "text-emerald-400" : "text-white"
-                      )}
-                    >
-                      {step.title}
-                    </p>
-                    <p className="text-sm text-slate-500 truncate">
-                      {step.description}
-                    </p>
-                  </div>
-                  {!step.isCompleted && (
-                    <Button size="sm" variant="secondary" className="shrink-0">
-                      Comenzar
-                    </Button>
-                  )}
+                  {content}
                 </Link>
               );
             })}

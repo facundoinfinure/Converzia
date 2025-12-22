@@ -122,8 +122,8 @@ export function NoDataEmptyState({ action, className }: PresetEmptyStateProps) {
   return (
     <EmptyState
       icon={<Inbox />}
-      title="No hay datos"
-      description="No hay información disponible para mostrar en este momento."
+      title="Nada por aquí"
+      description="Los datos aparecerán cuando haya actividad."
       action={action}
       className={className}
     />
@@ -165,8 +165,8 @@ export function NoLeadsEmptyState({ action, className }: PresetEmptyStateProps) 
   return (
     <EmptyState
       icon={<Users />}
-      title="No hay leads"
-      description="Todavía no hay leads registrados. Cuando lleguen leads de tus campañas, aparecerán aquí."
+      title="Sin leads todavía"
+      description="Los leads de tus campañas de Meta aparecerán aquí automáticamente."
       action={action}
       className={className}
     />
@@ -177,8 +177,8 @@ export function NoOffersEmptyState({ action, className }: PresetEmptyStateProps)
   return (
     <EmptyState
       icon={<Package />}
-      title="No hay ofertas"
-      description="Creá tu primera oferta para empezar a recibir y calificar leads."
+      title="Sin ofertas configuradas"
+      description="Las ofertas definen qué proyectos califica el bot. Contactá a Converzia para agregarlas."
       action={action}
       className={className}
     />
@@ -189,9 +189,9 @@ export function NoTenantsEmptyState({ action, className }: PresetEmptyStateProps
   return (
     <EmptyState
       icon={<Users />}
-      title="No hay tenants"
-      description="No hay tenants registrados en la plataforma. Creá el primero para comenzar."
-      action={action}
+      title="Sin tenants"
+      description="Creá el primer tenant para empezar a operar."
+      action={action ? action : { label: "Crear tenant", onClick: () => window.location.href = "/admin/tenants/new" }}
       className={className}
     />
   );
@@ -209,15 +209,15 @@ export function ErrorEmptyState({
   return (
     <EmptyState
       icon={<AlertCircle />}
-      title="Algo salió mal"
-      description={message || "Ocurrió un error al cargar los datos. Por favor, intentá de nuevo."}
+      title="Error al cargar"
+      description={message || "No pudimos cargar los datos. Intentá de nuevo."}
       action={
         onRetry
           ? {
               label: "Reintentar",
               onClick: onRetry,
             }
-          : undefined
+          : { label: "Recargar página", onClick: () => window.location.reload() }
       }
       className={className}
     />
@@ -245,6 +245,7 @@ export function NotFoundEmptyState({
     />
   );
 }
+
 
 
 

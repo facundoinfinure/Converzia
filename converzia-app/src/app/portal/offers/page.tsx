@@ -1,13 +1,15 @@
 "use client";
 
-import { Package, Users, Layers, MapPin } from "lucide-react";
+import { Package, Users, Layers, MapPin, Mail, ExternalLink } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { NoOffersEmptyState } from "@/components/ui/EmptyState";
 import { usePortalOffers } from "@/lib/hooks/use-portal";
 import { formatCurrency } from "@/lib/utils";
+import { Alert } from "@/components/ui/Alert";
 
 // Status config
 const statusConfig: Record<string, { label: string; variant: "success" | "warning" | "secondary" | "default" }> = {
@@ -33,15 +35,42 @@ export default function PortalOffersPage() {
     );
   }
 
+  const handleRequestChanges = () => {
+    window.location.href = "mailto:soporte@converzia.ai?subject=Solicitud de cambios en ofertas";
+  };
+
   return (
     <PageContainer>
       <PageHeader
         title="Mis Ofertas"
-        description="Ofertas configuradas para recibir leads"
+        description="Proyectos configurados para recibir y calificar leads"
+        actions={
+          offers.length > 0 && (
+            <Button
+              variant="secondary"
+              leftIcon={<Mail className="h-4 w-4" />}
+              onClick={handleRequestChanges}
+            >
+              Solicitar cambios
+            </Button>
+          )
+        }
       />
 
+      {/* Info alert */}
+      {offers.length > 0 && (
+        <Alert variant="info" className="mb-6">
+          Las ofertas son configuradas por el equipo de Converzia. Si necesitás agregar o modificar una oferta, contactanos.
+        </Alert>
+      )}
+
       {offers.length === 0 ? (
-        <NoOffersEmptyState />
+        <NoOffersEmptyState 
+          action={{
+            label: "Contactar a Converzia",
+            onClick: handleRequestChanges,
+          }}
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {offers.map((offer) => {

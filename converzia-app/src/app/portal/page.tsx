@@ -7,21 +7,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Users,
-  TrendingUp,
   CreditCard,
-  Package,
   ArrowRight,
-  CheckCircle,
   Clock,
-  MessageSquare,
-  Plus,
-  Link2,
-  Settings,
 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { LightCard, LightCardHeader, LightCardTitle, LightCardContent, LightCardFooter } from "@/components/ui/LightCard";
 import { LightButton } from "@/components/ui/LightButton";
-import { QuickActions } from "@/components/dashboard/QuickActions";
 import { DashboardCard } from "@/components/dashboard/DashboardCard";
 import { SimpleChart } from "@/components/ui/SimpleChart";
 import { Badge, LeadStatusBadge } from "@/components/ui/Badge";
@@ -39,15 +31,14 @@ export default function PortalDashboard() {
   const { activeTenant, activeTenantId } = useAuth();
   const { stats, recentLeads, isLoading, error } = usePortalDashboard();
   const [leadsTrend, setLeadsTrend] = useState<Array<{ date: string; value: number }>>([]);
-  const [timeRange, setTimeRange] = useState<"7d" | "30d" | "90d">("30d");
 
-  // Fetch leads trend
+  // Fetch leads trend (fixed to 30 days - no user configuration needed)
   useEffect(() => {
     async function fetchTrend() {
       if (!activeTenantId) return;
 
       const supabase = createClient();
-      const daysAgo = timeRange === "7d" ? 7 : timeRange === "30d" ? 30 : 90;
+      const daysAgo = 30;
       const trendData: Array<{ date: string; value: number }> = [];
 
       for (let i = daysAgo; i >= 0; i--) {
@@ -74,7 +65,7 @@ export default function PortalDashboard() {
     }
 
     fetchTrend();
-  }, [activeTenantId, timeRange]);
+  }, [activeTenantId]);
 
   if (isLoading) {
     return (
@@ -92,35 +83,6 @@ export default function PortalDashboard() {
     );
   }
 
-  // Quick actions for portal
-  const quickActions = [
-    {
-      label: "Recargar Créditos",
-      icon: <CreditCard className="h-4 w-4" />,
-      onClick: () => router.push("/portal/billing"),
-      variant: "primary" as const,
-    },
-    {
-      label: "Ver Leads Ready",
-      icon: <CheckCircle className="h-4 w-4" />,
-      onClick: () => router.push("/portal/leads?status=LEAD_READY"),
-      variant: "secondary" as const,
-      disabled: (stats?.leadReadyCount || 0) === 0,
-    },
-    {
-      label: "Nueva Oferta",
-      icon: <Plus className="h-4 w-4" />,
-      onClick: () => router.push("/admin/offers/new"),
-      variant: "secondary" as const,
-    },
-    {
-      label: "Configurar Integración",
-      icon: <Link2 className="h-4 w-4" />,
-      onClick: () => router.push("/portal/integrations"),
-      variant: "secondary" as const,
-    },
-  ];
-
   return (
     <PageContainer>
       <PageHeader
@@ -128,23 +90,34 @@ export default function PortalDashboard() {
         description="Vista general de tu cuenta"
       />
 
-      {/* Onboarding checklist */}
+      {/* Onboarding checklist - only shown if incomplete */}
       {activeTenant && <OnboardingChecklist tenantId={activeTenant.id} />}
 
-          {/* Quick Actions */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-sm font-medium text-gray-600 mb-1">Bienvenido</h2>
-          <p className="text-2xl font-semibold text-gray-900">Acciones rápidas</p>
-        </div>
-        <Link href="#" className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1">
-          Personalizar
-          <Settings className="h-4 w-4" />
-        </Link>
-      </div>
-      <QuickActions actions={quickActions} />
+      {/* Low credits alert */}
+      {stats && stats.creditBalance < 10 && (
+        <LightCard className="border-amber-200 bg-amber-50 mb-6">
+          <LightCardContent>
+            <div className="flex items-center gap-4">
+              <div className="h-12 w-12 rounded-lg bg-amber-100 flex items-center justify-center">
+                <CreditCard className="h-6 w-6 text-amber-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Créditos bajos: {stats.creditBalance}
+                </h3>
+                <p className="text-sm text-gray-600">
+                  Recargá para seguir recibiendo leads calificados.
+                </p>
+              </div>
+              <LightButton variant="primary" size="sm" onClick={() => router.push("/portal/billing")}>
+                Recargar
+              </LightButton>
+            </div>
+          </LightCardContent>
+        </LightCard>
+      )}
 
-      {/* Main Metric Card - Créditos */}
+      {/* Main Metric Card - Créditos (simplified, no time selector) */}
       <LightCard className="border-blue-200 bg-gradient-to-br from-blue-50 to-white">
         <LightCardHeader>
           <div className="flex items-center justify-between w-full">
@@ -158,30 +131,13 @@ export default function PortalDashboard() {
                 </span>
                 <span className="text-gray-600">créditos</span>
               </div>
-              {stats && stats.creditBalance < 10 && (
-                <p className="text-sm text-amber-600 mt-2 flex items-center gap-1">
-                  <Clock className="h-4 w-4" />
-                  Créditos bajos - recargá para seguir recibiendo leads
-                </p>
-              )}
             </div>
           </div>
         </LightCardHeader>
         <LightCardContent>
           {leadsTrend.length > 0 && (
             <div className="mt-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-gray-600">Tendencia de leads</span>
-                <select
-                  value={timeRange}
-                  onChange={(e) => setTimeRange(e.target.value as any)}
-                  className="text-xs text-gray-600 bg-white border border-gray-200 rounded-md px-2 py-1"
-                >
-                  <option value="7d">7 días</option>
-                  <option value="30d">30 días</option>
-                  <option value="90d">90 días</option>
-                </select>
-              </div>
+              <span className="text-sm text-gray-600">Tendencia de leads (30 días)</span>
               <SimpleChart
                 data={leadsTrend}
                 color="#3b82f6"

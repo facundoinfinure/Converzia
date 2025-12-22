@@ -166,13 +166,13 @@ const leadStatusConfig: Record<string, { variant: BadgeVariant; label: string }>
   ENGAGED: { variant: "primary", label: "Interesado" },
   QUALIFYING: { variant: "primary", label: "Calificando" },
   SCORED: { variant: "primary", label: "Calificado" },
-  LEAD_READY: { variant: "success", label: "Lead Ready" },
-  SENT_TO_DEVELOPER: { variant: "success", label: "Enviado" },
+  LEAD_READY: { variant: "success", label: "Listo" },
+  SENT_TO_DEVELOPER: { variant: "success", label: "Entregado" },
   COOLING: { variant: "secondary", label: "En pausa" },
   REACTIVATION: { variant: "warning", label: "Reactivación" },
   DISQUALIFIED: { variant: "danger", label: "Descalificado" },
   STOPPED: { variant: "danger", label: "Detenido" },
-  HUMAN_HANDOFF: { variant: "warning", label: "Handoff" },
+  HUMAN_HANDOFF: { variant: "warning", label: "Derivado" },
 };
 
 export function LeadStatusBadge({ status, className }: LeadStatusBadgeProps) {
@@ -227,10 +227,10 @@ interface RoleBadgeProps {
 }
 
 const roleConfig: Record<string, { variant: BadgeVariant; label: string }> = {
-  OWNER: { variant: "primary", label: "Owner" },
-  ADMIN: { variant: "info", label: "Admin" },
-  BILLING: { variant: "warning", label: "Billing" },
-  VIEWER: { variant: "secondary", label: "Viewer" },
+  OWNER: { variant: "primary", label: "Propietario" },
+  ADMIN: { variant: "info", label: "Administrador" },
+  BILLING: { variant: "warning", label: "Facturación" },
+  VIEWER: { variant: "secondary", label: "Visor" },
 };
 
 export function RoleBadge({ role, className }: RoleBadgeProps) {

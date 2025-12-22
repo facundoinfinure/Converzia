@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardFooter, CardSection } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -12,7 +13,7 @@ import { Select } from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
 import { useTenantMutations } from "@/lib/hooks/use-tenants";
 import { createTenantSchema, type CreateTenantInput } from "@/lib/validations/tenant";
-import { slugify } from "@/lib/utils";
+import { slugify, cn } from "@/lib/utils";
 
 // Timezone options for Argentina
 const timezoneOptions = [
@@ -26,6 +27,7 @@ export default function NewTenantPage() {
   const toast = useToast();
   const { createTenant, isLoading } = useTenantMutations();
   const [autoSlug, setAutoSlug] = useState(true);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const {
     register,
@@ -136,39 +138,55 @@ export default function NewTenantPage() {
             </CardContent>
           </Card>
 
-          {/* Configuration */}
-          <Card>
-            <CardContent className="p-6">
-              <CardSection title="Configuración" description="Parámetros de calificación y duplicados">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <Select
-                    label="Zona horaria"
-                    options={timezoneOptions}
-                    {...register("timezone")}
-                    error={errors.timezone?.message}
-                  />
+          {/* Advanced Configuration - Collapsable */}
+              <div className="mt-6 pt-6 border-t border-[var(--border-primary)]">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                  className="flex items-center gap-2 text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+                >
+                  {showAdvanced ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                  Configuración avanzada
+                </button>
 
-                  <Input
-                    label="Score threshold"
-                    type="number"
-                    min={1}
-                    max={100}
-                    {...register("default_score_threshold", { valueAsNumber: true })}
-                    error={errors.default_score_threshold?.message}
-                    hint="Puntaje mínimo para Lead Ready"
-                  />
+                <div className={cn(
+                  "overflow-hidden transition-all duration-300",
+                  showAdvanced ? "mt-6 max-h-[500px] opacity-100" : "max-h-0 opacity-0"
+                )}>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <Select
+                      label="Zona horaria"
+                      options={timezoneOptions}
+                      {...register("timezone")}
+                      error={errors.timezone?.message}
+                    />
 
-                  <Input
-                    label="Ventana duplicados (días)"
-                    type="number"
-                    min={1}
-                    max={365}
-                    {...register("duplicate_window_days", { valueAsNumber: true })}
-                    error={errors.duplicate_window_days?.message}
-                    hint="Días para considerar duplicado"
-                  />
+                    <Input
+                      label="Umbral de calificación"
+                      type="number"
+                      min={1}
+                      max={100}
+                      {...register("default_score_threshold", { valueAsNumber: true })}
+                      error={errors.default_score_threshold?.message}
+                      hint="Puntaje mínimo para lead listo (default: 80)"
+                    />
+
+                    <Input
+                      label="Ventana de duplicados (días)"
+                      type="number"
+                      min={1}
+                      max={365}
+                      {...register("duplicate_window_days", { valueAsNumber: true })}
+                      error={errors.duplicate_window_days?.message}
+                      hint="Días para detectar duplicados (default: 90)"
+                    />
+                  </div>
                 </div>
-              </CardSection>
+              </div>
             </CardContent>
 
             <CardFooter>
@@ -189,6 +207,7 @@ export default function NewTenantPage() {
     </PageContainer>
   );
 }
+
 
 
 

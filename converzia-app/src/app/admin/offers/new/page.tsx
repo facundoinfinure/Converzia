@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Sparkles } from "lucide-react";
+import { Sparkles, ChevronDown, ChevronUp } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardFooter, CardSection } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -15,6 +15,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useOfferMutations, useTenantOptions } from "@/lib/hooks/use-offers";
 import { createOfferSchema, type CreateOfferInput } from "@/lib/validations/offer";
 import { slugify } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 // Options
 const offerTypeOptions = [
@@ -44,6 +45,7 @@ export default function NewOfferPage() {
   const { options: tenantOptions, isLoading: loadingTenants } = useTenantOptions();
   const [autoSlug, setAutoSlug] = useState(true);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const defaultTenantId = searchParams.get("tenant") || "";
 
@@ -210,10 +212,10 @@ export default function NewOfferPage() {
         toast.error("Por favor, completá todos los campos requeridos correctamente");
       })}>
         <div className="space-y-6">
-          {/* Basic Info */}
+          {/* Essential Fields - 5 campos principales */}
           <Card>
             <CardContent className="p-6">
-              <CardSection title="Información básica">
+              <CardSection title="Datos esenciales">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <CustomSelect
                     label="Tenant"
@@ -227,7 +229,7 @@ export default function NewOfferPage() {
                   />
 
                   <Select
-                    label="Tipo de oferta"
+                    label="Tipo"
                     options={offerTypeOptions}
                     {...register("offer_type")}
                     error={errors.offer_type?.message}
@@ -261,77 +263,7 @@ export default function NewOfferPage() {
                         Generar con AI
                       </Button>
                     </div>
-                    {selectedTenantId && offerType && name && (
-                      <p className="text-xs text-slate-500 mt-1">
-                        El botón de AI buscará información en el RAG del tenant para completar la oferta
-                      </p>
-                    )}
                   </div>
-
-                  <Input
-                    label="Slug"
-                    placeholder="ej: torre-central"
-                    {...register("slug")}
-                    onChange={(e) => {
-                      register("slug").onChange(e);
-                      setAutoSlug(false);
-                    }}
-                    error={errors.slug?.message}
-                    hint="Se usa en URLs"
-                    required
-                  />
-
-                  <div className="md:col-span-2">
-                    <Input
-                      label="Descripción corta"
-                      placeholder="Breve descripción para previews"
-                      {...register("short_description")}
-                      error={errors.short_description?.message}
-                    />
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <TextArea
-                      label="Descripción completa"
-                      placeholder="Descripción detallada del proyecto..."
-                      rows={4}
-                      {...register("description")}
-                      error={errors.description?.message}
-                    />
-                  </div>
-
-                  <Input
-                    label="URL de imagen"
-                    placeholder="https://..."
-                    {...register("image_url")}
-                    error={errors.image_url?.message}
-                  />
-
-                  <Input
-                    label="Prioridad"
-                    type="number"
-                    min={0}
-                    max={1000}
-                    {...register("priority", { valueAsNumber: true })}
-                    error={errors.priority?.message}
-                    hint="Mayor = más prioridad (0-1000)"
-                  />
-                </div>
-              </CardSection>
-            </CardContent>
-          </Card>
-
-          {/* Location */}
-          <Card>
-            <CardContent className="p-6">
-              <CardSection title="Ubicación">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <Select
-                    label="País"
-                    options={countryOptions}
-                    {...register("country")}
-                    error={errors.country?.message}
-                  />
 
                   <Input
                     label="Ciudad"
@@ -341,74 +273,134 @@ export default function NewOfferPage() {
                   />
 
                   <Input
-                    label="Zona / Barrio"
-                    placeholder="Palermo"
-                    {...register("zone")}
-                    error={errors.zone?.message}
-                  />
-
-                  <div className="md:col-span-3">
-                    <Input
-                      label="Dirección"
-                      placeholder="Av. Libertador 1234"
-                      {...register("address")}
-                      error={errors.address?.message}
-                    />
-                  </div>
-
-                  <Input
-                    label="Latitud"
-                    type="number"
-                    step="any"
-                    placeholder="-34.6037"
-                    {...register("latitude", { valueAsNumber: true })}
-                    error={errors.latitude?.message}
-                  />
-
-                  <Input
-                    label="Longitud"
-                    type="number"
-                    step="any"
-                    placeholder="-58.3816"
-                    {...register("longitude", { valueAsNumber: true })}
-                    error={errors.longitude?.message}
-                  />
-                </div>
-              </CardSection>
-            </CardContent>
-          </Card>
-
-          {/* Pricing */}
-          <Card>
-            <CardContent className="p-6">
-              <CardSection title="Precios">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <Select
-                    label="Moneda"
-                    options={currencyOptions}
-                    {...register("currency")}
-                    error={errors.currency?.message}
-                  />
-
-                  <Input
-                    label="Precio desde"
+                    label="Precio desde (USD)"
                     type="number"
                     min={0}
                     placeholder="100000"
                     {...register("price_from", { valueAsNumber: true })}
                     error={errors.price_from?.message}
                   />
-
-                  <Input
-                    label="Precio hasta"
-                    type="number"
-                    min={0}
-                    placeholder="200000"
-                    {...register("price_to", { valueAsNumber: true })}
-                    error={errors.price_to?.message}
-                  />
                 </div>
               </CardSection>
+
+              {/* Advanced Fields - Collapsable */}
+              <div className="mt-6 pt-6 border-t border-[var(--border-primary)]">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                  className="flex items-center gap-2 text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+                >
+                  {showAdvanced ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                  Configuración avanzada
+                </button>
+
+                <div className={cn(
+                  "overflow-hidden transition-all duration-300",
+                  showAdvanced ? "mt-6 max-h-[2000px] opacity-100" : "max-h-0 opacity-0"
+                )}>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Hidden slug field - auto-generated */}
+                    <input type="hidden" {...register("slug")} />
+                    
+                    <div className="md:col-span-2">
+                      <Input
+                        label="Descripción corta"
+                        placeholder="Breve descripción para previews"
+                        {...register("short_description")}
+                        error={errors.short_description?.message}
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <TextArea
+                        label="Descripción completa"
+                        placeholder="Descripción detallada del proyecto..."
+                        rows={3}
+                        {...register("description")}
+                        error={errors.description?.message}
+                      />
+                    </div>
+
+                    <Select
+                      label="País"
+                      options={countryOptions}
+                      {...register("country")}
+                      error={errors.country?.message}
+                    />
+
+                    <Input
+                      label="Zona / Barrio"
+                      placeholder="Palermo"
+                      {...register("zone")}
+                      error={errors.zone?.message}
+                    />
+
+                    <div className="md:col-span-2">
+                      <Input
+                        label="Dirección"
+                        placeholder="Av. Libertador 1234"
+                        {...register("address")}
+                        error={errors.address?.message}
+                      />
+                    </div>
+
+                    <Select
+                      label="Moneda"
+                      options={currencyOptions}
+                      {...register("currency")}
+                      error={errors.currency?.message}
+                    />
+
+                    <Input
+                      label="Precio hasta"
+                      type="number"
+                      min={0}
+                      placeholder="200000"
+                      {...register("price_to", { valueAsNumber: true })}
+                      error={errors.price_to?.message}
+                    />
+
+                    <Input
+                      label="URL de imagen"
+                      placeholder="https://..."
+                      {...register("image_url")}
+                      error={errors.image_url?.message}
+                    />
+
+                    <Input
+                      label="Prioridad"
+                      type="number"
+                      min={0}
+                      max={1000}
+                      {...register("priority", { valueAsNumber: true })}
+                      error={errors.priority?.message}
+                      hint="Mayor = más prioridad (default: 100)"
+                    />
+
+                    <Input
+                      label="Latitud"
+                      type="number"
+                      step="any"
+                      placeholder="-34.6037"
+                      {...register("latitude", { valueAsNumber: true })}
+                      error={errors.latitude?.message}
+                    />
+
+                    <Input
+                      label="Longitud"
+                      type="number"
+                      step="any"
+                      placeholder="-58.3816"
+                      {...register("longitude", { valueAsNumber: true })}
+                      error={errors.longitude?.message}
+                    />
+                  </div>
+                </div>
+              </div>
             </CardContent>
 
             <CardFooter>
@@ -429,6 +421,7 @@ export default function NewOfferPage() {
     </PageContainer>
   );
 }
+
 
 
 

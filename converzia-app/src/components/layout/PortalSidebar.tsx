@@ -7,13 +7,13 @@ import {
   Users,
   Package,
   CreditCard,
-  Settings,
   LogOut,
   Zap,
   UserCog,
   Building2,
   Menu,
   X,
+  Link2,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -25,12 +25,9 @@ const navigation = [
   { name: "Dashboard", href: "/portal", icon: LayoutDashboard },
   { name: "Leads", href: "/portal/leads", icon: Users },
   { name: "Mis Ofertas", href: "/portal/offers", icon: Package },
-  { name: "Billing", href: "/portal/billing", icon: CreditCard },
+  { name: "Integraciones", href: "/portal/integrations", icon: Link2 },
+  { name: "Facturación", href: "/portal/billing", icon: CreditCard },
   { name: "Equipo", href: "/portal/team", icon: UserCog },
-];
-
-const bottomNavigation = [
-  { name: "Configuración", href: "/portal/settings", icon: Settings },
 ];
 
 export function PortalSidebar() {
@@ -149,28 +146,8 @@ export function PortalSidebar() {
           </div>
         </nav>
 
-        {/* Bottom Navigation */}
-        <div className="border-t border-[var(--sidebar-border)] px-3 py-4 space-y-1">
-          {bottomNavigation.map((item) => {
-            const isActive = pathname.startsWith(item.href);
-
-            return (
-              <Link
-                key={item.name}
-                href={item.href}
-                className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
-                  isActive
-                    ? "bg-[var(--sidebar-item-active)] text-[var(--sidebar-item-active-text)]"
-                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--sidebar-item-hover)]"
-                )}
-              >
-                <item.icon className={cn("h-5 w-5", isActive && "text-[var(--sidebar-item-active-text)]")} />
-                {item.name}
-              </Link>
-            );
-          })}
-
+        {/* Sign Out */}
+        <div className="border-t border-[var(--sidebar-border)] px-3 py-4">
           <button
             onClick={signOut}
             className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--error)] hover:bg-[var(--error-light)] transition-all"

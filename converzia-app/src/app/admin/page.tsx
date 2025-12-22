@@ -8,25 +8,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Users,
-  Building2,
-  TrendingUp,
-  Clock,
-  ArrowUpRight,
   CheckCircle2,
   AlertTriangle,
   MessageSquare,
   CreditCard,
-  Package,
   LayoutDashboard,
-  Plus,
-  Megaphone,
-  Settings,
-  ChevronDown,
 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { LightCard, LightCardHeader, LightCardTitle, LightCardContent, LightCardFooter } from "@/components/ui/LightCard";
 import { LightButton } from "@/components/ui/LightButton";
-import { QuickActions } from "@/components/dashboard/QuickActions";
 import { DashboardCard } from "@/components/dashboard/DashboardCard";
 import { SimpleChart } from "@/components/ui/SimpleChart";
 import { Badge } from "@/components/ui/Badge";
@@ -374,35 +364,6 @@ export default function AdminDashboard() {
     recentActivity.length === 0 &&
     pendingApprovals.length === 0;
 
-  // Quick actions for admin
-  const quickActions = [
-    {
-      label: "Crear Tenant",
-      icon: <Plus className="h-4 w-4" />,
-      onClick: () => router.push("/admin/tenants/new"),
-      variant: "primary" as const,
-    },
-    {
-      label: "Mapear Ad",
-      icon: <Megaphone className="h-4 w-4" />,
-      onClick: () => router.push("/admin/ads-mapping"),
-      variant: "secondary" as const,
-    },
-    {
-      label: "Nueva Oferta",
-      icon: <Package className="h-4 w-4" />,
-      onClick: () => router.push("/admin/offers/new"),
-      variant: "secondary" as const,
-    },
-    {
-      label: "Ver Aprobaciones",
-      icon: <Users className="h-4 w-4" />,
-      onClick: () => router.push("/admin/users"),
-      variant: "secondary" as const,
-      disabled: (stats?.pendingApprovals || 0) === 0,
-    },
-  ];
-
   return (
     <PageContainer>
       <PageHeader
@@ -455,18 +416,56 @@ export default function AdminDashboard() {
         </LightCard>
       ) : (
         <div className="space-y-6">
-          {/* Quick Actions */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-medium text-gray-600 dark:text-slate-400 mb-1">Bienvenido</h2>
-              <p className="text-2xl font-semibold text-gray-900 dark:text-slate-100">Acciones rápidas</p>
-            </div>
-            <Link href="#" className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1">
-              Personalizar
-              <Settings className="h-4 w-4" />
-            </Link>
-          </div>
-          <QuickActions actions={quickActions} />
+          {/* Alerts Row - Show actionable items first */}
+          {(stats?.unmappedAds || 0) > 0 && (
+            <LightCard className="border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30">
+              <LightCardContent>
+                <div className="flex items-center gap-4">
+                  <div className="h-12 w-12 rounded-lg bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center">
+                    <AlertTriangle className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
+                      {stats?.unmappedAds} ads sin mapear
+                    </h3>
+                    <p className="text-sm text-gray-600 dark:text-slate-400">
+                      Hay leads esperando. Mapeá los ads para iniciar la calificación.
+                    </p>
+                  </div>
+                  <Link href="/admin/ads-mapping">
+                    <LightButton variant="primary" size="sm">
+                      Mapear ahora
+                    </LightButton>
+                  </Link>
+                </div>
+              </LightCardContent>
+            </LightCard>
+          )}
+
+          {(stats?.pendingApprovals || 0) > 0 && (
+            <LightCard className="border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/30">
+              <LightCardContent>
+                <div className="flex items-center gap-4">
+                  <div className="h-12 w-12 rounded-lg bg-purple-100 dark:bg-purple-900/50 flex items-center justify-center">
+                    <Users className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
+                      {stats?.pendingApprovals} aprobaciones pendientes
+                    </h3>
+                    <p className="text-sm text-gray-600 dark:text-slate-400">
+                      Usuarios esperando acceso a la plataforma.
+                    </p>
+                  </div>
+                  <Link href="/admin/users">
+                    <LightButton variant="primary" size="sm">
+                      Revisar
+                    </LightButton>
+                  </Link>
+                </div>
+              </LightCardContent>
+            </LightCard>
+          )}
 
           {/* Main Metric Card */}
           <LightCard className="border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50 to-white dark:from-slate-800 dark:to-slate-800">
@@ -541,31 +540,6 @@ export default function AdminDashboard() {
             />
           </div>
 
-          {/* Alerts Row - Estilo Mercury */}
-          {(stats?.unmappedAds || 0) > 0 && (
-            <LightCard className="border-amber-200 bg-amber-50">
-              <LightCardContent>
-                <div className="flex items-center gap-4">
-                  <div className="h-12 w-12 rounded-lg bg-amber-100 flex items-center justify-center">
-                    <AlertTriangle className="h-6 w-6 text-amber-600" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                      {stats?.unmappedAds} Ads sin mapear
-                    </h3>
-                    <p className="text-sm text-gray-600 dark:text-slate-400">
-                      Hay leads esperando ser procesados. Mapeá los ads a ofertas para iniciar la calificación.
-                    </p>
-                  </div>
-                  <Link href="/admin/ads-mapping">
-                    <LightButton variant="primary" size="sm">
-                      Mapear ahora
-                    </LightButton>
-                  </Link>
-                </div>
-              </LightCardContent>
-            </LightCard>
-          )}
 
           {/* Cards Informativos */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

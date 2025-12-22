@@ -212,45 +212,67 @@ export default function SettingsPage() {
         ]}
       />
 
-      <Tabs defaultValue="preferences">
+      <Tabs defaultValue="general">
         <TabsList>
-          <TabTrigger value="preferences" icon={<Palette className="h-4 w-4" />}>
-            Preferencias
+          <TabTrigger value="general" icon={<Palette className="h-4 w-4" />}>
+            General
           </TabTrigger>
-          <TabTrigger value="meta" icon={<Facebook className="h-4 w-4" />}>
-            Meta / Facebook
-          </TabTrigger>
-          <TabTrigger value="whatsapp" icon={<MessageCircle className="h-4 w-4" />}>
-            WhatsApp
-          </TabTrigger>
-          <TabTrigger value="chatwoot" icon={<Webhook className="h-4 w-4" />}>
-            Chatwoot
-          </TabTrigger>
-          <TabTrigger value="openai" icon={<Bot className="h-4 w-4" />}>
-            OpenAI
-          </TabTrigger>
-          <TabTrigger value="prompts" icon={<Settings className="h-4 w-4" />}>
-            Prompts
+          <TabTrigger value="integrations" icon={<Webhook className="h-4 w-4" />}>
+            Integraciones
           </TabTrigger>
         </TabsList>
 
-        {/* Preferences Tab */}
-        <TabContent value="preferences">
-          <Card>
-            <CardHeader>
-              <CardTitle>Preferencias de usuario</CardTitle>
-              <p className="text-sm text-slate-500 mt-1">
-                Personalizá tu experiencia en la plataforma
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <ThemeSetting />
-            </CardContent>
-          </Card>
+        {/* General Tab - Preferences + Prompts */}
+        <TabContent value="general">
+          <div className="space-y-6">
+            {/* Preferences */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Preferencias</CardTitle>
+                <p className="text-sm text-slate-500 mt-1">
+                  Personalizá tu experiencia en la plataforma
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <ThemeSetting />
+              </CardContent>
+            </Card>
+
+            {/* Prompts */}
+            <Card>
+              <CardHeader>
+                <div>
+                  <CardTitle>Prompts del bot</CardTitle>
+                  <p className="text-sm text-slate-500 mt-1">
+                    Configuración del comportamiento del bot para todos los tenants
+                  </p>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <TextArea
+                  label="System prompt - Calificación (Markdown)"
+                  value={promptSettings.qualification_system_prompt_md}
+                  onChange={(e) =>
+                    setPromptSettings({ ...promptSettings, qualification_system_prompt_md: e.target.value })
+                  }
+                  rows={12}
+                  placeholder="Pegá acá el prompt (Markdown)"
+                  hint="Variables disponibles: {{tenant_name}}, {{offer_name}}, etc."
+                />
+              </CardContent>
+              <CardFooter>
+                <Button onClick={() => handleSave("prompts")} isLoading={isSaving} leftIcon={<Save className="h-4 w-4" />}>
+                  Guardar prompts
+                </Button>
+              </CardFooter>
+            </Card>
+          </div>
         </TabContent>
 
-        {/* Meta Settings */}
-        <TabContent value="meta">
+        {/* Integrations Tab - All integrations in one view */}
+        <TabContent value="integrations">
+          <div className="space-y-6">
+            {/* Meta Settings */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
@@ -324,10 +346,8 @@ export default function SettingsPage() {
               </Button>
             </CardFooter>
           </Card>
-        </TabContent>
 
-        {/* WhatsApp Settings */}
-        <TabContent value="whatsapp">
+            {/* WhatsApp Settings */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
@@ -381,10 +401,8 @@ export default function SettingsPage() {
               </Button>
             </CardFooter>
           </Card>
-        </TabContent>
 
-        {/* Chatwoot Settings */}
-        <TabContent value="chatwoot">
+            {/* Chatwoot Settings */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
@@ -448,10 +466,8 @@ export default function SettingsPage() {
               </Button>
             </CardFooter>
           </Card>
-        </TabContent>
 
-        {/* OpenAI Settings */}
-        <TabContent value="openai">
+            {/* OpenAI Settings */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
@@ -514,46 +530,7 @@ export default function SettingsPage() {
               </Button>
             </CardFooter>
           </Card>
-        </TabContent>
-
-        {/* Prompts Settings (Converzia Admin only via RLS) */}
-        <TabContent value="prompts">
-          <Card>
-            <CardHeader>
-              <div>
-                <CardTitle>Prompts (Admin)</CardTitle>
-                <p className="text-sm text-slate-500 mt-1">
-                  Estos prompts afectan el comportamiento del bot para todos los tenants. Los tenants no pueden editar esto.
-                </p>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Alert variant="info">
-                Sugerencia: guardalo en formato Markdown. En runtime se interpolan variables como <code>{"{{tenant_name}}"}</code>.
-              </Alert>
-              <TextArea
-                label="System prompt - Calificación (Markdown)"
-                value={promptSettings.qualification_system_prompt_md}
-                onChange={(e) =>
-                  setPromptSettings({ ...promptSettings, qualification_system_prompt_md: e.target.value })
-                }
-                rows={18}
-                placeholder="Pegá acá el prompt (Markdown)"
-              />
-            </CardContent>
-            <CardFooter>
-              <Button
-                variant="secondary"
-                onClick={() => setPromptSettings({ qualification_system_prompt_md: "" })}
-                disabled={isSaving}
-              >
-                Reset (usar prompt por defecto del repo)
-              </Button>
-              <Button onClick={() => handleSave("prompts")} isLoading={isSaving} leftIcon={<Save className="h-4 w-4" />}>
-                Guardar
-              </Button>
-            </CardFooter>
-          </Card>
+          </div>
         </TabContent>
       </Tabs>
     </PageContainer>
