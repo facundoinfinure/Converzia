@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Menu, Search, X, ArrowLeft, Eye } from "lucide-react";
+import { Search, ArrowLeft, Eye } from "lucide-react";
 import { useAuth } from "@/lib/auth/context";
 import { Avatar } from "@/components/ui/Avatar";
 import { Dropdown } from "@/components/ui/Dropdown";
@@ -15,7 +15,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 export function PortalHeader() {
-  const { profile, activeRole, signOut, activeTenantId } = useAuth();
+  const { profile, activeRole, signOut, activeTenantId, activeTenant } = useAuth();
   const router = useRouter();
   const [showSearch, setShowSearch] = useState(false);
   const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -107,11 +107,11 @@ export function PortalHeader() {
     <>
       {/* Impersonation Banner */}
       {isImpersonating && (
-        <div className="sticky top-0 z-40 bg-[var(--warning)] text-[var(--warning-dark)]">
-          <div className="flex items-center justify-between px-4 py-2">
-            <div className="flex items-center gap-2">
-              <Eye className="h-4 w-4" />
-              <span className="text-sm font-medium">
+        <div className="sticky top-0 z-[var(--z-header)] bg-gradient-to-r from-[var(--warning)] to-amber-500 text-amber-900">
+          <div className="flex items-center justify-between px-4 py-2.5">
+            <div className="flex items-center gap-2 min-w-0">
+              <Eye className="h-4 w-4 flex-shrink-0" />
+              <span className="text-sm font-semibold truncate">
                 Viendo como: <strong>{impersonatedTenantName}</strong>
               </span>
             </div>
@@ -120,30 +120,41 @@ export function PortalHeader() {
               variant="secondary"
               onClick={stopImpersonation}
               leftIcon={<ArrowLeft className="h-4 w-4" />}
+              className="flex-shrink-0"
             >
-              Volver al Admin
+              <span className="hidden sm:inline">Volver al Admin</span>
+              <span className="sm:hidden">Volver</span>
             </Button>
           </div>
         </div>
       )}
 
-      <header className={`sticky ${isImpersonating ? 'top-10' : 'top-0'} z-30 h-16 border-b border-[var(--border-primary)] bg-[var(--bg-primary)]`}>
-        <div className="flex h-full items-center justify-between px-6">
+      <header className={`sticky ${isImpersonating ? 'top-[46px]' : 'top-0'} z-[var(--z-header)] h-16 border-b border-[var(--border-primary)] bg-[var(--bg-primary)]/95 backdrop-blur-md`}>
+        <div className="flex h-full items-center justify-between px-4 lg:px-6">
           {/* Left side */}
-          <div className="flex items-center gap-4 flex-1 max-w-2xl">
-            {/* Mobile menu button */}
-            <button className="lg:hidden p-2 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors">
-              <Menu className="h-5 w-5" />
-            </button>
+          <div className="flex items-center gap-3 flex-1 max-w-2xl">
+            {/* Mobile: Show tenant name */}
+            <div className="lg:hidden flex items-center gap-2 min-w-0">
+              {activeTenant && (
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex-shrink-0 h-8 w-8 rounded-lg bg-gradient-to-br from-[var(--accent-primary)] to-purple-500 flex items-center justify-center text-white text-xs font-bold">
+                    {activeTenant.name.slice(0, 2).toUpperCase()}
+                  </div>
+                  <span className="text-sm font-semibold text-[var(--text-primary)] truncate max-w-[120px]">
+                    {activeTenant.name}
+                  </span>
+                </div>
+              )}
+            </div>
 
-            {/* Search bar - Pill shaped */}
+            {/* Search bar - Pill shaped, hidden on mobile */}
             <button
               onClick={() => setShowSearch(true)}
-              className="hidden md:flex items-center gap-3 flex-1 max-w-xl px-4 py-2 rounded-full bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-[var(--text-tertiary)] hover:border-[var(--border-secondary)] hover:bg-[var(--bg-secondary)] transition-all text-sm"
+              className="hidden lg:flex items-center gap-3 flex-1 max-w-xl px-4 py-2.5 rounded-full bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-[var(--text-tertiary)] hover:border-[var(--border-secondary)] hover:bg-[var(--bg-secondary)] transition-all text-sm group"
             >
-              <Search className="h-4 w-4 flex-shrink-0" />
+              <Search className="h-4 w-4 flex-shrink-0 group-hover:text-[var(--accent-primary)] transition-colors" />
               <span className="flex-1 text-left">Buscar...</span>
-              <kbd className="hidden lg:inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-[var(--bg-primary)] border border-[var(--border-primary)] font-medium text-[var(--text-tertiary)]">
+              <kbd className="inline-flex items-center gap-0.5 px-2 py-0.5 text-[10px] rounded-md bg-[var(--bg-primary)] border border-[var(--border-primary)] font-semibold text-[var(--text-tertiary)]">
                 ⌘K
               </kbd>
             </button>
@@ -153,10 +164,18 @@ export function PortalHeader() {
           <div className="flex-1" />
 
           {/* Right side */}
-          <div className="flex items-center gap-2">
-            {/* Role badge */}
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Mobile search button */}
+            <button
+              onClick={() => setShowSearch(true)}
+              className="lg:hidden flex items-center justify-center w-10 h-10 rounded-xl bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--accent-primary)] transition-colors"
+            >
+              <Search className="h-5 w-5" />
+            </button>
+
+            {/* Role badge - hidden on mobile */}
             {activeRole && (
-              <Badge variant="secondary" size="sm">
+              <Badge variant="secondary" size="sm" className="hidden sm:flex">
                 {activeRole}
               </Badge>
             )}
@@ -171,17 +190,19 @@ export function PortalHeader() {
             <Dropdown
               align="right"
               trigger={
-                <button className="flex items-center gap-3 p-1.5 rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors ml-2">
+                <button className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-[var(--bg-tertiary)] transition-colors ml-1">
                   <Avatar
                     src={profile?.avatar_url}
                     name={profile?.full_name || profile?.email || "User"}
                     size="sm"
                   />
                   <div className="hidden md:block text-left">
-                    <p className="text-sm font-medium text-[var(--text-primary)]">
+                    <p className="text-sm font-semibold text-[var(--text-primary)] max-w-[120px] truncate">
                       {profile?.full_name || "Usuario"}
                     </p>
-                    <p className="text-xs text-[var(--text-tertiary)]">{profile?.email}</p>
+                    <p className="text-xs text-[var(--text-tertiary)] truncate max-w-[120px]">
+                      {profile?.email}
+                    </p>
                   </div>
                 </button>
               }

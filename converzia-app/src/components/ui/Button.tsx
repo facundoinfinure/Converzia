@@ -3,7 +3,7 @@ import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ============================================
-// Button Component - Clean, Modern Design
+// Button Component - Mobile-First, Touch-Friendly
 // ============================================
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -34,10 +34,21 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     ref
   ) => {
     const baseStyles = cn(
-      "inline-flex items-center justify-center gap-2 font-medium transition-all duration-200",
-      "focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+      // Base layout
+      "inline-flex items-center justify-center gap-2 font-semibold",
+      // Transitions
+      "transition-all duration-200 ease-out",
+      // Focus states - accessible
+      "focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]",
+      // Disabled states
       "disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none",
-      pill ? "rounded-full" : "rounded-lg",
+      // Touch feedback
+      "active:scale-[0.97]",
+      // Prevent text selection on tap
+      "select-none",
+      // Shape
+      pill ? "rounded-full" : "rounded-xl",
+      // Width
       fullWidth && "w-full"
     );
 
@@ -46,15 +57,18 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         "bg-[var(--accent-primary)] text-white",
         "hover:bg-[var(--accent-primary-hover)]",
         "focus-visible:ring-[var(--accent-primary)]",
-        "active:scale-[0.98]"
+        "shadow-sm hover:shadow-md",
+        // Gradient on hover for premium feel
+        "hover:shadow-[var(--accent-primary)]/25"
       ),
       secondary: cn(
-        "bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-primary)]",
+        "bg-[var(--bg-tertiary)] text-[var(--text-primary)]",
+        "border border-[var(--border-primary)]",
         "hover:bg-[var(--bg-secondary)] hover:border-[var(--border-secondary)]",
         "focus-visible:ring-[var(--border-secondary)]"
       ),
       outline: cn(
-        "border border-[var(--border-primary)] text-[var(--text-primary)] bg-transparent",
+        "border-2 border-[var(--border-primary)] text-[var(--text-primary)] bg-transparent",
         "hover:bg-[var(--bg-tertiary)] hover:border-[var(--border-secondary)]",
         "focus-visible:ring-[var(--border-secondary)]"
       ),
@@ -66,12 +80,14 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       danger: cn(
         "bg-[var(--error)] text-white",
         "hover:bg-[var(--error-dark)]",
-        "focus-visible:ring-[var(--error)]"
+        "focus-visible:ring-[var(--error)]",
+        "shadow-sm hover:shadow-md"
       ),
       success: cn(
         "bg-[var(--success)] text-white",
         "hover:bg-[var(--success-dark)]",
-        "focus-visible:ring-[var(--success)]"
+        "focus-visible:ring-[var(--success)]",
+        "shadow-sm hover:shadow-md"
       ),
       link: cn(
         "text-[var(--accent-primary)] bg-transparent underline-offset-4",
@@ -81,12 +97,13 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       ),
     };
 
+    // Touch-friendly sizes (minimum 44px height on mobile)
     const sizes = {
-      xs: "h-7 px-2.5 text-xs",
-      sm: "h-8 px-3 text-sm",
-      md: "h-10 px-4 text-sm",
-      lg: "h-11 px-5 text-base",
-      xl: "h-12 px-6 text-base",
+      xs: "h-8 px-3 text-xs min-h-[32px]",
+      sm: "h-9 px-3.5 text-sm min-h-[36px]",
+      md: "h-11 px-5 text-sm min-h-[44px]", // Mobile-friendly default
+      lg: "h-12 px-6 text-base min-h-[48px]",
+      xl: "h-14 px-8 text-base min-h-[56px]",
     };
 
     const iconSizes = {
@@ -126,7 +143,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 Button.displayName = "Button";
 
 // ============================================
-// Icon Button
+// Icon Button - Touch-Friendly
 // ============================================
 
 export interface IconButtonProps extends Omit<ButtonProps, "leftIcon" | "rightIcon" | "children"> {
@@ -136,16 +153,17 @@ export interface IconButtonProps extends Omit<ButtonProps, "leftIcon" | "rightIc
 
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
   ({ icon, size = "md", className, variant = "ghost", ...props }, ref) => {
+    // Touch-friendly sizes (minimum 44px)
     const sizes = {
-      xs: "h-7 w-7",
-      sm: "h-8 w-8",
-      md: "h-10 w-10",
-      lg: "h-11 w-11",
-      xl: "h-12 w-12",
+      xs: "h-8 w-8 min-h-[32px] min-w-[32px]",
+      sm: "h-9 w-9 min-h-[36px] min-w-[36px]",
+      md: "h-11 w-11 min-h-[44px] min-w-[44px]",
+      lg: "h-12 w-12 min-h-[48px] min-w-[48px]",
+      xl: "h-14 w-14 min-h-[56px] min-w-[56px]",
     };
 
     const iconSizes = {
-      xs: "h-3.5 w-3.5",
+      xs: "h-4 w-4",
       sm: "h-4 w-4",
       md: "h-5 w-5",
       lg: "h-5 w-5",
@@ -159,7 +177,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
         variant={variant}
         className={cn(
           sizes[size], 
-          "p-0 rounded-lg",
+          "p-0 rounded-xl",
           "[&>span]:flex [&>span]:items-center [&>span]:justify-center",
           className
         )}
@@ -187,7 +205,7 @@ export function ButtonGroup({ children, className }: ButtonGroupProps) {
     <div className={cn("flex items-center", className)}>
       <div className={cn(
         "inline-flex overflow-hidden",
-        "border border-[var(--border-primary)] rounded-lg",
+        "border border-[var(--border-primary)] rounded-xl",
         "divide-x divide-[var(--border-primary)]",
         "[&>button]:rounded-none [&>button]:border-0"
       )}>
@@ -209,21 +227,14 @@ interface ActionButtonProps {
 
 export function ActionButtons({ children, className, gap = "sm" }: ActionButtonProps) {
   const gaps = {
-    sm: "gap-1",
+    sm: "gap-1.5",
     md: "gap-2",
     lg: "gap-3",
   };
   
   return (
-    <div className={cn("flex items-center", gaps[gap], className)}>
+    <div className={cn("flex items-center flex-wrap", gaps[gap], className)}>
       {children}
     </div>
   );
 }
-
-
-
-
-
-
-

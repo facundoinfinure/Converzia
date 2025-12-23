@@ -6,7 +6,7 @@ export default {
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
-  darkMode: "class",
+  darkMode: ["class", "[data-theme='dark']"],
   theme: {
     extend: {
       colors: {
@@ -16,36 +16,17 @@ export default {
           DEFAULT: "var(--card-bg)",
           border: "var(--card-border)",
         },
-        // Mercury color palette
-        mercury: {
-          bg: {
-            primary: "var(--mercury-bg-primary)",
-            secondary: "var(--mercury-bg-secondary)",
-            tertiary: "var(--mercury-bg-tertiary)",
-          },
-          text: {
-            primary: "var(--mercury-text-primary)",
-            secondary: "var(--mercury-text-secondary)",
-            tertiary: "var(--mercury-text-tertiary)",
-          },
-          primary: "var(--mercury-primary)",
-          border: "var(--mercury-border)",
-          success: "var(--mercury-success)",
-          warning: "var(--mercury-warning)",
-          error: "var(--mercury-error)",
-          info: "var(--mercury-info)",
-        },
         primary: {
-          50: "#eff6ff",
-          100: "#dbeafe",
-          200: "#bfdbfe",
-          300: "#93c5fd",
-          400: "#60a5fa",
-          500: "#3b82f6", // Mercury blue
-          600: "#2563eb",
-          700: "#1d4ed8",
-          800: "#1e40af",
-          900: "#1e3a8a",
+          50: "#eef2ff",
+          100: "#e0e7ff",
+          200: "#c7d2fe",
+          300: "#a5b4fc",
+          400: "#818cf8",
+          500: "#6366f1",
+          600: "#4f46e5",
+          700: "#4338ca",
+          800: "#3730a3",
+          900: "#312e81",
         },
         accent: {
           50: "#eef2ff",
@@ -61,23 +42,88 @@ export default {
         },
       },
       fontFamily: {
-        sans: ["Inter", "var(--font-geist-sans)", "system-ui", "sans-serif"],
-        mono: ["var(--font-geist-mono)", "monospace"],
+        sans: ["var(--font-body)", "system-ui", "sans-serif"],
+        display: ["var(--font-display)", "system-ui", "sans-serif"],
+        mono: ["var(--font-mono)", "monospace"],
       },
-      boxShadow: {
-        'mercury-sm': 'var(--mercury-shadow-sm)',
-        'mercury': 'var(--mercury-shadow)',
-        'mercury-md': 'var(--mercury-shadow-md)',
+      fontSize: {
+        "2xs": "0.625rem", // 10px
+      },
+      spacing: {
+        "safe-bottom": "env(safe-area-inset-bottom, 0px)",
+        "safe-top": "env(safe-area-inset-top, 0px)",
+        "18": "4.5rem",
+        "22": "5.5rem",
+      },
+      minHeight: {
+        "touch": "44px",
+        "touch-lg": "48px",
+      },
+      minWidth: {
+        "touch": "44px",
       },
       borderRadius: {
-        'mercury-sm': 'var(--mercury-radius-sm)',
-        'mercury-md': 'var(--mercury-radius-md)',
-        'mercury-lg': 'var(--mercury-radius-lg)',
-        'mercury-xl': 'var(--mercury-radius-xl)',
+        "2xl": "1rem",
+        "3xl": "1.5rem",
+        "4xl": "2rem",
+      },
+      boxShadow: {
+        "glow": "0 0 20px rgba(99, 102, 241, 0.3)",
+        "glow-lg": "0 0 40px rgba(99, 102, 241, 0.4)",
+        "card": "0 1px 3px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.04)",
+      },
+      animation: {
+        "fade-in": "fadeIn 0.2s ease-out",
+        "fade-in-up": "fadeInUp 0.3s ease-out",
+        "fade-in-down": "fadeInDown 0.3s ease-out",
+        "slide-in-right": "slideInRight 0.3s ease-out",
+        "slide-in-left": "slideInLeft 0.3s ease-out",
+        "slide-in-up": "slideInUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)",
+        "scale-in": "scaleIn 0.2s ease-out",
+        "bounce-subtle": "bounce 0.6s ease-in-out infinite",
+      },
+      keyframes: {
+        fadeIn: {
+          from: { opacity: "0" },
+          to: { opacity: "1" },
+        },
+        fadeInUp: {
+          from: { opacity: "0", transform: "translateY(16px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
+        fadeInDown: {
+          from: { opacity: "0", transform: "translateY(-16px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
+        slideInRight: {
+          from: { opacity: "0", transform: "translateX(24px)" },
+          to: { opacity: "1", transform: "translateX(0)" },
+        },
+        slideInLeft: {
+          from: { opacity: "0", transform: "translateX(-24px)" },
+          to: { opacity: "1", transform: "translateX(0)" },
+        },
+        slideInUp: {
+          from: { opacity: "0", transform: "translateY(100%)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
+        scaleIn: {
+          from: { opacity: "0", transform: "scale(0.95)" },
+          to: { opacity: "1", transform: "scale(1)" },
+        },
+        bounce: {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-4px)" },
+        },
+      },
+      transitionTimingFunction: {
+        "bounce": "cubic-bezier(0.34, 1.56, 0.64, 1)",
+      },
+      screens: {
+        "xs": "475px",
+        "3xl": "1920px",
       },
     },
   },
   plugins: [],
 } satisfies Config;
-
-

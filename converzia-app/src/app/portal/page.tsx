@@ -12,19 +12,19 @@ import {
   Package,
   TrendingUp,
   Zap,
-  Clock,
   CheckCircle2,
+  Plus,
 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { 
   DashboardCard, 
   HeroMetric, 
   AlertCard, 
-  ActivityItem 
+  ActivityItem,
+  QuickActionCard 
 } from "@/components/dashboard/DashboardCard";
 import { SimpleChart } from "@/components/ui/SimpleChart";
 import { OnboardingChecklist } from "@/components/portal/OnboardingChecklist";
@@ -77,17 +77,17 @@ export default function PortalDashboard() {
   if (isLoading) {
     return (
       <PageContainer>
-        <div className="space-y-6">
-          <Skeleton className="h-10 w-64" />
-          <Skeleton className="h-40 rounded-xl" />
-          <div className="grid grid-cols-4 gap-4">
+        <div className="space-y-4 sm:space-y-6 animate-pulse">
+          <Skeleton className="h-10 w-48 sm:w-64" />
+          <Skeleton className="h-36 sm:h-40 rounded-2xl" />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {[...Array(4)].map((_, i) => (
-              <Skeleton key={i} className="h-32 rounded-xl" />
+              <Skeleton key={i} className="h-28 sm:h-32 rounded-2xl" />
             ))}
           </div>
-          <div className="grid grid-cols-2 gap-6">
-            <Skeleton className="h-64 rounded-xl" />
-            <Skeleton className="h-64 rounded-xl" />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+            <Skeleton className="h-56 sm:h-64 rounded-2xl" />
+            <Skeleton className="h-56 sm:h-64 rounded-2xl" />
           </div>
         </div>
       </PageContainer>
@@ -98,9 +98,11 @@ export default function PortalDashboard() {
 
   return (
     <PageContainer>
+      {/* Header - Simplified for mobile */}
       <PageHeader
-        title={`Bienvenido, ${activeTenant?.name || "Portal"}`}
+        title={`Hola, ${activeTenant?.name.split(" ")[0] || "Portal"}`}
         description="Vista general de tu cuenta"
+        compact
       />
 
       {/* Onboarding checklist */}
@@ -117,7 +119,7 @@ export default function PortalDashboard() {
             label: "Recargar",
             onClick: () => router.push("/portal/billing"),
           }}
-          className="mb-6"
+          className="mb-4 sm:mb-6"
         />
       )}
 
@@ -131,13 +133,13 @@ export default function PortalDashboard() {
         chart={
           leadsTrend.length > 0 && (
             <div className="mt-2">
-              <p className="text-sm text-[var(--text-tertiary)] mb-2">
+              <p className="text-xs sm:text-sm text-[var(--text-tertiary)] mb-2">
                 Tendencia de leads (30 días)
               </p>
               <SimpleChart
                 data={leadsTrend}
                 color="var(--accent-primary)"
-                height={100}
+                height={80}
                 showGrid={false}
                 showAxis={false}
               />
@@ -148,68 +150,56 @@ export default function PortalDashboard() {
           label: "Recargar créditos",
           onClick: () => router.push("/portal/billing"),
         }}
-        className="mb-6"
+        className="mb-4 sm:mb-6"
       />
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      {/* Stats Grid - 2 columns on mobile, 4 on desktop */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4 sm:mb-6">
         <DashboardCard
           title="Total Leads"
           value={stats?.totalLeads || 0}
           icon={<Users className="h-5 w-5" />}
           iconColor="info"
-          action={{
-            label: "Ver por proyecto",
-            onClick: () => router.push("/portal/offers"),
-          }}
+          size="sm"
         />
         <DashboardCard
-          title="Leads Calificados"
+          title="Calificados"
           value={stats?.leadReadyCount || 0}
           icon={<CheckCircle2 className="h-5 w-5" />}
           iconColor="success"
-          action={{
-            label: "Ver detalles",
-            onClick: () => router.push("/portal/offers"),
-          }}
+          size="sm"
         />
         <DashboardCard
-          title="Tasa de Conversión"
+          title="Conversión"
           value={`${stats?.conversionRate || 0}%`}
           icon={<TrendingUp className="h-5 w-5" />}
           iconColor="primary"
-          change={
-            stats?.conversionRate && stats.conversionRate > 0
-              ? { value: stats.conversionRate, trend: "up" as const }
-              : undefined
-          }
+          size="sm"
         />
         <DashboardCard
-          title="Proyectos Activos"
+          title="Proyectos"
           value={stats?.activeOffers || 0}
           icon={<Package className="h-5 w-5" />}
           iconColor="warning"
-          action={{
-            label: "Gestionar",
-            onClick: () => router.push("/portal/offers"),
-          }}
+          size="sm"
         />
       </div>
 
-      {/* Two column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Two column layout - Stack on mobile */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Recent Leads */}
-        <Card>
+        <Card className="animate-fadeInUp stagger-1">
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle>Leads recientes</CardTitle>
+              <CardTitle size="sm">Leads recientes</CardTitle>
               <Link href="/portal/offers">
                 <Button 
                   size="sm" 
                   variant="ghost"
                   rightIcon={<ArrowRight className="h-4 w-4" />}
                 >
-                  Ver todos
+                  <span className="hidden sm:inline">Ver todos</span>
+                  <span className="sm:hidden">Ver</span>
                 </Button>
               </Link>
             </div>
@@ -234,9 +224,9 @@ export default function PortalDashboard() {
                 ))}
               </div>
             ) : (
-              <div className="py-12 text-center">
+              <div className="py-10 sm:py-12 text-center">
                 <Users className="h-10 w-10 text-[var(--text-tertiary)] mx-auto mb-3" />
-                <p className="text-[var(--text-secondary)] font-medium">Sin leads todavía</p>
+                <p className="text-[var(--text-secondary)] font-semibold">Sin leads todavía</p>
                 <p className="text-sm text-[var(--text-tertiary)] mt-1">
                   Los leads aparecerán aquí cuando lleguen.
                 </p>
@@ -246,9 +236,9 @@ export default function PortalDashboard() {
         </Card>
 
         {/* Pipeline Summary */}
-        <Card>
+        <Card className="animate-fadeInUp stagger-2">
           <CardHeader>
-            <CardTitle>Pipeline de leads</CardTitle>
+            <CardTitle size="sm">Pipeline de leads</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -257,52 +247,55 @@ export default function PortalDashboard() {
                   label: "Contactados", 
                   count: stats?.pipelineStats?.contacted || 0, 
                   color: "bg-[var(--info)]",
-                  bgColor: "bg-[var(--info-light)]" 
                 },
                 { 
                   label: "En calificación", 
                   count: stats?.pipelineStats?.qualifying || 0, 
                   color: "bg-[var(--accent-primary)]",
-                  bgColor: "bg-[var(--accent-primary-light)]" 
                 },
                 { 
                   label: "Calificados", 
                   count: stats?.pipelineStats?.leadReady || 0, 
                   color: "bg-[var(--success)]",
-                  bgColor: "bg-[var(--success-light)]" 
                 },
                 { 
                   label: "Entregados", 
                   count: stats?.pipelineStats?.delivered || 0, 
                   color: "bg-[var(--text-tertiary)]",
-                  bgColor: "bg-[var(--bg-tertiary)]" 
                 },
-              ].map((stage) => {
+              ].map((stage, index) => {
                 const total = (stats?.totalLeads || 1);
                 const percentage = total > 0 ? Math.round((stage.count / total) * 100) : 0;
                 
                 return (
-                  <div key={stage.label} className="space-y-2">
+                  <div 
+                    key={stage.label} 
+                    className="space-y-2 animate-fadeInUp"
+                    style={{ animationDelay: `${(index + 1) * 100}ms` }}
+                  >
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className={`h-3 w-3 rounded-full ${stage.color}`} />
-                        <span className="text-sm text-[var(--text-secondary)]">
+                      <div className="flex items-center gap-2 sm:gap-3">
+                        <div className={`h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full ${stage.color}`} />
+                        <span className="text-xs sm:text-sm text-[var(--text-secondary)]">
                           {stage.label}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-[var(--text-primary)]">
+                      <div className="flex items-center gap-1.5 sm:gap-2">
+                        <span className="text-sm font-bold text-[var(--text-primary)]">
                           {stage.count}
                         </span>
-                        <span className="text-xs text-[var(--text-tertiary)]">
+                        <span className="text-[10px] sm:text-xs text-[var(--text-tertiary)]">
                           ({percentage}%)
                         </span>
                       </div>
                     </div>
                     <div className="h-2 rounded-full bg-[var(--bg-tertiary)] overflow-hidden">
                       <div 
-                        className={`h-full rounded-full transition-all duration-500 ${stage.color}`}
-                        style={{ width: `${percentage}%` }}
+                        className={`h-full rounded-full transition-all duration-700 ease-out ${stage.color}`}
+                        style={{ 
+                          width: `${percentage}%`,
+                          transitionDelay: `${(index + 1) * 100}ms`
+                        }}
                       />
                     </div>
                   </div>
@@ -313,7 +306,7 @@ export default function PortalDashboard() {
             <div className="mt-6 pt-4 border-t border-[var(--border-primary)]">
               <Button
                 variant="ghost"
-                size="sm"
+                size="md"
                 onClick={() => router.push("/portal/offers")}
                 rightIcon={<ArrowRight className="h-4 w-4" />}
                 className="w-full justify-between"

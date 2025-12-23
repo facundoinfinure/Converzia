@@ -70,7 +70,6 @@ export default function LoginPage() {
         setError("Error al conectar con Google. Intentá de nuevo.");
         setIsGoogleLoading(false);
       }
-      // If successful, user will be redirected to Google
     } catch (err) {
       setError("Error inesperado. Intentá de nuevo.");
       setIsGoogleLoading(false);
@@ -83,7 +82,6 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      // Create timeout for auth
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => reject(new Error("Timeout: El login tardó más de 10 segundos")), 10000);
       });
@@ -106,7 +104,6 @@ export default function LoginPage() {
       }
 
       if (data && data.user) {
-        // Check if user is admin
         const { data: profile } = await queryWithTimeout(
           supabase
             .from("user_profiles")
@@ -115,13 +112,12 @@ export default function LoginPage() {
             .single(),
           10000,
           "check admin status",
-          false // Don't retry admin check
+          false
         );
 
         if ((profile as any)?.is_converzia_admin) {
           router.push("/admin");
         } else {
-          // Check for active memberships
           const { data: memberships } = await queryWithTimeout(
             supabase
               .from("tenant_members")
@@ -129,7 +125,7 @@ export default function LoginPage() {
               .eq("user_id", data.user.id),
             10000,
             "check memberships",
-            false // Don't retry membership check
+            false
           ) as { data: { id: string; status: string }[] | null };
 
           if (!memberships || memberships.length === 0) {
@@ -152,30 +148,33 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
+    <div className="min-h-screen bg-[var(--bg-secondary)] flex flex-col items-center justify-center p-4 sm:p-6">
       {/* Background decoration */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary-500/10 rounded-full blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-accent-500/10 rounded-full blur-3xl" />
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-[var(--accent-primary)]/10 rounded-full blur-3xl" />
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-br from-[var(--accent-primary)]/5 to-purple-500/5 rounded-full blur-3xl" />
       </div>
 
-      <div className="relative z-10 w-full max-w-md">
+      <div className="relative z-10 w-full max-w-md animate-fadeInUp">
         {/* Logo */}
         <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 shadow-lg shadow-primary-500/25">
-            <Zap className="h-6 w-6 text-white" />
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--accent-primary)] to-purple-600 shadow-xl shadow-[var(--accent-primary)]/30">
+            <Zap className="h-7 w-7 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-white">Converzia</h1>
+          <h1 className="text-3xl font-bold text-[var(--text-primary)] font-[var(--font-display)]">
+            Converzia
+          </h1>
         </div>
 
         {/* Login Card */}
-        <Card>
-          <CardContent className="p-8">
+        <Card className="shadow-2xl border-[var(--border-primary)]">
+          <CardContent className="p-6 sm:p-8">
             <div className="text-center mb-8">
-              <h2 className="text-xl font-semibold text-white mb-2">
+              <h2 className="text-xl sm:text-2xl font-bold text-[var(--text-primary)] font-[var(--font-display)]">
                 Iniciar sesión
               </h2>
-              <p className="text-slate-400">
+              <p className="text-[var(--text-secondary)] mt-2 text-sm sm:text-base">
                 Ingresá tus credenciales para continuar
               </p>
             </div>
@@ -203,10 +202,12 @@ export default function LoginPage() {
             {/* Divider */}
             <div className="relative mb-6">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-card-border"></div>
+                <div className="w-full border-t border-[var(--border-primary)]"></div>
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-card text-slate-500">o con email</span>
+                <span className="px-4 bg-[var(--bg-primary)] text-[var(--text-tertiary)] font-medium">
+                  o con email
+                </span>
               </div>
             </div>
 
@@ -217,7 +218,7 @@ export default function LoginPage() {
                 placeholder="tu@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                leftIcon={<Mail className="h-4 w-4" />}
+                leftIcon={<Mail className="h-5 w-5" />}
                 autoComplete="email"
                 required
               />
@@ -228,17 +229,17 @@ export default function LoginPage() {
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                leftIcon={<Lock className="h-4 w-4" />}
+                leftIcon={<Lock className="h-5 w-5" />}
                 rightIcon={
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="text-slate-500 hover:text-white transition-colors"
+                    className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors p-1"
                   >
                     {showPassword ? (
-                      <EyeOff className="h-4 w-4" />
+                      <EyeOff className="h-5 w-5" />
                     ) : (
-                      <Eye className="h-4 w-4" />
+                      <Eye className="h-5 w-5" />
                     )}
                   </button>
                 }
@@ -246,17 +247,17 @@ export default function LoginPage() {
                 required
               />
 
-              <div className="flex items-center justify-between">
-                <label className="flex items-center gap-2 text-sm text-slate-400">
+              <div className="flex items-center justify-between gap-4">
+                <label className="flex items-center gap-2.5 text-sm text-[var(--text-secondary)] cursor-pointer">
                   <input
                     type="checkbox"
-                    className="rounded border-card-border bg-card text-primary-500 focus:ring-primary-500"
+                    className="w-4 h-4 rounded border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--accent-primary)] focus:ring-[var(--accent-primary)] focus:ring-offset-0"
                   />
-                  Recordarme
+                  <span>Recordarme</span>
                 </label>
                 <Link
                   href="/forgot-password"
-                  className="text-sm text-primary-400 hover:text-primary-300 transition-colors"
+                  className="text-sm text-[var(--accent-primary)] hover:text-[var(--accent-primary-hover)] transition-colors font-medium"
                 >
                   ¿Olvidaste tu contraseña?
                 </Link>
@@ -275,23 +276,21 @@ export default function LoginPage() {
         </Card>
 
         {/* Footer */}
-        <p className="text-center text-sm text-slate-500 mt-6">
+        <p className="text-center text-sm text-[var(--text-tertiary)] mt-6">
           ¿No tenés cuenta?{" "}
           <button
             onClick={handleGoogleSignIn}
-            className="text-primary-400 hover:text-primary-300 transition-colors"
+            className="text-[var(--accent-primary)] hover:text-[var(--accent-primary-hover)] transition-colors font-semibold"
           >
             Registrate con Google
           </button>
+        </p>
+
+        {/* Branding footer */}
+        <p className="text-center text-xs text-[var(--text-tertiary)] mt-8 opacity-60">
+          © 2024 Converzia. Todos los derechos reservados.
         </p>
       </div>
     </div>
   );
 }
-
-
-
-
-
-
-

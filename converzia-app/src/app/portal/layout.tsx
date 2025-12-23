@@ -7,20 +7,18 @@ export default function PortalLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-[var(--bg-secondary)]">
       <PortalSidebar />
-      <div className="lg:ml-64">
+      
+      {/* Main content area - shifts right on desktop */}
+      <div className="lg:ml-64 flex flex-col min-h-screen">
         <PortalHeader />
-        <main className="min-h-[calc(100vh-4rem)]">{children}</main>
+        
+        {/* Main content with padding for mobile bottom nav */}
+        <main className="flex-1 pb-[calc(72px+env(safe-area-inset-bottom,0px))] lg:pb-0">
+          {children}
+        </main>
       </div>
     </div>
   );
 }
-
-
-
-
-
-
-
-

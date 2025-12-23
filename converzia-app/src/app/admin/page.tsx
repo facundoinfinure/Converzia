@@ -3,7 +3,6 @@
 export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Users,
@@ -280,17 +279,17 @@ export default function AdminDashboard() {
   if (isLoading) {
     return (
       <PageContainer>
-        <div className="space-y-6">
-          <Skeleton className="h-10 w-64" />
-          <Skeleton className="h-40 rounded-xl" />
-          <div className="grid grid-cols-4 gap-4">
+        <div className="space-y-4 sm:space-y-6 animate-pulse">
+          <Skeleton className="h-10 w-48 sm:w-64" />
+          <Skeleton className="h-36 sm:h-40 rounded-2xl" />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {[...Array(4)].map((_, i) => (
-              <Skeleton key={i} className="h-32 rounded-xl" />
+              <Skeleton key={i} className="h-28 sm:h-32 rounded-2xl" />
             ))}
           </div>
-          <div className="grid grid-cols-2 gap-6">
-            <Skeleton className="h-64 rounded-xl" />
-            <Skeleton className="h-64 rounded-xl" />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+            <Skeleton className="h-56 sm:h-64 rounded-2xl" />
+            <Skeleton className="h-56 sm:h-64 rounded-2xl" />
           </div>
         </div>
       </PageContainer>
@@ -313,7 +312,8 @@ export default function AdminDashboard() {
     <PageContainer>
       <PageHeader
         title="Dashboard"
-        description="Vista general de la plataforma Converzia"
+        description="Vista general de la plataforma"
+        compact
       />
 
       {error && (
@@ -325,12 +325,12 @@ export default function AdminDashboard() {
             label: "Recargar",
             onClick: () => window.location.reload(),
           }}
-          className="mb-6"
+          className="mb-4 sm:mb-6"
         />
       )}
 
       {hasNoData ? (
-        <Card>
+        <Card className="animate-fadeInUp">
           <EmptyState
             icon={<LayoutDashboard />}
             title="Sin información disponible"
@@ -339,46 +339,48 @@ export default function AdminDashboard() {
           />
         </Card>
       ) : (
-        <div className="space-y-6">
-          {/* Actionable Alerts */}
-          {(stats?.unmappedAds || 0) > 0 && (
-            <AlertCard
-              type="warning"
-              icon={<AlertTriangle className="h-5 w-5" />}
-              title={`${stats?.unmappedAds} ads sin mapear`}
-              description="Hay leads esperando. Mapeá los ads para iniciar la calificación."
-              action={{
-                label: "Mapear ahora",
-                onClick: () => router.push("/admin/ads-mapping"),
-              }}
-            />
-          )}
+        <div className="space-y-4 sm:space-y-6">
+          {/* Actionable Alerts - Stack on mobile */}
+          <div className="space-y-3">
+            {(stats?.unmappedAds || 0) > 0 && (
+              <AlertCard
+                type="warning"
+                icon={<AlertTriangle className="h-5 w-5" />}
+                title={`${stats?.unmappedAds} ads sin mapear`}
+                description="Hay leads esperando. Mapeá los ads para iniciar la calificación."
+                action={{
+                  label: "Mapear",
+                  onClick: () => router.push("/admin/ads-mapping"),
+                }}
+              />
+            )}
 
-          {(stats?.pendingApprovals || 0) > 0 && (
-            <AlertCard
-              type="info"
-              icon={<Users className="h-5 w-5" />}
-              title={`${stats?.pendingApprovals} aprobaciones pendientes`}
-              description="Usuarios esperando acceso a la plataforma."
-              action={{
-                label: "Revisar",
-                onClick: () => router.push("/admin/users"),
-              }}
-            />
-          )}
+            {(stats?.pendingApprovals || 0) > 0 && (
+              <AlertCard
+                type="info"
+                icon={<Users className="h-5 w-5" />}
+                title={`${stats?.pendingApprovals} aprobaciones pendientes`}
+                description="Usuarios esperando acceso a la plataforma."
+                action={{
+                  label: "Revisar",
+                  onClick: () => router.push("/admin/users"),
+                }}
+              />
+            )}
 
-          {(stats?.lowCreditTenants || 0) > 0 && (
-            <AlertCard
-              type="danger"
-              icon={<CreditCard className="h-5 w-5" />}
-              title={`${stats?.lowCreditTenants} tenants con créditos bajos`}
-              description="Estos tenants tienen menos de 10 créditos."
-              action={{
-                label: "Ver tenants",
-                onClick: () => router.push("/admin/tenants?filter=low_credits"),
-              }}
-            />
-          )}
+            {(stats?.lowCreditTenants || 0) > 0 && (
+              <AlertCard
+                type="danger"
+                icon={<CreditCard className="h-5 w-5" />}
+                title={`${stats?.lowCreditTenants} tenants con créditos bajos`}
+                description="Estos tenants tienen menos de 10 créditos."
+                action={{
+                  label: "Ver",
+                  onClick: () => router.push("/admin/tenants?filter=low_credits"),
+                }}
+              />
+            )}
+          </div>
 
           {/* Hero Metric - Total Leads */}
           <HeroMetric
@@ -397,7 +399,7 @@ export default function AdminDashboard() {
                 <SimpleChart
                   data={stats.leadsTrend}
                   color="var(--accent-primary)"
-                  height={100}
+                  height={80}
                   showGrid={false}
                   showAxis={false}
                 />
@@ -405,57 +407,57 @@ export default function AdminDashboard() {
             }
           />
 
-          {/* Stats Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Stats Grid - 2 columns on mobile, 4 on desktop */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <DashboardCard
-              title="Tenants Activos"
+              title="Tenants"
               value={stats?.activeTenants || 0}
               icon={<Building2 className="h-5 w-5" />}
               iconColor="primary"
+              size="sm"
               action={{
-                label: "Ver todos",
+                label: "Ver",
                 onClick: () => router.push("/admin/tenants"),
               }}
             />
             <DashboardCard
-              title="Tasa Lead Ready"
+              title="Lead Ready"
               value={`${stats?.leadReadyRate || 0}%`}
               icon={<TrendingUp className="h-5 w-5" />}
               iconColor="success"
-              change={
-                stats?.leadReadyRate && stats.leadReadyRate > 0
-                  ? { value: stats.leadReadyRate, trend: "up" as const }
-                  : undefined
-              }
+              size="sm"
             />
             <DashboardCard
-              title="Tiempo Respuesta"
+              title="T. Respuesta"
               value={stats?.avgResponseTime || "N/A"}
               icon={<Clock className="h-5 w-5" />}
               iconColor="info"
+              size="sm"
             />
             <DashboardCard
               title="Leads Hoy"
               value={stats?.leadsToday || 0}
               icon={<Users className="h-5 w-5" />}
               iconColor="warning"
+              size="sm"
             />
           </div>
 
-          {/* Two column layout */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Two column layout - Stack on mobile */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
             {/* Recent Activity */}
-            <Card>
+            <Card className="animate-fadeInUp stagger-1">
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle>Actividad Reciente</CardTitle>
+                  <CardTitle size="sm">Actividad Reciente</CardTitle>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => router.push("/admin/operations")}
                     rightIcon={<ArrowRight className="h-4 w-4" />}
                   >
-                    Ver todas
+                    <span className="hidden sm:inline">Ver todas</span>
+                    <span className="sm:hidden">Ver</span>
                   </Button>
                 </div>
               </CardHeader>
@@ -478,19 +480,19 @@ export default function AdminDashboard() {
                     })}
                   </div>
                 ) : (
-                  <div className="py-12 text-center">
+                  <div className="py-10 sm:py-12 text-center">
                     <MessageSquare className="h-10 w-10 text-[var(--text-tertiary)] mx-auto mb-3" />
-                    <p className="text-[var(--text-secondary)]">Sin actividad reciente</p>
+                    <p className="text-[var(--text-secondary)] font-semibold">Sin actividad reciente</p>
                   </div>
                 )}
               </CardContent>
             </Card>
 
             {/* Pending Approvals */}
-            <Card>
+            <Card className="animate-fadeInUp stagger-2">
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle>Aprobaciones Pendientes</CardTitle>
+                  <CardTitle size="sm">Aprobaciones Pendientes</CardTitle>
                   {(stats?.pendingApprovals || 0) > 0 && (
                     <Badge variant="warning">{stats?.pendingApprovals}</Badge>
                   )}
@@ -502,23 +504,23 @@ export default function AdminDashboard() {
                     {pendingApprovals.map((approval) => (
                       <div
                         key={approval.id}
-                        className="flex items-center justify-between p-4 hover:bg-[var(--bg-tertiary)] transition-colors"
+                        className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 hover:bg-[var(--bg-tertiary)] transition-colors"
                       >
-                        <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-full bg-[var(--accent-primary-light)] flex items-center justify-center text-[var(--accent-primary)] font-medium text-sm">
-                            {approval.name.split(" ").map((n) => n[0]).join("")}
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[var(--accent-primary-light)] to-purple-100 flex items-center justify-center text-[var(--accent-primary)] font-bold text-sm flex-shrink-0">
+                            {approval.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
                           </div>
-                          <div>
-                            <p className="text-sm font-medium text-[var(--text-primary)]">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-[var(--text-primary)] truncate">
                               {approval.name}
                             </p>
-                            <p className="text-xs text-[var(--text-tertiary)]">
+                            <p className="text-xs text-[var(--text-tertiary)] truncate">
                               {approval.tenant}
                             </p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="default">{approval.role}</Badge>
+                        <div className="flex items-center gap-2 ml-auto sm:ml-0">
+                          <Badge variant="default" className="text-xs">{approval.role}</Badge>
                           <Button size="sm" variant="primary">
                             Aprobar
                           </Button>
@@ -527,9 +529,9 @@ export default function AdminDashboard() {
                     ))}
                   </div>
                 ) : (
-                  <div className="py-12 text-center">
+                  <div className="py-10 sm:py-12 text-center">
                     <CheckCircle2 className="h-10 w-10 text-[var(--success)] mx-auto mb-3" />
-                    <p className="text-[var(--text-secondary)]">
+                    <p className="text-[var(--text-secondary)] font-semibold">
                       Sin aprobaciones pendientes
                     </p>
                   </div>
