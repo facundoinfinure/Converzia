@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   Activity,
   TrendingUp,
@@ -13,6 +14,17 @@ import {
   MessageSquare,
   Users,
   AlertTriangle,
+  Filter,
+  Eye,
+  ChevronRight,
+  UserCheck,
+  UserX,
+  Phone,
+  Mail,
+  Building2,
+  Package,
+  ArrowRight,
+  Zap,
 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -24,9 +36,12 @@ import { StatCard, StatsGrid } from "@/components/ui/StatCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ConfirmModal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
+import { SearchInput } from "@/components/ui/SearchInput";
+import { CustomSelect } from "@/components/ui/Select";
 import { createClient } from "@/lib/supabase/client";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
-import { formatCurrency, formatRelativeTime, formatDate } from "@/lib/utils";
+import { formatCurrency, formatRelativeTime, formatDate, cn } from "@/lib/utils";
+import Link from "next/link";
 
 // ============================================
 // Types
@@ -65,13 +80,127 @@ interface Refund {
   tenant?: { name: string };
 }
 
+// Pipeline types
+interface PipelineStats {
+  pending_mapping: number;
+  to_be_contacted: number;
+  contacted: number;
+  engaged: number;
+  qualifying: number;
+  scored: number;
+  lead_ready: number;
+  sent_to_developer: number;
+  cooling: number;
+  reactivation: number;
+  disqualified: number;
+  stopped: number;
+  human_handoff: number;
+}
+
+interface PipelineLead {
+  id: string;
+  lead_id: string;
+  status: string;
+  score_total: number | null;
+  qualification_fields: any;
+  contact_attempts: number;
+  created_at: string;
+  updated_at: string;
+  first_response_at: string | null;
+  lead: {
+    phone: string;
+    full_name: string | null;
+    email: string | null;
+    first_name: string | null;
+    last_name: string | null;
+  };
+  tenant: {
+    id: string;
+    name: string;
+  };
+  offer: {
+    id: string;
+    name: string;
+  } | null;
+}
+
+// Status categories for the funnel
+const FUNNEL_STAGES = [
+  { 
+    key: "new", 
+    label: "Nuevos", 
+    statuses: ["PENDING_MAPPING", "TO_BE_CONTACTED"],
+    color: "from-slate-500 to-slate-600",
+    bgColor: "bg-slate-500/10",
+    textColor: "text-slate-400",
+  },
+  { 
+    key: "contacted", 
+    label: "Contactados", 
+    statuses: ["CONTACTED"],
+    color: "from-blue-500 to-blue-600",
+    bgColor: "bg-blue-500/10",
+    textColor: "text-blue-400",
+  },
+  { 
+    key: "engaged", 
+    label: "Interesados", 
+    statuses: ["ENGAGED", "QUALIFYING"],
+    color: "from-cyan-500 to-cyan-600",
+    bgColor: "bg-cyan-500/10",
+    textColor: "text-cyan-400",
+  },
+  { 
+    key: "qualified", 
+    label: "Calificados", 
+    statuses: ["SCORED", "LEAD_READY"],
+    color: "from-emerald-500 to-emerald-600",
+    bgColor: "bg-emerald-500/10",
+    textColor: "text-emerald-400",
+  },
+  { 
+    key: "delivered", 
+    label: "Entregados", 
+    statuses: ["SENT_TO_DEVELOPER"],
+    color: "from-green-500 to-green-600",
+    bgColor: "bg-green-500/10",
+    textColor: "text-green-400",
+  },
+  { 
+    key: "paused", 
+    label: "En Pausa", 
+    statuses: ["COOLING", "REACTIVATION", "HUMAN_HANDOFF"],
+    color: "from-amber-500 to-amber-600",
+    bgColor: "bg-amber-500/10",
+    textColor: "text-amber-400",
+  },
+  { 
+    key: "lost", 
+    label: "Perdidos", 
+    statuses: ["DISQUALIFIED", "STOPPED"],
+    color: "from-red-500 to-red-600",
+    bgColor: "bg-red-500/10",
+    textColor: "text-red-400",
+  },
+];
+
 export default function OperationsPage() {
+  const router = useRouter();
   const toast = useToast();
   const [stats, setStats] = useState<OperationsStats | null>(null);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [refunds, setRefunds] = useState<Refund[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [retryId, setRetryId] = useState<string | null>(null);
+  
+  // Pipeline state
+  const [pipelineStats, setPipelineStats] = useState<PipelineStats | null>(null);
+  const [pipelineLeads, setPipelineLeads] = useState<PipelineLead[]>([]);
+  const [pipelineLoading, setPipelineLoading] = useState(false);
+  const [selectedStage, setSelectedStage] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [tenantFilter, setTenantFilter] = useState<string>("");
+  const [tenantOptions, setTenantOptions] = useState<Array<{value: string; label: string}>>([]);
 
   const supabase = createClient();
 
@@ -221,6 +350,20 @@ export default function OperationsPage() {
             }))
           );
         }
+        
+        // Fetch tenant options for filter
+        const { data: tenantsData } = await queryWithTimeout(
+          supabase.from("tenants").select("id, name").eq("status", "ACTIVE").order("name"),
+          10000,
+          "tenants list"
+        );
+        if (tenantsData) {
+          setTenantOptions([
+            { value: "", label: "Todos los tenants" },
+            ...tenantsData.map((t: any) => ({ value: t.id, label: t.name }))
+          ]);
+        }
+        
       } catch (error) {
         console.error("Error fetching operations data:", error);
         toast.error("Error al cargar datos de operaciones");
@@ -231,6 +374,115 @@ export default function OperationsPage() {
 
     fetchData();
   }, [supabase, toast]);
+  
+  // Fetch pipeline data
+  useEffect(() => {
+    fetchPipelineData();
+  }, [selectedStage, tenantFilter]);
+  
+  async function fetchPipelineData() {
+    setPipelineLoading(true);
+    
+    try {
+      // Fetch pipeline stats (counts by status)
+      const statusCounts: PipelineStats = {
+        pending_mapping: 0,
+        to_be_contacted: 0,
+        contacted: 0,
+        engaged: 0,
+        qualifying: 0,
+        scored: 0,
+        lead_ready: 0,
+        sent_to_developer: 0,
+        cooling: 0,
+        reactivation: 0,
+        disqualified: 0,
+        stopped: 0,
+        human_handoff: 0,
+      };
+      
+      const statuses = [
+        "PENDING_MAPPING", "TO_BE_CONTACTED", "CONTACTED", "ENGAGED", 
+        "QUALIFYING", "SCORED", "LEAD_READY", "SENT_TO_DEVELOPER",
+        "COOLING", "REACTIVATION", "DISQUALIFIED", "STOPPED", "HUMAN_HANDOFF"
+      ];
+      
+      // Fetch counts for each status in parallel
+      const countPromises = statuses.map(status => {
+        let query = supabase
+          .from("lead_offers")
+          .select("id", { count: "exact", head: true })
+          .eq("status", status);
+        
+        if (tenantFilter) {
+          query = query.eq("tenant_id", tenantFilter);
+        }
+        
+        return queryWithTimeout(query, 10000, `count ${status}`);
+      });
+      
+      const results = await Promise.all(countPromises);
+      
+      results.forEach((result, index) => {
+        const key = statuses[index].toLowerCase() as keyof PipelineStats;
+        statusCounts[key] = result.count || 0;
+      });
+      
+      setPipelineStats(statusCounts);
+      
+      // Fetch leads for selected stage
+      if (selectedStage) {
+        const stage = FUNNEL_STAGES.find(s => s.key === selectedStage);
+        if (stage) {
+          let query = supabase
+            .from("lead_offers")
+            .select(`
+              id,
+              lead_id,
+              status,
+              score_total,
+              qualification_fields,
+              contact_attempts,
+              created_at,
+              updated_at,
+              first_response_at,
+              lead:leads(phone, full_name, email, first_name, last_name),
+              tenant:tenants(id, name),
+              offer:offers(id, name)
+            `)
+            .in("status", stage.statuses)
+            .order("updated_at", { ascending: false })
+            .limit(100);
+          
+          if (tenantFilter) {
+            query = query.eq("tenant_id", tenantFilter);
+          }
+          
+          const { data, error } = await queryWithTimeout(query, 15000, "pipeline leads");
+          
+          if (error) {
+            console.error("Error fetching pipeline leads:", error);
+          } else if (data) {
+            setPipelineLeads(
+              data.map((d: any) => ({
+                ...d,
+                lead: Array.isArray(d.lead) ? d.lead[0] : d.lead,
+                tenant: Array.isArray(d.tenant) ? d.tenant[0] : d.tenant,
+                offer: Array.isArray(d.offer) ? d.offer[0] : d.offer,
+              }))
+            );
+          }
+        }
+      } else {
+        setPipelineLeads([]);
+      }
+      
+    } catch (error) {
+      console.error("Error fetching pipeline data:", error);
+    } finally {
+      setPipelineLoading(false);
+    }
+  }
 
   const handleRetryDelivery = async () => {
     if (!retryId) return;
@@ -251,6 +503,34 @@ export default function OperationsPage() {
       toast.error("Error al reintentar entrega");
     }
   };
+  
+  // Calculate stage totals
+  const getStageTotals = () => {
+    if (!pipelineStats) return {};
+    return FUNNEL_STAGES.reduce((acc, stage) => {
+      acc[stage.key] = stage.statuses.reduce((sum, status) => {
+        const key = status.toLowerCase() as keyof PipelineStats;
+        return sum + (pipelineStats[key] || 0);
+      }, 0);
+      return acc;
+    }, {} as Record<string, number>);
+  };
+  
+  const stageTotals = getStageTotals();
+  const totalLeads = Object.values(stageTotals).reduce((a, b) => a + b, 0);
+  
+  // Filter leads by search
+  const filteredLeads = pipelineLeads.filter(lead => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      lead.lead?.full_name?.toLowerCase().includes(q) ||
+      lead.lead?.phone?.includes(q) ||
+      lead.lead?.email?.toLowerCase().includes(q) ||
+      lead.tenant?.name?.toLowerCase().includes(q) ||
+      lead.offer?.name?.toLowerCase().includes(q)
+    );
+  });
 
   // Delivery columns
   const deliveryColumns: Column<Delivery>[] = [
@@ -360,6 +640,106 @@ export default function OperationsPage() {
       ),
     },
   ];
+  
+  // Pipeline lead columns
+  const pipelineColumns: Column<PipelineLead>[] = [
+    {
+      key: "lead",
+      header: "Lead",
+      cell: (l) => (
+        <div className="flex items-center gap-3">
+          <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary-500/20 to-primary-600/20 flex items-center justify-center">
+            <span className="text-sm font-medium text-primary-400">
+              {(l.lead?.first_name?.[0] || l.lead?.full_name?.[0] || "?").toUpperCase()}
+            </span>
+          </div>
+          <div>
+            <p className="font-medium text-[var(--text-primary)]">
+              {l.lead?.full_name || l.lead?.phone}
+            </p>
+            <div className="flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
+              <Phone className="h-3 w-3" />
+              {l.lead?.phone}
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "tenant",
+      header: "Tenant / Oferta",
+      cell: (l) => (
+        <div>
+          <div className="flex items-center gap-1.5 text-sm">
+            <Building2 className="h-3.5 w-3.5 text-[var(--text-tertiary)]" />
+            <span className="text-[var(--text-primary)]">{l.tenant?.name}</span>
+          </div>
+          {l.offer && (
+            <div className="flex items-center gap-1.5 text-xs text-[var(--text-tertiary)] mt-0.5">
+              <Package className="h-3 w-3" />
+              {l.offer.name}
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "status",
+      header: "Estado",
+      cell: (l) => <LeadStatusBadge status={l.status} />,
+    },
+    {
+      key: "score",
+      header: "Score",
+      cell: (l) => (
+        l.score_total !== null ? (
+          <div className="flex items-center gap-2">
+            <div className="w-16 h-1.5 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
+              <div 
+                className={cn(
+                  "h-full rounded-full",
+                  l.score_total >= 70 ? "bg-emerald-500" :
+                  l.score_total >= 40 ? "bg-amber-500" : "bg-red-500"
+                )}
+                style={{ width: `${l.score_total}%` }}
+              />
+            </div>
+            <span className="text-sm font-medium text-[var(--text-secondary)]">{l.score_total}</span>
+          </div>
+        ) : (
+          <span className="text-[var(--text-tertiary)] text-sm">-</span>
+        )
+      ),
+    },
+    {
+      key: "attempts",
+      header: "Intentos",
+      cell: (l) => (
+        <span className="text-[var(--text-secondary)]">{l.contact_attempts}</span>
+      ),
+    },
+    {
+      key: "updated",
+      header: "Última actividad",
+      cell: (l) => (
+        <span className="text-[var(--text-tertiary)] text-sm">
+          {formatRelativeTime(l.updated_at)}
+        </span>
+      ),
+    },
+    {
+      key: "actions",
+      header: "",
+      width: "100px",
+      cell: (l) => (
+        <Link href={`/admin/operations/leads/${l.id}`}>
+          <Button size="xs" variant="secondary" rightIcon={<Eye className="h-3.5 w-3.5" />}>
+            Ver
+          </Button>
+        </Link>
+      ),
+    },
+  ];
 
   return (
     <PageContainer>
@@ -425,8 +805,11 @@ export default function OperationsPage() {
         </Card>
       )}
 
-      <Tabs defaultValue="deliveries">
+      <Tabs defaultValue="pipeline">
         <TabsList>
+          <TabTrigger value="pipeline" count={totalLeads}>
+            Pipeline de Leads
+          </TabTrigger>
           <TabTrigger value="deliveries" count={stats?.totalDeliveries}>
             Entregas
           </TabTrigger>
@@ -437,6 +820,137 @@ export default function OperationsPage() {
             Estado del sistema
           </TabTrigger>
         </TabsList>
+        
+        {/* Pipeline Tab */}
+        <TabContent value="pipeline">
+          <div className="space-y-6">
+            {/* Filters */}
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="flex-1 min-w-[200px]">
+                    <CustomSelect
+                      value={tenantFilter}
+                      onValueChange={setTenantFilter}
+                      options={tenantOptions}
+                      placeholder="Filtrar por tenant..."
+                    />
+                  </div>
+                  <Button 
+                    variant="secondary" 
+                    size="sm"
+                    onClick={() => fetchPipelineData()}
+                    leftIcon={<RefreshCw className={cn("h-4 w-4", pipelineLoading && "animate-spin")} />}
+                  >
+                    Actualizar
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+            
+            {/* Funnel Visualization */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Zap className="h-5 w-5 text-primary-400" />
+                  Funnel de Leads
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-7 gap-2">
+                  {FUNNEL_STAGES.map((stage, index) => {
+                    const count = stageTotals[stage.key] || 0;
+                    const percentage = totalLeads > 0 ? Math.round((count / totalLeads) * 100) : 0;
+                    const isSelected = selectedStage === stage.key;
+                    
+                    return (
+                      <button
+                        key={stage.key}
+                        onClick={() => setSelectedStage(isSelected ? null : stage.key)}
+                        className={cn(
+                          "relative p-4 rounded-xl border-2 transition-all duration-200 text-left",
+                          isSelected 
+                            ? "border-primary-500 bg-primary-500/10" 
+                            : "border-transparent hover:border-[var(--border-primary)]",
+                          stage.bgColor
+                        )}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className={cn("text-2xl font-bold", stage.textColor)}>
+                            {count}
+                          </span>
+                          {index < FUNNEL_STAGES.length - 1 && (
+                            <ArrowRight className="h-4 w-4 text-[var(--text-tertiary)] absolute -right-3 top-1/2 -translate-y-1/2 z-10" />
+                          )}
+                        </div>
+                        <p className="text-xs font-medium text-[var(--text-secondary)] mb-1">
+                          {stage.label}
+                        </p>
+                        <p className="text-xs text-[var(--text-tertiary)]">
+                          {percentage}% del total
+                        </p>
+                        {/* Stage indicator bar */}
+                        <div className="mt-2 h-1 w-full rounded-full bg-[var(--bg-tertiary)] overflow-hidden">
+                          <div 
+                            className={cn("h-full rounded-full bg-gradient-to-r", stage.color)}
+                            style={{ width: `${percentage}%` }}
+                          />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+            
+            {/* Lead List */}
+            {selectedStage && (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle>
+                      Leads en {FUNNEL_STAGES.find(s => s.key === selectedStage)?.label}
+                    </CardTitle>
+                    <SearchInput
+                      value={searchQuery}
+                      onChange={setSearchQuery}
+                      placeholder="Buscar lead..."
+                      className="w-64"
+                    />
+                  </div>
+                </CardHeader>
+                <DataTable
+                  data={filteredLeads}
+                  columns={pipelineColumns}
+                  keyExtractor={(l) => l.id}
+                  isLoading={pipelineLoading}
+                  emptyState={
+                    <EmptyState
+                      icon={<Users />}
+                      title="Sin leads en esta etapa"
+                      description="No hay leads en el estado seleccionado."
+                      size="sm"
+                    />
+                  }
+                />
+              </Card>
+            )}
+            
+            {!selectedStage && (
+              <Card className="border-dashed">
+                <CardContent className="p-12 text-center">
+                  <Users className="h-12 w-12 mx-auto mb-4 text-[var(--text-tertiary)]" />
+                  <h3 className="text-lg font-medium text-[var(--text-primary)] mb-2">
+                    Seleccioná una etapa del funnel
+                  </h3>
+                  <p className="text-sm text-[var(--text-tertiary)]">
+                    Hacé click en cualquier etapa para ver los leads en ese estado
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </TabContent>
 
         {/* Deliveries */}
         <TabContent value="deliveries">
@@ -548,12 +1062,3 @@ export default function OperationsPage() {
     </PageContainer>
   );
 }
-
-
-
-
-
-
-
-
-

@@ -11,6 +11,7 @@ import {
   UserCog,
   Building2,
   X,
+  Users,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -22,6 +23,7 @@ import { BottomNavigation } from "./BottomNavigation";
 const navigation = [
   { name: "Dashboard", href: "/portal", icon: LayoutDashboard },
   { name: "Mis Proyectos", href: "/portal/offers", icon: Package },
+  { name: "Mis Leads", href: "/portal/leads", icon: Users },
   { name: "Facturación", href: "/portal/billing", icon: CreditCard },
   { name: "Equipo", href: "/portal/team", icon: UserCog },
 ];
@@ -30,8 +32,8 @@ const navigation = [
 const mobileNavItems = [
   { name: "Inicio", href: "/portal", icon: <LayoutDashboard className="h-5 w-5" /> },
   { name: "Proyectos", href: "/portal/offers", icon: <Package className="h-5 w-5" /> },
+  { name: "Leads", href: "/portal/leads", icon: <Users className="h-5 w-5" /> },
   { name: "Billing", href: "/portal/billing", icon: <CreditCard className="h-5 w-5" /> },
-  { name: "Equipo", href: "/portal/team", icon: <UserCog className="h-5 w-5" /> },
 ];
 
 export function PortalSidebar() {
