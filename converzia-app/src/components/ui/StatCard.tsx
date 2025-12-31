@@ -1,10 +1,12 @@
 import { ReactNode } from "react";
-import { ArrowUpRight, ArrowDownRight, Minus } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, Minus, Info, TrendingUp, TrendingDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "./Card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./Tooltip";
 
 // ============================================
-// Stat Card Component - Clean, Modern Design
+// Stat Card Component - Premium Design
+// Title on top, large number, clean look
 // ============================================
 
 interface StatCardProps {
@@ -17,6 +19,8 @@ interface StatCardProps {
   iconColor?: string;
   loading?: boolean;
   className?: string;
+  /** Tooltip content to show on hover */
+  tooltip?: string;
 }
 
 export function StatCard({
@@ -29,67 +33,112 @@ export function StatCard({
   iconColor,
   loading = false,
   className,
+  tooltip,
 }: StatCardProps) {
-  const trendColors = {
-    up: "text-[var(--success)]",
-    down: "text-[var(--error)]",
-    neutral: "text-[var(--text-tertiary)]",
+  const trendConfig = {
+    up: { 
+      color: "text-emerald-500", 
+      bg: "bg-emerald-500/10",
+      Icon: TrendingUp 
+    },
+    down: { 
+      color: "text-red-500", 
+      bg: "bg-red-500/10",
+      Icon: TrendingDown 
+    },
+    neutral: { 
+      color: "text-muted-foreground", 
+      bg: "bg-muted",
+      Icon: Minus 
+    },
   };
 
-  const TrendIcon = trend === "up" ? ArrowUpRight : trend === "down" ? ArrowDownRight : Minus;
+  const { color: trendColor, bg: trendBg, Icon: TrendIcon } = trendConfig[trend];
 
   if (loading) {
     return (
-      <Card className={className}>
+      <Card className={cn("overflow-hidden", className)}>
         <CardContent className="p-6">
-          <div className="flex items-center justify-between">
-            <div className="h-12 w-12 rounded-xl bg-[var(--bg-tertiary)] animate-pulse" />
-            <div className="h-5 w-16 rounded bg-[var(--bg-tertiary)] animate-pulse" />
+          <div className="flex items-center justify-between mb-4">
+            <div className="h-4 w-24 rounded bg-muted animate-pulse" />
+            <div className="h-4 w-4 rounded bg-muted animate-pulse" />
           </div>
-          <div className="mt-4 space-y-2">
-            <div className="h-8 w-24 rounded bg-[var(--bg-tertiary)] animate-pulse" />
-            <div className="h-4 w-32 rounded bg-[var(--bg-tertiary)] animate-pulse" />
-          </div>
+          <div className="h-9 w-28 rounded bg-muted animate-pulse mb-2" />
+          <div className="h-4 w-16 rounded bg-muted animate-pulse" />
         </CardContent>
       </Card>
     );
   }
 
-  return (
-    <Card className={className}>
+  const cardContent = (
+    <Card className={cn(
+      "overflow-hidden transition-all duration-200",
+      "hover:shadow-md hover:-translate-y-0.5",
+      tooltip && "cursor-help",
+      className
+    )}>
       <CardContent className="p-6">
-        <div className="flex items-center justify-between">
-          {icon && (
-            <div
-              className={cn(
-                "h-12 w-12 rounded-xl flex items-center justify-center text-white",
-                iconColor?.includes("from-") 
-                  ? `bg-gradient-to-br ${iconColor}` 
-                  : iconColor || "bg-[var(--accent-primary-light)] text-[var(--accent-primary)]"
-              )}
-            >
-              <span className="h-6 w-6">{icon}</span>
-            </div>
-          )}
-
-          {change !== undefined && (
-            <div className={cn("flex items-center gap-1 text-sm font-medium", trendColors[trend])}>
-              <TrendIcon className="h-4 w-4" />
-              {Math.abs(change)}%
-            </div>
-          )}
-        </div>
-
-        <div className="mt-4">
-          <p className="text-2xl font-semibold text-[var(--text-primary)]">{value}</p>
-          <p className="text-sm text-[var(--text-secondary)]">
+        {/* Header: Title + Tooltip Icon */}
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-medium text-muted-foreground">
             {title}
-            {changeLabel && <span className="ml-1 text-[var(--text-tertiary)]">({changeLabel})</span>}
-          </p>
+          </h3>
+          {tooltip && (
+            <Info className="h-4 w-4 text-muted-foreground/50" />
+          )}
+          {!tooltip && icon && (
+            <div className={cn(
+              "h-8 w-8 rounded-lg flex items-center justify-center",
+              iconColor?.includes("from-") 
+                ? `bg-gradient-to-br ${iconColor} text-white` 
+                : "bg-primary/10 text-primary"
+            )}>
+              <span className="h-4 w-4">{icon}</span>
+            </div>
+          )}
         </div>
+
+        {/* Value - Large and prominent */}
+        <p className="text-3xl font-semibold tracking-tight text-foreground mb-1">
+          {value}
+        </p>
+
+        {/* Trend indicator */}
+        {change !== undefined && (
+          <div className="flex items-center gap-1.5">
+            <span className={cn(
+              "inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-medium",
+              trendBg,
+              trendColor
+            )}>
+              <TrendIcon className="h-3 w-3" />
+              {Math.abs(change)}%
+            </span>
+            {changeLabel && (
+              <span className="text-xs text-muted-foreground">
+                {changeLabel}
+              </span>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
+
+  if (tooltip) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          {cardContent}
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="max-w-xs">
+          <p>{tooltip}</p>
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return cardContent;
 }
 
 // ============================================
@@ -114,27 +163,28 @@ export function MiniStatCard({
   className,
 }: MiniStatCardProps) {
   const trendColors = {
-    up: "text-[var(--success)]",
-    down: "text-[var(--error)]",
-    neutral: "text-[var(--text-tertiary)]",
+    up: "text-emerald-500",
+    down: "text-red-500",
+    neutral: "text-muted-foreground",
   };
 
   return (
     <div
       className={cn(
-        "flex items-center gap-4 p-4 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-primary)]",
+        "flex items-center gap-4 p-4 rounded-xl bg-card border border-border",
+        "transition-all duration-200 hover:shadow-sm",
         className
       )}
     >
       {icon && (
-        <div className="h-10 w-10 rounded-lg bg-[var(--accent-primary-light)] flex items-center justify-center text-[var(--accent-primary)]">
+        <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
           {icon}
         </div>
       )}
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-[var(--text-secondary)] truncate">{title}</p>
+        <p className="text-sm text-muted-foreground truncate">{title}</p>
         <div className="flex items-center gap-2">
-          <p className="text-lg font-semibold text-[var(--text-primary)]">{value}</p>
+          <p className="text-lg font-semibold text-foreground">{value}</p>
           {change && trend && (
             <span className={cn("text-xs font-medium", trendColors[trend])}>{change}</span>
           )}
@@ -195,63 +245,53 @@ export function ProgressStatCard({
 
   const colorClasses = {
     primary: {
-      bar: "bg-[var(--accent-primary)]",
-      text: "text-[var(--accent-primary)]",
+      bar: "bg-primary",
+      text: "text-primary",
     },
     success: {
-      bar: "bg-[var(--success)]",
-      text: "text-[var(--success)]",
+      bar: "bg-emerald-500",
+      text: "text-emerald-500",
     },
     warning: {
-      bar: "bg-[var(--warning)]",
-      text: "text-[var(--warning)]",
+      bar: "bg-amber-500",
+      text: "text-amber-500",
     },
     danger: {
-      bar: "bg-[var(--error)]",
-      text: "text-[var(--error)]",
+      bar: "bg-red-500",
+      text: "text-red-500",
     },
   };
 
   const colors = colorClasses[color];
 
   return (
-    <Card className={className}>
+    <Card className={cn("overflow-hidden", className)}>
       <CardContent className="p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             {icon && (
-              <div className={cn("h-10 w-10 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center", colors.text)}>
+              <div className={cn("h-10 w-10 rounded-lg bg-muted flex items-center justify-center", colors.text)}>
                 {icon}
               </div>
             )}
-            <span className="text-sm text-[var(--text-secondary)]">{title}</span>
+            <span className="text-sm text-muted-foreground">{title}</span>
           </div>
           <span className={cn("text-sm font-medium", colors.text)}>
             {value}{unit} / {max}{unit}
           </span>
         </div>
 
-        <div className="h-2 rounded-full bg-[var(--bg-tertiary)] overflow-hidden">
+        <div className="h-2 rounded-full bg-muted overflow-hidden">
           <div
             className={cn("h-full rounded-full transition-all duration-500", colors.bar)}
             style={{ width: `${percentage}%` }}
           />
         </div>
 
-        <p className="mt-2 text-xs text-[var(--text-tertiary)] text-right">
+        <p className="mt-2 text-xs text-muted-foreground text-right">
           {percentage.toFixed(0)}% usado
         </p>
       </CardContent>
     </Card>
   );
 }
-
-
-
-
-
-
-
-
-
-

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Activity,
@@ -375,12 +375,8 @@ export default function OperationsPage() {
     fetchData();
   }, [supabase, toast]);
   
-  // Fetch pipeline data
-  useEffect(() => {
-    fetchPipelineData();
-  }, [selectedStage, tenantFilter]);
-  
-  async function fetchPipelineData() {
+  // Fetch pipeline data - using useCallback to avoid stale closure
+  const fetchPipelineData = useCallback(async () => {
     setPipelineLoading(true);
     
     try {
@@ -482,7 +478,12 @@ export default function OperationsPage() {
     } finally {
       setPipelineLoading(false);
     }
-  }
+  }, [selectedStage, tenantFilter, supabase]);
+
+  // Trigger pipeline fetch when dependencies change
+  useEffect(() => {
+    fetchPipelineData();
+  }, [fetchPipelineData]);
 
   const handleRetryDelivery = async () => {
     if (!retryId) return;
@@ -831,7 +832,7 @@ export default function OperationsPage() {
                   <div className="flex-1 min-w-[200px]">
                     <CustomSelect
                       value={tenantFilter}
-                      onValueChange={setTenantFilter}
+                      onChange={setTenantFilter}
                       options={tenantOptions}
                       placeholder="Filtrar por tenant..."
                     />
@@ -848,57 +849,68 @@ export default function OperationsPage() {
               </CardContent>
             </Card>
             
-            {/* Funnel Visualization */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Zap className="h-5 w-5 text-primary-400" />
-                  Funnel de Leads
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-7 gap-2">
+            {/* Funnel Visualization - Premium Horizontal Design */}
+            <Card className="overflow-hidden">
+              <CardContent className="p-0">
+                {/* Funnel stages - horizontal with better selection indicator */}
+                <div className="flex items-stretch border-b border-border">
                   {FUNNEL_STAGES.map((stage, index) => {
                     const count = stageTotals[stage.key] || 0;
-                    const percentage = totalLeads > 0 ? Math.round((count / totalLeads) * 100) : 0;
                     const isSelected = selectedStage === stage.key;
+                    const isLast = index === FUNNEL_STAGES.length - 1;
                     
                     return (
                       <button
                         key={stage.key}
                         onClick={() => setSelectedStage(isSelected ? null : stage.key)}
                         className={cn(
-                          "relative p-4 rounded-xl border-2 transition-all duration-200 text-left",
-                          isSelected 
-                            ? "border-primary-500 bg-primary-500/10" 
-                            : "border-transparent hover:border-[var(--border-primary)]",
-                          stage.bgColor
+                          "relative flex-1 py-4 px-3 text-center transition-all duration-200",
+                          "hover:bg-muted/50",
+                          isSelected && "bg-muted/70",
+                          !isLast && "border-r border-border"
                         )}
                       >
-                        <div className="flex items-center justify-between mb-2">
-                          <span className={cn("text-2xl font-bold", stage.textColor)}>
+                        {/* Selected indicator - bold bottom bar */}
+                        {isSelected && (
+                          <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                        )}
+                        
+                        {/* Stage content */}
+                        <div className="flex flex-col items-center gap-1">
+                          <span className={cn(
+                            "text-xl font-semibold transition-colors",
+                            isSelected ? "text-primary" : "text-foreground"
+                          )}>
                             {count}
                           </span>
-                          {index < FUNNEL_STAGES.length - 1 && (
-                            <ArrowRight className="h-4 w-4 text-[var(--text-tertiary)] absolute -right-3 top-1/2 -translate-y-1/2 z-10" />
-                          )}
-                        </div>
-                        <p className="text-xs font-medium text-[var(--text-secondary)] mb-1">
+                          <span className={cn(
+                            "text-xs font-medium transition-colors",
+                            isSelected ? "text-primary" : "text-muted-foreground"
+                          )}>
                           {stage.label}
-                        </p>
-                        <p className="text-xs text-[var(--text-tertiary)]">
-                          {percentage}% del total
-                        </p>
-                        {/* Stage indicator bar */}
-                        <div className="mt-2 h-1 w-full rounded-full bg-[var(--bg-tertiary)] overflow-hidden">
-                          <div 
-                            className={cn("h-full rounded-full bg-gradient-to-r", stage.color)}
-                            style={{ width: `${percentage}%` }}
-                          />
+                          </span>
                         </div>
+                        
+                        {/* Arrow between stages */}
+                        {!isLast && (
+                          <ChevronRight className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 h-4 w-4 text-muted-foreground/50 z-10" />
+                        )}
                       </button>
                     );
                   })}
+                </div>
+                
+                {/* Total summary bar */}
+                <div className="flex items-center justify-between px-4 py-2 bg-muted/30 text-xs text-muted-foreground">
+                  <span>Total: <strong className="text-foreground">{totalLeads}</strong> leads</span>
+                  {selectedStage && (
+                    <button 
+                      onClick={() => setSelectedStage(null)}
+                      className="text-primary hover:underline"
+                    >
+                      Limpiar selección
+                    </button>
+                  )}
                 </div>
               </CardContent>
             </Card>

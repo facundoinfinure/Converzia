@@ -3,8 +3,8 @@
    Mobile-First • Modern • Distintive
    ============================================ */
 
-/* Premium Fonts - Plus Jakarta Sans for headers, DM Sans for body */
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=DM+Sans:wght@400;500;600&display=swap');
+/* Premium Fonts - Inter for a clean, modern look like Linear/Vercel */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
   /* ============================================
@@ -111,11 +111,11 @@
   --bottom-nav-height: 72px;
   
   /* ============================================
-     TYPOGRAPHY - Distinctive fonts
+     TYPOGRAPHY - Premium Inter font stack
      ============================================ */
-  --font-display: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --font-display: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
   
   /* Font sizes - Mobile-first (slightly smaller for mobile) */
   --font-size-xs: 11px;
@@ -689,4 +689,128 @@ h1, h2, h3, h4, h5, h6 {
   margin: 0 auto var(--space-4);
 }
 
+/* ============================================
+   PREMIUM MICRO-INTERACTIONS
+   Subtle hover/active states for UI polish
+   ============================================ */
+
+/* Card hover lift effect */
+.card-interactive {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.card-interactive:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.1), 0 4px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="dark"] .card-interactive:hover {
+  box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.3), 0 4px 10px -5px rgba(0, 0, 0, 0.2);
+}
+
+/* Button press effect */
+.btn-press {
+  transition: transform 0.1s ease;
+}
+
+.btn-press:active {
+  transform: scale(0.97);
+}
+
+/* Link underline animation */
+.link-underline {
+  position: relative;
+  text-decoration: none;
+}
+
+.link-underline::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -2px;
+  width: 100%;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: right;
+  transition: transform 0.2s ease;
+}
+
+.link-underline:hover::after {
+  transform: scaleX(1);
+  transform-origin: left;
+}
+
+/* Smooth icon transitions */
+.icon-transition {
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.icon-transition:hover {
+  transform: scale(1.05);
+}
+
+/* Row hover highlight */
+.row-hover {
+  transition: background-color 0.15s ease;
+}
+
+.row-hover:hover {
+  background-color: hsl(var(--muted) / 0.5);
+}
+
+/* Fade in on mount animation */
+.fade-in-mount {
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* Page enter animation */
+.page-enter {
+  animation: fadeInUp 0.3s ease-out;
+}
+
+/* Stagger children animation helper */
+.stagger-children > * {
+  animation: fadeInUp 0.3s ease-out forwards;
+  opacity: 0;
+}
+
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 50ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 100ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 150ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 200ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 250ms; }
+.stagger-children > *:nth-child(7) { animation-delay: 300ms; }
+.stagger-children > *:nth-child(8) { animation-delay: 350ms; }
+
+/* Smooth collapse/expand */
+.collapse-transition {
+  overflow: hidden;
+  transition: max-height 0.2s ease, opacity 0.2s ease;
+}
+
+/* Focus ring for accessibility */
+.focus-ring {
+  outline: none;
+}
+
+.focus-ring:focus-visible {
+  box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--primary));
+}
+
+/* Status dot pulse */
+.status-dot-pulse {
+  position: relative;
+}
+
+.status-dot-pulse::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  background: inherit;
+  animation: pulse 2s ease-in-out infinite;
+  opacity: 0.4;
+}
 

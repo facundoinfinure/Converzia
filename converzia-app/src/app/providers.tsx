@@ -4,6 +4,7 @@ import { ReactNode, useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "@/lib/auth/context";
 import { ToastProvider, useToast, setToastHandler } from "@/components/ui/Toast";
+import { TooltipProvider } from "@/components/ui/Tooltip";
 
 // ============================================
 // React Query Client
@@ -30,12 +31,14 @@ interface ProvidersProps {
 export function Providers({ children }: ProvidersProps) {
   return (
     <QueryClientProvider client={queryClient}>
-      <ToastProvider position="bottom-right">
-        <AuthProvider>
-          <ToastInitializer />
-          {children}
-        </AuthProvider>
-      </ToastProvider>
+      <TooltipProvider delayDuration={200}>
+        <ToastProvider position="bottom-right">
+          <AuthProvider>
+            <ToastInitializer />
+            {children}
+          </AuthProvider>
+        </ToastProvider>
+      </TooltipProvider>
     </QueryClientProvider>
   );
 }

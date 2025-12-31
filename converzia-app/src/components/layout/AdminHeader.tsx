@@ -10,6 +10,9 @@ import { NotificationCenter } from "@/components/ui/NotificationCenter";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { SidebarTrigger } from "@/components/ui/sidebar";
+import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
 
 export function AdminHeader() {
   const { profile, signOut } = useAuth();
@@ -112,62 +115,60 @@ export function AdminHeader() {
 
   return (
     <>
-      <header className="sticky top-0 z-[var(--z-header)] h-16 border-b border-[var(--border-primary)] bg-[var(--bg-primary)]/95 backdrop-blur-md">
-        <div className="flex h-full items-center justify-between px-4 lg:px-6">
-          {/* Left side - Search */}
-          <div className="flex items-center gap-3 flex-1 max-w-2xl">
-            {/* Search bar - Pill shaped, hidden on small mobile */}
+      <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="flex w-full items-center justify-between px-4">
+          {/* Left side - Sidebar trigger + Search */}
+          <div className="flex items-center gap-2">
+            {/* Sidebar toggle - desktop only */}
+            <SidebarTrigger className="hidden lg:flex -ml-1" />
+            <Separator orientation="vertical" className="hidden lg:block h-4 mx-2" />
+            
+            {/* Search button - pill shaped */}
             <button
               onClick={() => setShowSearch(true)}
-              className="hidden sm:flex items-center gap-3 flex-1 max-w-xl px-4 py-2.5 rounded-full bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-[var(--text-tertiary)] hover:border-[var(--border-secondary)] hover:bg-[var(--bg-secondary)] transition-all text-sm group"
+              className={cn(
+                "flex items-center gap-2 px-3 py-1.5 rounded-md",
+                "text-sm text-muted-foreground",
+                "border border-input bg-background",
+                "hover:bg-accent hover:text-accent-foreground",
+                "transition-colors"
+              )}
             >
-              <Search className="h-4 w-4 flex-shrink-0 group-hover:text-[var(--accent-primary)] transition-colors" />
-              <span className="flex-1 text-left">Buscar...</span>
-              <kbd className="hidden lg:inline-flex items-center gap-0.5 px-2 py-0.5 text-[10px] rounded-md bg-[var(--bg-primary)] border border-[var(--border-primary)] font-semibold text-[var(--text-tertiary)]">
-                ⌘K
+              <Search className="h-4 w-4" />
+              <span className="hidden sm:inline">Buscar...</span>
+              <kbd className="hidden lg:inline-flex pointer-events-none h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+                <span className="text-xs">⌘</span>K
               </kbd>
-            </button>
-
-            {/* Mobile search button */}
-            <button
-              onClick={() => setShowSearch(true)}
-              className="sm:hidden flex items-center justify-center w-10 h-10 rounded-xl bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--accent-primary)] transition-colors"
-            >
-              <Search className="h-5 w-5" />
             </button>
           </div>
 
           {/* Right side - Actions */}
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="flex items-center gap-1">
             {/* Theme toggle */}
             <ThemeToggle size="sm" />
 
             {/* Notifications */}
             <NotificationCenter />
 
-            {/* User menu */}
+            {/* User avatar only - cleaner look */}
             <Dropdown
               align="right"
               trigger={
-                <button className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-[var(--bg-tertiary)] transition-colors ml-1">
+                <button className="flex items-center p-1 rounded-full hover:bg-accent transition-colors ml-1">
                   <Avatar
                     src={profile?.avatar_url}
                     name={profile?.full_name || profile?.email || "User"}
                     size="sm"
                   />
-                  <div className="hidden md:block text-left">
-                    <p className="text-sm font-semibold text-[var(--text-primary)] max-w-[120px] truncate">
-                      {profile?.full_name || "Admin"}
-                    </p>
-                    <p className="text-xs text-[var(--text-tertiary)]">Admin</p>
-                  </div>
                 </button>
               }
               items={[
                 {
-                  label: "Mi perfil",
-                  onClick: () => router.push("/admin/settings"),
+                  label: profile?.full_name || profile?.email || "Admin",
+                  onClick: () => {},
+                  disabled: true,
                 },
+                { divider: true, label: "" },
                 {
                   label: "Configuración",
                   onClick: () => router.push("/admin/settings"),
@@ -194,7 +195,7 @@ export function AdminHeader() {
         onSearch={handleSearch}
         results={searchResults}
         isLoading={isSearching}
-        placeholder="Buscar tenants, ofertas, leads, usuarios..."
+        placeholder="Buscar tenants, ofertas, leads..."
       />
     </>
   );

@@ -1,6 +1,7 @@
-import { AdminSidebar } from "@/components/layout/AdminSidebar";
+import { AdminSidebar, AdminSidebarProvider } from "@/components/layout/AdminSidebar";
 import { AdminHeader } from "@/components/layout/AdminHeader";
 import { PendingApprovalsProvider } from "@/contexts/PendingApprovalsContext";
+import { SidebarInset } from "@/components/ui/sidebar";
 
 export default function AdminLayout({
   children,
@@ -9,19 +10,20 @@ export default function AdminLayout({
 }) {
   return (
     <PendingApprovalsProvider>
-      <div className="min-h-screen bg-[var(--bg-secondary)]">
+      <AdminSidebarProvider>
+        <div className="flex min-h-screen w-full bg-background">
         <AdminSidebar />
         
-        {/* Main content area - shifts right on desktop */}
-        <div className="lg:ml-64 flex flex-col min-h-screen">
+          <SidebarInset className="flex flex-col">
           <AdminHeader />
           
           {/* Main content with padding for mobile bottom nav */}
           <main className="flex-1 pb-[calc(72px+env(safe-area-inset-bottom,0px))] lg:pb-0">
             {children}
           </main>
+          </SidebarInset>
         </div>
-      </div>
+      </AdminSidebarProvider>
     </PendingApprovalsProvider>
   );
 }

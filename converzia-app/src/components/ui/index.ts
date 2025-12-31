@@ -30,3 +30,4 @@ export * from "./AdvancedFilters";
 export * from "./BulkActions";
 export * from "./NotificationCenter";
 export * from "./ThemeToggle";
+export * from "./Tooltip";

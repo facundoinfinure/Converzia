@@ -28,24 +28,24 @@ export function PageHeader({
   compact = false,
 }: PageHeaderProps) {
   return (
-    <div className={cn("mb-6 lg:mb-8 animate-fadeInUp", className)}>
-      {/* Breadcrumbs - Hide on mobile for cleaner UI */}
-      {breadcrumbs && breadcrumbs.length > 0 && (
-        <nav className="hidden sm:flex items-center gap-1.5 text-sm mb-3">
+    <div className={cn("mb-6 lg:mb-8 page-enter", className)}>
+      {/* Breadcrumbs - Minimal, only show on desktop when truly needed */}
+      {breadcrumbs && breadcrumbs.length > 1 && (
+        <nav className="hidden lg:flex items-center gap-1.5 text-xs mb-3 text-muted-foreground">
           {breadcrumbs.map((item, index) => (
             <div key={index} className="flex items-center gap-1.5">
               {index > 0 && (
-                <ChevronRight className="h-3.5 w-3.5 text-[var(--text-tertiary)]" />
+                <ChevronRight className="h-3 w-3" />
               )}
               {item.href ? (
                 <Link
                   href={item.href}
-                  className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+                  className="hover:text-foreground transition-colors"
                 >
                   {item.label}
                 </Link>
               ) : (
-                <span className="text-[var(--text-secondary)] font-medium">
+                <span className="text-foreground">
                   {item.label}
                 </span>
               )}
@@ -54,31 +54,30 @@ export function PageHeader({
         </nav>
       )}
 
-      {/* Title and Actions - Stack on mobile */}
+      {/* Title and Actions - Clean, prominent title */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <h1 
             className={cn(
-              "font-bold text-[var(--text-primary)] tracking-tight",
-              "font-[var(--font-display)]",
+              "font-semibold text-foreground tracking-tight",
               compact 
-                ? "text-xl lg:text-2xl" 
-                : "text-2xl lg:text-3xl"
+                ? "text-lg lg:text-xl" 
+                : "text-xl lg:text-2xl"
             )}
           >
             {title}
           </h1>
           {description && (
             <p className={cn(
-              "text-[var(--text-secondary)] mt-1",
-              compact ? "text-sm" : "text-sm lg:text-base"
+              "text-muted-foreground mt-1",
+              compact ? "text-sm" : "text-sm"
             )}>
               {description}
             </p>
           )}
         </div>
 
-        {/* Actions - Full width on small mobile, auto on larger */}
+        {/* Actions */}
         {actions && (
           <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap sm:flex-shrink-0">
             {actions}
@@ -158,10 +157,10 @@ export function PageContainer({
   return (
     <div 
       className={cn(
-        // Mobile-first padding
-        "px-4 py-5",
+        // Mobile-first padding - generous whitespace
+        "px-4 py-6",
         // Larger padding on desktop
-        "sm:px-6 lg:px-8 lg:py-6",
+        "sm:px-6 lg:px-8 lg:py-8",
         // Max width
         maxWidths[maxWidth],
         className

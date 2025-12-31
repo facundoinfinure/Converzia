@@ -6,35 +6,139 @@
 @import '../styles/design-system.css';
 
 /* ============================================
-   LEGACY VARIABLE MAPPING
-   Para mantener compatibilidad con componentes existentes
+   SHADCN/UI CSS VARIABLES
+   Compatible with shadcn design system
    ============================================ */
-:root {
-  /* Map old variables to new design system */
-  --background: var(--bg-secondary);
-  --foreground: var(--text-primary);
-  --card-bg: var(--bg-primary);
-  --card-border: var(--border-primary);
-  
-  /* Primary colors mapping */
-  --primary-50: #EEF2FF;
-  --primary-100: #E0E7FF;
-  --primary-200: #C7D2FE;
-  --primary-300: #A5B4FC;
-  --primary-400: #818CF8;
-  --primary-500: var(--accent-primary);
-  --primary-600: #4F46E5;
-  --primary-700: #4338CA;
-  --primary-800: #3730A3;
-  --primary-900: #312E81;
-}
+@layer base {
+  :root {
+    /* ============================================
+       PREMIUM COLOR PALETTE - Light Theme
+       Refined, subtle, professional
+       ============================================ */
+    
+    /* Backgrounds - cleaner whites */
+    --background: 0 0% 100%;
+    --foreground: 224 71% 4%;
+    
+    /* Card - pure white with subtle depth */
+    --card: 0 0% 100%;
+    --card-foreground: 224 71% 4%;
+    
+    /* Popover */
+    --popover: 0 0% 100%;
+    --popover-foreground: 224 71% 4%;
+    
+    /* Primary - elegant dark gray as primary (like Linear) */
+    --primary: 224 71% 4%;
+    --primary-foreground: 0 0% 100%;
+    
+    /* Secondary */
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 224 71% 4%;
+    
+    /* Muted - very subtle */
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+    
+    /* Accent - subtle highlight */
+    --accent: 220 14% 96%;
+    --accent-foreground: 224 71% 4%;
+    
+    /* Destructive */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    
+    /* Borders - almost invisible */
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    
+    /* Ring - focus color (indigo accent) */
+    --ring: 243 75% 59%;
+    
+    /* Radius - slightly rounded */
+    --radius: 0.625rem;
+    
+    /* Sidebar - light and clean */
+    --sidebar-background: 0 0% 99%;
+    --sidebar-foreground: 224 71% 4%;
+    --sidebar-primary: 224 71% 4%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 14% 96%;
+    --sidebar-accent-foreground: 224 71% 4%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 243 75% 59%;
+    
+    /* Chart colors */
+    --chart-1: 243 75% 59%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+  }
 
-/* Dark theme overrides for legacy variables */
-[data-theme="dark"] {
-  --background: var(--bg-secondary);
-  --foreground: var(--text-primary);
-  --card-bg: var(--bg-primary);
-  --card-border: var(--border-primary);
+  [data-theme="dark"],
+  .dark {
+    /* ============================================
+       PREMIUM COLOR PALETTE - Dark Theme
+       Deep, rich, modern
+       ============================================ */
+    
+    /* Backgrounds - rich dark */
+    --background: 224 71% 4%;
+    --foreground: 210 20% 98%;
+
+    /* Card - slightly lifted from background */
+    --card: 224 47% 6%;
+    --card-foreground: 210 20% 98%;
+    
+    /* Popover */
+    --popover: 224 47% 6%;
+    --popover-foreground: 210 20% 98%;
+    
+    /* Primary - white text on dark */
+    --primary: 210 20% 98%;
+    --primary-foreground: 224 71% 4%;
+    
+    /* Secondary */
+    --secondary: 215 28% 17%;
+    --secondary-foreground: 210 20% 98%;
+    
+    /* Muted */
+    --muted: 215 28% 17%;
+    --muted-foreground: 217 10% 64%;
+    
+    /* Accent */
+    --accent: 215 28% 17%;
+    --accent-foreground: 210 20% 98%;
+    
+    /* Destructive */
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 20% 98%;
+    
+    /* Borders - subtle */
+    --border: 215 28% 17%;
+    --input: 215 28% 17%;
+    
+    /* Ring */
+    --ring: 243 75% 70%;
+    
+    /* Sidebar */
+    --sidebar-background: 224 47% 6%;
+    --sidebar-foreground: 210 20% 98%;
+    --sidebar-primary: 243 75% 70%;
+    --sidebar-primary-foreground: 224 71% 4%;
+    --sidebar-accent: 215 28% 17%;
+    --sidebar-accent-foreground: 210 20% 98%;
+    --sidebar-border: 215 28% 17%;
+    --sidebar-ring: 243 75% 70%;
+    
+    /* Chart colors - adjusted for dark */
+    --chart-1: 243 75% 70%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+  }
 }
 
 /* ============================================
@@ -311,4 +415,15 @@ body {
 
 .pull-indicator.visible {
   transform: translateX(-50%) translateY(0);
+}
+
+
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
 }

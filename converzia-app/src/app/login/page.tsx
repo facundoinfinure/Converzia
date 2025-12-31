@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/Input";
 import { Alert } from "@/components/ui/Alert";
 import { createClient } from "@/lib/supabase/client";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
+import { cn } from "@/lib/utils";
 
 // Google Icon Component
 function GoogleIcon({ className }: { className?: string }) {
@@ -148,52 +149,45 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--bg-secondary)] flex flex-col items-center justify-center p-4 sm:p-6">
-      {/* Background decoration */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-[var(--accent-primary)]/10 rounded-full blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-br from-[var(--accent-primary)]/5 to-purple-500/5 rounded-full blur-3xl" />
+    <div className="min-h-screen bg-background flex">
+      {/* Left side - Form */}
+      <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-8 lg:px-16">
+        <div className="w-full max-w-sm">
+          {/* Logo */}
+          <div className="flex items-center gap-2.5 mb-10">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary">
+              <Zap className="h-5 w-5 text-primary-foreground" />
       </div>
-
-      <div className="relative z-10 w-full max-w-md animate-fadeInUp">
-        {/* Logo */}
-        <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--accent-primary)] to-purple-600 shadow-xl shadow-[var(--accent-primary)]/30">
-            <Zap className="h-7 w-7 text-white" />
+            <span className="text-xl font-semibold tracking-tight">
+              Converzia
+            </span>
           </div>
-          <h1 className="text-3xl font-bold text-[var(--text-primary)] font-[var(--font-display)]">
-            Converzia
-          </h1>
-        </div>
 
-        {/* Login Card */}
-        <Card className="shadow-2xl border-[var(--border-primary)]">
-          <CardContent className="p-6 sm:p-8">
-            <div className="text-center mb-8">
-              <h2 className="text-xl sm:text-2xl font-bold text-[var(--text-primary)] font-[var(--font-display)]">
-                Iniciar sesión
-              </h2>
-              <p className="text-[var(--text-secondary)] mt-2 text-sm sm:text-base">
+          {/* Header */}
+          <div className="mb-8">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+              Bienvenido de vuelta
+          </h1>
+            <p className="text-muted-foreground mt-2">
                 Ingresá tus credenciales para continuar
               </p>
             </div>
 
+          {/* Error alert */}
             {(error || authError) && (
               <Alert variant="error" className="mb-6">
                 {error || (authError === "auth_failed" ? "Error de autenticación. Intentá de nuevo." : authError)}
               </Alert>
             )}
 
-            {/* Google Sign In Button */}
+          {/* Google Sign In */}
             <Button
               type="button"
               variant="secondary"
               fullWidth
-              size="lg"
               onClick={handleGoogleSignIn}
               isLoading={isGoogleLoading}
-              className="mb-6"
+            className="h-11 mb-6"
             >
               {!isGoogleLoading && <GoogleIcon className="h-5 w-5 mr-2" />}
               Continuar con Google
@@ -202,94 +196,120 @@ export default function LoginPage() {
             {/* Divider */}
             <div className="relative mb-6">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-[var(--border-primary)]"></div>
+              <div className="w-full border-t border-border"></div>
               </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-[var(--bg-primary)] text-[var(--text-tertiary)] font-medium">
-                  o con email
+            <div className="relative flex justify-center text-xs">
+              <span className="px-3 bg-background text-muted-foreground uppercase tracking-wider">
+                o
                 </span>
               </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">
+                Email
+              </label>
               <Input
-                label="Email"
                 type="email"
                 placeholder="tu@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                leftIcon={<Mail className="h-5 w-5" />}
                 autoComplete="email"
                 required
+                className="h-11"
               />
+            </div>
 
-              <Input
-                label="Contraseña"
-                type={showPassword ? "text" : "password"}
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                leftIcon={<Lock className="h-5 w-5" />}
-                rightIcon={
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors p-1"
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-5 w-5" />
-                    ) : (
-                      <Eye className="h-5 w-5" />
-                    )}
-                  </button>
-                }
-                autoComplete="current-password"
-                required
-              />
-
-              <div className="flex items-center justify-between gap-4">
-                <label className="flex items-center gap-2.5 text-sm text-[var(--text-secondary)] cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="w-4 h-4 rounded border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--accent-primary)] focus:ring-[var(--accent-primary)] focus:ring-offset-0"
-                  />
-                  <span>Recordarme</span>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-foreground">
+                  Contraseña
                 </label>
                 <Link
                   href="/forgot-password"
-                  className="text-sm text-[var(--accent-primary)] hover:text-[var(--accent-primary-hover)] transition-colors font-medium"
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                 >
                   ¿Olvidaste tu contraseña?
                 </Link>
+              </div>
+              <div className="relative">
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  required
+                  className="h-11 pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
               </div>
 
               <Button
                 type="submit"
                 fullWidth
-                size="lg"
                 isLoading={isLoading}
+              className="h-11 mt-2"
               >
-                Iniciar sesión
+              Ingresar
               </Button>
             </form>
-          </CardContent>
-        </Card>
 
         {/* Footer */}
-        <p className="text-center text-sm text-[var(--text-tertiary)] mt-6">
+          <p className="text-center text-sm text-muted-foreground mt-8">
           ¿No tenés cuenta?{" "}
           <button
             onClick={handleGoogleSignIn}
-            className="text-[var(--accent-primary)] hover:text-[var(--accent-primary-hover)] transition-colors font-semibold"
+              className="text-foreground hover:underline font-medium"
           >
-            Registrate con Google
+              Registrate
           </button>
         </p>
+        </div>
+      </div>
 
-        {/* Branding footer */}
-        <p className="text-center text-xs text-[var(--text-tertiary)] mt-8 opacity-60">
-          © 2024 Converzia. Todos los derechos reservados.
+      {/* Right side - Visual */}
+      <div className="hidden lg:flex flex-1 items-center justify-center bg-muted/30 relative overflow-hidden">
+        {/* Background pattern */}
+        <div className="absolute inset-0">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,hsl(var(--primary)/0.15),transparent_50%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_70%,hsl(var(--primary)/0.1),transparent_50%)]" />
+          {/* Grid pattern */}
+          <svg className="absolute inset-0 h-full w-full" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+                <path d="M 32 0 L 0 0 0 32" fill="none" stroke="currentColor" strokeWidth="0.5" className="text-border/50" />
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#grid)" />
+          </svg>
+        </div>
+
+        {/* Content */}
+        <div className="relative z-10 max-w-md text-center px-8">
+          <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-primary mx-auto mb-8 shadow-2xl shadow-primary/25">
+            <Zap className="h-10 w-10 text-primary-foreground" />
+          </div>
+          <h2 className="text-2xl font-semibold text-foreground mb-4">
+            Automatizá tu marketing con IA
+          </h2>
+          <p className="text-muted-foreground leading-relaxed">
+            Converzia te ayuda a convertir más leads en clientes con conversaciones inteligentes y automatización de primer nivel.
         </p>
+        </div>
       </div>
     </div>
   );

@@ -313,12 +313,14 @@ export default function RevenueDashboardPage() {
               value={formatCurrency(summary.payments_received, "USD")}
               icon={<Wallet />}
               iconColor="from-emerald-500 to-green-600"
+              tooltip="Pagos de tenants en el período"
             />
             <StatCard
               title="Valor Generado"
               value={formatCurrency(summary.leads_ready_value, "USD")}
               icon={<DollarSign />}
               iconColor="from-blue-500 to-cyan-600"
+              tooltip="Leads ready × precio CPL"
             />
             <StatCard
               title="Profit Real"
@@ -347,6 +349,7 @@ export default function RevenueDashboardPage() {
               value={formatCurrency(summary.attributed_spend, "USD")}
               icon={<Target />}
               iconColor="from-orange-500 to-amber-600"
+              tooltip="Costo de ads proporcional a leads"
             />
             <StatCard
               title="Leads Ready"
@@ -361,26 +364,6 @@ export default function RevenueDashboardPage() {
               iconColor={summary.margin_pct >= 30 ? "from-green-500 to-emerald-600" : "from-amber-500 to-orange-600"}
             />
           </StatsGrid>
-
-          {/* Info Card explaining metrics */}
-          <Card className="mb-6 bg-[var(--bg-secondary)] border-[var(--border-primary)]">
-            <CardContent className="py-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                <div>
-                  <span className="font-medium text-[var(--text-primary)]">Ingresos Recibidos:</span>
-                  <span className="text-[var(--text-secondary)] ml-2">Pagos de tenants en el período</span>
-                </div>
-                <div>
-                  <span className="font-medium text-[var(--text-primary)]">Valor Generado:</span>
-                  <span className="text-[var(--text-secondary)] ml-2">Leads ready × precio CPL</span>
-                </div>
-                <div>
-                  <span className="font-medium text-[var(--text-primary)]">Gasto Atribuido:</span>
-                  <span className="text-[var(--text-secondary)] ml-2">Costo de ads proporcional a leads</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
         </>
       ) : null}
 
