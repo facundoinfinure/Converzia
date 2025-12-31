@@ -475,6 +475,7 @@ export default function EditTenantPage({ params }: Props) {
                       <th className="pb-3 pr-4">Créditos</th>
                       <th className="pb-3 pr-4">Precio (USD)</th>
                       <th className="pb-3 pr-4">Descuento %</th>
+                      <th className="pb-3 pr-4">Precio/Lead</th>
                       <th className="pb-3 pr-4 text-center">Popular</th>
                       <th className="pb-3 w-10"></th>
                     </tr>
@@ -525,6 +526,11 @@ export default function EditTenantPage({ params }: Props) {
                             onChange={(e) => updatePackage(index, "discount_pct", e.target.value ? parseFloat(e.target.value) : undefined)}
                             className="w-20 px-3 py-2 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-lg text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] focus:border-transparent"
                           />
+                        </td>
+                        <td className="py-3 pr-4">
+                          <span className="px-3 py-2 text-sm font-medium text-[var(--text-secondary)]">
+                            ${pkg.credits > 0 ? (pkg.price / pkg.credits).toFixed(2) : "0.00"}
+                          </span>
                         </td>
                         <td className="py-3 pr-4 text-center">
                           <Switch

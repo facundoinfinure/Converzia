@@ -33,7 +33,7 @@ import { Input } from "@/components/ui/Input";
 import { useUnmappedAds, useAdMappings, useAdMappingMutations, useOffersForMapping } from "@/lib/hooks/use-ads";
 import { formatRelativeTime, formatDate, formatCurrency } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
-import { PlatformSelector, type PlatformType } from "@/components/admin/PlatformButton";
+import { PlatformSelector, platforms, type PlatformType } from "@/components/admin/PlatformButton";
 import { PlatformAdPicker } from "@/components/admin/PlatformAdPicker";
 import type { UnmappedAd } from "@/types";
 
@@ -79,6 +79,9 @@ export default function AdsMappingPage() {
   // Meta connection state
   const [metaConnected, setMetaConnected] = useState<boolean | null>(null);
   const [metaAccountName, setMetaAccountName] = useState<string | null>(null);
+  
+  // Meta ad statuses (real-time from Meta API)
+  const [metaAdStatuses, setMetaAdStatuses] = useState<Record<string, { status: string; effective_status?: string }>>({});
 
   const { unmappedAds, total: unmappedTotal, isLoading: loadingUnmapped, error: unmappedError, refetch: refetchUnmapped } = useUnmappedAds();
   const { mappings, total: mappingsTotal, isLoading: loadingMappings, error: mappingsError, refetch: refetchMappings } = useAdMappings({
@@ -134,31 +137,62 @@ export default function AdsMappingPage() {
     fetchOffersWithoutAds();
   }, [fetchOffersWithoutAds]);
 
-  // Check Meta connection status
+  // Check Meta connection status using the config endpoint (more reliable)
   const checkMetaConnection = useCallback(async () => {
     try {
-      const response = await fetch("/api/integrations/meta/ads");
+      const response = await fetch("/api/integrations/meta/config");
       const data = await response.json();
       
-      if (response.ok) {
+      if (response.ok && data.connected === true) {
         setMetaConnected(true);
-        // Try to get account name from the response
-        if (data.ad_accounts?.length > 0) {
+        // Get account name from user_name or first ad account
+        if (data.user_name) {
+          setMetaAccountName(data.user_name);
+        } else if (data.ad_accounts?.length > 0) {
           setMetaAccountName(data.ad_accounts[0].name);
         }
-      } else if (data.not_connected) {
+      } else if (response.ok && data.connected === false) {
         setMetaConnected(false);
       } else {
-        setMetaConnected(false);
+        // Don't show banner on error, just leave as null
+        setMetaConnected(null);
       }
     } catch {
-      setMetaConnected(false);
+      // Don't show banner on network errors
+      setMetaConnected(null);
     }
   }, []);
 
   useEffect(() => {
     checkMetaConnection();
   }, [checkMetaConnection]);
+
+  // Fetch Meta ad statuses when mappings change
+  const fetchMetaAdStatuses = useCallback(async () => {
+    if (!metaConnected || mappings.length === 0) return;
+
+    // Get ad IDs from META platform mappings
+    const metaAdIds = mappings
+      .filter((m) => ((m as any).platform || "META") === "META")
+      .map((m) => m.ad_id)
+      .filter(Boolean);
+
+    if (metaAdIds.length === 0) return;
+
+    try {
+      const response = await fetch(`/api/integrations/meta/ad-status?ad_ids=${metaAdIds.join(",")}`);
+      const data = await response.json();
+      if (data.statuses) {
+        setMetaAdStatuses(data.statuses);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch Meta ad statuses:", err);
+    }
+  }, [mappings, metaConnected]);
+
+  useEffect(() => {
+    fetchMetaAdStatuses();
+  }, [fetchMetaAdStatuses]);
 
   // Handle manual mapping creation
   const handleManualMapping = async () => {
@@ -416,29 +450,85 @@ export default function AdsMappingPage() {
     },
   ];
 
-  // Mappings columns
+  // Mappings columns - Order: Oferta, Plataforma, Ad, Estado, Creado, Actions
   const mappingsColumns: Column<(typeof mappings)[0]>[] = [
     {
-      key: "ad",
-      header: "Ad",
+      key: "offer",
+      header: "Oferta",
       cell: (m) => (
         <div>
-          <span className="font-medium text-[var(--text-primary)]">{m.ad_name || m.ad_id}</span>
-          {m.campaign_name && (
-            <p className="text-xs text-[var(--text-tertiary)] mt-0.5">{m.campaign_name}</p>
-          )}
+          <span className="font-medium text-primary-400">{m.offer?.name || "Sin oferta"}</span>
+          <p className="text-xs text-[var(--text-tertiary)] mt-0.5">{m.tenant?.name}</p>
         </div>
       ),
     },
     {
-      key: "mapping",
-      header: "Mapeo",
-      cell: (m) => (
-        <div>
-          <span className="text-primary-400">{m.offer?.name}</span>
-          <p className="text-xs text-[var(--text-tertiary)] mt-0.5">{m.tenant?.name}</p>
-        </div>
-      ),
+      key: "platform",
+      header: "Plataforma",
+      width: "100px",
+      cell: (m) => {
+        const platform = ((m as any).platform || "META") as PlatformType;
+        const config = platforms[platform];
+        const Logo = config?.logo;
+        return (
+          <div className="flex items-center gap-2">
+            <div className={`h-8 w-8 flex items-center justify-center rounded-lg ${config?.bgColor || "bg-[var(--bg-tertiary)]"}`}>
+              <div className={`h-5 w-5 ${config?.color || "text-[var(--text-tertiary)]"}`}>
+                {Logo && <Logo />}
+              </div>
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      key: "ad",
+      header: "Ad",
+      cell: (m) => {
+        const platform = ((m as any).platform || "META") as PlatformType;
+        const metaStatus = platform === "META" ? metaAdStatuses[m.ad_id] : null;
+        const effectiveStatus = metaStatus?.effective_status || metaStatus?.status;
+        
+        // Determine status color based on Meta effective_status
+        // ACTIVE = green, PAUSED = yellow, other = gray
+        let statusColor = "#6b7280"; // Default gray
+        let statusTitle = "Estado desconocido";
+        
+        if (effectiveStatus) {
+          if (effectiveStatus === "ACTIVE") {
+            statusColor = "#22c55e"; // Green
+            statusTitle = "Activo en Meta";
+          } else if (effectiveStatus === "PAUSED" || effectiveStatus === "CAMPAIGN_PAUSED" || effectiveStatus === "ADSET_PAUSED") {
+            statusColor = "#eab308"; // Yellow
+            statusTitle = "Pausado en Meta";
+          } else if (effectiveStatus === "DELETED" || effectiveStatus === "ARCHIVED") {
+            statusColor = "#ef4444"; // Red
+            statusTitle = "Eliminado/Archivado";
+          } else {
+            statusColor = "#6b7280"; // Gray
+            statusTitle = `Meta: ${effectiveStatus}`;
+          }
+        } else if (!m.is_active) {
+          statusTitle = "Inactivo en Converzia";
+        }
+
+        return (
+          <div className="flex items-center gap-2">
+            {/* Ad Status Indicator - Real Meta status */}
+            <div 
+              className="h-2.5 w-2.5 rounded-full flex-shrink-0"
+              style={{ backgroundColor: statusColor }}
+              title={statusTitle}
+            />
+            <div>
+              <span className="font-medium text-[var(--text-primary)]">{m.ad_name || m.ad_id}</span>
+              {m.campaign_name && (
+                <p className="text-xs text-[var(--text-tertiary)] mt-0.5">{m.campaign_name}</p>
+              )}
+            </div>
+          </div>
+        );
+      },
     },
     {
       key: "status",
