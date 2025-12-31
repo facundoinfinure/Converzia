@@ -438,7 +438,7 @@ export default function OffersPage() {
               className="flex-1 max-w-md"
             />
 
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-3">
               {/* Tenant filter */}
               <CustomSelect
                 value={tenantFilter}
