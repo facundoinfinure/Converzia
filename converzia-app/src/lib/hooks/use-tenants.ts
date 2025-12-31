@@ -471,7 +471,7 @@ export function useTenantMutations() {
           .from("tenant_pricing")
           .select("id")
           .eq("tenant_id", tenantId)
-          .single(),
+          .maybeSingle(),
         10000,
         `check existing pricing for tenant ${tenantId}`
       );

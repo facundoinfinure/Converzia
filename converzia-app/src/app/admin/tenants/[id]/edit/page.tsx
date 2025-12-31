@@ -153,25 +153,53 @@ export default function EditTenantPage({ params }: Props) {
     }
   };
 
+  // Calculate package price based on CPL and discount
+  const calculatePackagePrice = (credits: number, discountPct: number = 0, cpl: number) => {
+    const basePrice = credits * cpl;
+    const discount = discountPct / 100;
+    return Math.round(basePrice * (1 - discount) * 100) / 100; // Round to 2 decimals
+  };
+
   // Package management
   const addPackage = () => {
     const newId = `pkg_${Date.now()}`;
+    const defaultCredits = 50;
+    const defaultDiscount = 0;
     setPricingForm((prev) => ({
       ...prev,
       packages: [
         ...prev.packages,
-        { id: newId, name: "", credits: 50, price: 400 },
+        { 
+          id: newId, 
+          name: "", 
+          credits: defaultCredits, 
+          price: calculatePackagePrice(defaultCredits, defaultDiscount, prev.cost_per_lead),
+        },
       ],
     }));
   };
 
   const updatePackage = (index: number, field: keyof CreditPackage, value: any) => {
-    setPricingForm((prev) => ({
-      ...prev,
-      packages: prev.packages.map((pkg, i) =>
-        i === index ? { ...pkg, [field]: value } : pkg
-      ),
-    }));
+    setPricingForm((prev) => {
+      const updatedPackages = prev.packages.map((pkg, i) => {
+        if (i !== index) return pkg;
+        
+        const updatedPkg = { ...pkg, [field]: value };
+        
+        // Recalculate price when credits or discount change
+        if (field === "credits" || field === "discount_pct") {
+          updatedPkg.price = calculatePackagePrice(
+            field === "credits" ? value : pkg.credits,
+            field === "discount_pct" ? (value || 0) : (pkg.discount_pct || 0),
+            prev.cost_per_lead
+          );
+        }
+        
+        return updatedPkg;
+      });
+      
+      return { ...prev, packages: updatedPackages };
+    });
   };
 
   const removePackage = (index: number) => {
@@ -345,12 +373,18 @@ export default function EditTenantPage({ params }: Props) {
                   min={0}
                   step={0.01}
                   value={pricingForm.cost_per_lead}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const newCpl = parseFloat(e.target.value) || 0;
                     setPricingForm((prev) => ({
                       ...prev,
-                      cost_per_lead: parseFloat(e.target.value) || 0,
-                    }))
-                  }
+                      cost_per_lead: newCpl,
+                      // Recalculate all package prices with new CPL
+                      packages: prev.packages.map((pkg) => ({
+                        ...pkg,
+                        price: calculatePackagePrice(pkg.credits, pkg.discount_pct || 0, newCpl),
+                      })),
+                    }));
+                  }}
                 />
               )}
 
@@ -476,17 +510,29 @@ export default function EditTenantPage({ params }: Props) {
                     }
                     className="w-28"
                   />
-                  <Input
-                    label="Precio (USD)"
-                    type="number"
-                    min={0}
-                    step={0.01}
-                    value={pkg.price}
-                    onChange={(e) =>
-                      updatePackage(index, "price", parseFloat(e.target.value) || 0)
-                    }
-                    className="w-32"
-                  />
+                  {/* Price: calculated for PER_LEAD, editable otherwise */}
+                  {pricingForm.charge_model === "PER_LEAD" ? (
+                    <div className="w-32">
+                      <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
+                        Precio (USD)
+                      </label>
+                      <div className="h-10 px-3 flex items-center rounded-lg bg-[var(--bg-primary)] border border-[var(--border-primary)] text-[var(--text-primary)] font-medium">
+                        ${pkg.price.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                  ) : (
+                    <Input
+                      label="Precio (USD)"
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={pkg.price}
+                      onChange={(e) =>
+                        updatePackage(index, "price", parseFloat(e.target.value) || 0)
+                      }
+                      className="w-32"
+                    />
+                  )}
                   <Input
                     label="Descuento %"
                     type="number"

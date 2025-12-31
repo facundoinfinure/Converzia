@@ -93,19 +93,18 @@ export async function startInitialConversation(leadOfferId: string): Promise<voi
   const tenantName = tenant?.name || "nuestro equipo";
 
   // Send WhatsApp template message (required for initiating conversations)
-  // Template: lead_bienvenida
+  // Template: lead_bienvenida_spa
   // Header: {{1}} (lead name)
   // Body: {{1}} (offer name), {{2}} (tenant name)
-  // Note: Template is currently in English ("en"), should be migrated to es_AR
   try {
     await sendTemplateMessage(
       chatwootConversationId,
-      "lead_bienvenida",
+      "lead_bienvenida_spa",
       {
         header: [leadName],
         body: [offerName, tenantName],
       },
-      "en" // TODO: Change to "es_AR" when Spanish template is approved
+      "es_AR"
     );
     Metrics.messageSent("success");
   } catch (templateError) {
@@ -119,7 +118,7 @@ export async function startInitialConversation(leadOfferId: string): Promise<voi
     await sendMessageWithRetry(chatwootConversationId, initialMessage);
   }
   
-  const initialMessage = `[Template: lead_bienvenida] Hola ${leadName}, gracias por tu interés en ${offerName}.`;
+  const initialMessage = `[Template: lead_bienvenida_spa] Hola ${leadName}, gracias por tu interés en ${offerName}.`;
 
   // Update lead offer status
   await queryWithTimeout(

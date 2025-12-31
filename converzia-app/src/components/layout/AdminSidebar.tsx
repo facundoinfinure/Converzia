@@ -21,7 +21,7 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { useUnmappedAds } from "@/lib/hooks/use-ads";
-import { usePendingApprovals } from "@/lib/hooks/use-users";
+import { usePendingApprovalsContext } from "@/contexts/PendingApprovalsContext";
 import { BottomNavigation } from "./BottomNavigation";
 
 // ============================================
@@ -71,7 +71,7 @@ const mobileNavItems = [
 export function AdminSidebar() {
   const pathname = usePathname();
   const { total: unmappedAdsCount } = useUnmappedAds();
-  const { total: pendingApprovalsCount } = usePendingApprovals();
+  const { total: pendingApprovalsCount } = usePendingApprovalsContext();
 
   // Build navigation with dynamic badges
   const navigation: NavItem[] = baseNavigation.map((item) => {

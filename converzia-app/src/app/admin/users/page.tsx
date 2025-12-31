@@ -33,7 +33,8 @@ import { Input } from "@/components/ui/Input";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
 import { useToast } from "@/components/ui/Toast";
-import { useUsers, usePendingApprovals, useUserMutations } from "@/lib/hooks/use-users";
+import { useUsers, useUserMutations } from "@/lib/hooks/use-users";
+import { usePendingApprovalsContext } from "@/contexts/PendingApprovalsContext";
 import { formatRelativeTime, formatDate } from "@/lib/utils";
 
 const VERTICAL_OPTIONS = [
@@ -76,7 +77,7 @@ export default function UsersPage() {
     pageSize: 20,
   });
 
-  const { approvals, total: approvalsCount, isLoading: loadingApprovals, refetch: refetchApprovals } = usePendingApprovals();
+  const { approvals, total: approvalsCount, isLoading: loadingApprovals, refetch: refetchApprovals } = usePendingApprovalsContext();
   const { approveMembership, rejectMembership, setConverziaAdmin, deleteUser, isLoading: isMutating } = useUserMutations();
 
   const [approveId, setApproveId] = useState<string | null>(null);

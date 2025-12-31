@@ -20,6 +20,7 @@ import { TextArea } from "@/components/ui/TextArea";
 import { useToast } from "@/components/ui/Toast";
 import { useTenants, useTenantMutations } from "@/lib/hooks/use-tenants";
 import { useAuth } from "@/lib/auth/context";
+import { usePendingApprovalsContext } from "@/contexts/PendingApprovalsContext";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import type { TenantWithStats } from "@/types";
 
@@ -54,6 +55,7 @@ export default function TenantsPage() {
   });
 
   const { updateTenantStatus, deleteTenant, approveTenant, rejectTenant, isLoading: isMutating } = useTenantMutations();
+  const { refetch: refetchPendingApprovals } = usePendingApprovalsContext();
 
   // Count pending tenants
   const pendingCount = tenants.filter((t) => t.status === "PENDING").length;
@@ -75,6 +77,7 @@ export default function TenantsPage() {
       toast.success("Tenant aprobado correctamente");
       setApproveId(null);
       refetch();
+      refetchPendingApprovals();
     } catch (error) {
       toast.error("Error al aprobar el tenant");
     }
@@ -88,6 +91,7 @@ export default function TenantsPage() {
       setRejectId(null);
       setRejectReason("");
       refetch();
+      refetchPendingApprovals();
     } catch (error) {
       toast.error("Error al rechazar el tenant");
     }
@@ -113,6 +117,7 @@ export default function TenantsPage() {
       toast.success(`${selectedTenants.length} tenant(s) aprobado(s)`);
       setSelectedTenants([]);
       refetch();
+      refetchPendingApprovals();
     } catch (error) {
       toast.error("Error al aprobar tenants");
     }
@@ -444,6 +449,7 @@ export default function TenantsPage() {
                   toast.success(`${ids.length} tenant(s) aprobado(s)`);
                   setSelectedTenants([]);
                   refetch();
+                  refetchPendingApprovals();
                 } catch (error) {
                   toast.error("Error al aprobar tenants");
                 }
@@ -461,6 +467,7 @@ export default function TenantsPage() {
                   toast.success(`${ids.length} tenant(s) rechazado(s)`);
                   setSelectedTenants([]);
                   refetch();
+                  refetchPendingApprovals();
                 } catch (error) {
                   toast.error("Error al rechazar tenants");
                 }
