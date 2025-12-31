@@ -603,11 +603,14 @@ export default function SettingsPage() {
                           className="w-full px-4 py-2.5 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] focus:border-[var(--accent-primary)]"
                         >
                           <option value="">Seleccionar cuenta publicitaria...</option>
-                          {metaConfig.ad_accounts.map((acc: any) => (
-                            <option key={acc.id} value={acc.account_id || acc.id}>
-                              {acc.name || acc.account_id || acc.id}
-                            </option>
-                          ))}
+                          {metaConfig.ad_accounts.map((acc: any) => {
+                            const accountId = acc.account_id || acc.id?.replace('act_', '');
+                            return (
+                              <option key={acc.id} value={accountId}>
+                                {acc.name} (ID: {accountId})
+                              </option>
+                            );
+                          })}
                         </select>
                         {metaConfig.selected_ad_account_id && (
                           <p className="text-xs text-green-500 mt-2 flex items-center gap-1">

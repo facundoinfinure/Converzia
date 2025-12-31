@@ -109,10 +109,12 @@ export async function GET(request: NextRequest) {
     const targetAccountId = accountId;
 
     // Fetch campaign structure for specified account
+    console.log("Fetching campaigns for account:", targetAccountId);
     const { campaigns, adsets, ads } = await getCampaignStructure(
       targetAccountId,
       tokens.access_token
     );
+    console.log("Results:", { campaigns: campaigns.length, adsets: adsets.length, ads: ads.length });
 
     // Organize into hierarchical structure
     const campaignMap = new Map<string, {
