@@ -35,3 +35,4 @@ COMMENT ON COLUMN tenants.rejected_reason IS 'Reason for rejection if applicable
 
 
 
+

@@ -403,3 +403,5 @@ SELECT column_name FROM information_schema.columns
 WHERE table_name = 'deliveries' AND column_name = 'trace_id';
 */
 
+
+

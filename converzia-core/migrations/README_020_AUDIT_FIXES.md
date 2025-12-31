@@ -150,3 +150,5 @@ After this migration, the following invariants are enforced at the database leve
 5. ✅ **Idempotent Meta ingestion** - `ON CONFLICT DO NOTHING` pattern
 6. ✅ **Audit trail via trace_id** - All operations traceable
 
+
+

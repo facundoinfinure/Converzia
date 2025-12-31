@@ -135,3 +135,5 @@ GRANT SELECT, INSERT ON system_metrics TO service_role;
 COMMENT ON TABLE system_metrics IS 'Time-series metrics storage for observability';
 COMMENT ON VIEW dead_letter_queue IS 'View of all deliveries in dead letter status for investigation';
 
+
+
