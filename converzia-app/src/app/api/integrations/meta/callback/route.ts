@@ -4,21 +4,27 @@ import { createClient } from "@/lib/supabase/server";
 const META_APP_ID = process.env.META_APP_ID;
 const META_APP_SECRET = process.env.META_APP_SECRET;
 
-// Build redirect URI - try multiple sources
-function getRedirectUri(request: NextRequest): string {
-  // First try explicit env var
+// Build redirect URI - MUST be consistent between auth and callback
+function getRedirectUri(): string {
+  // Use explicit env var if set
   if (process.env.META_REDIRECT_URI) {
     return process.env.META_REDIRECT_URI;
   }
   
-  // Then try NEXT_PUBLIC_APP_URL
+  // Use NEXT_PUBLIC_APP_URL (required for production)
   if (process.env.NEXT_PUBLIC_APP_URL) {
-    return `${process.env.NEXT_PUBLIC_APP_URL}/api/integrations/meta/callback`;
+    // Ensure no trailing slash
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, "");
+    return `${baseUrl}/api/integrations/meta/callback`;
   }
   
-  // Fall back to request origin
-  const origin = request.headers.get("origin") || request.nextUrl.origin;
-  return `${origin}/api/integrations/meta/callback`;
+  // For Vercel deployments
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}/api/integrations/meta/callback`;
+  }
+  
+  // Fallback for local dev
+  return "http://localhost:3000/api/integrations/meta/callback";
 }
 
 interface MetaTokenResponse {
@@ -81,7 +87,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Exchange code for access token
-    const redirectUri = getRedirectUri(request);
+    const redirectUri = getRedirectUri();
     console.log("Meta OAuth callback - redirect URI:", redirectUri);
     
     const tokenUrl = new URL("https://graph.facebook.com/v18.0/oauth/access_token");
