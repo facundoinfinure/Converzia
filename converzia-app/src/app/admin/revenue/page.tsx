@@ -267,12 +267,6 @@ export default function RevenueDashboardPage() {
     },
   ];
 
-  const hasData = summary && (
-    summary.leads_ready_count > 0 || 
-    summary.platform_spend > 0 || 
-    summary.payments_received > 0
-  );
-
   return (
     <PageContainer>
       <PageHeader
@@ -304,23 +298,6 @@ export default function RevenueDashboardPage() {
         }
       />
 
-      {/* Empty State if no data */}
-      {!isLoading && !hasData && (
-        <Card className="mb-6">
-          <CardContent className="py-12">
-            <EmptyState
-              icon={<BarChart3 className="h-12 w-12" />}
-              title="Sin datos de revenue"
-              description="Conectá Meta Ads en Configuración y sincronizá los costos de publicidad para ver el análisis de revenue."
-              action={{
-                label: "Ir a Configuración",
-                onClick: () => window.location.href = "/admin/settings",
-              }}
-            />
-          </CardContent>
-        </Card>
-      )}
-
       {/* Main Stats Row - Key Metrics */}
       {isLoading ? (
         <StatsGrid columns={4} className="mb-6">
@@ -328,86 +305,84 @@ export default function RevenueDashboardPage() {
             <Skeleton key={i} className="h-32" />
           ))}
         </StatsGrid>
-      ) : hasData ? (
-        <StatsGrid columns={4} className="mb-6">
-          <StatCard
-            title="Ingresos Recibidos"
-            value={formatCurrency(summary.payments_received, "USD")}
-            icon={<Wallet />}
-            iconColor="from-emerald-500 to-green-600"
-          />
-          <StatCard
-            title="Valor Generado"
-            value={formatCurrency(summary.leads_ready_value, "USD")}
-            icon={<DollarSign />}
-            iconColor="from-blue-500 to-cyan-600"
-          />
-          <StatCard
-            title="Profit Real"
-            value={formatCurrency(summary.profit, "USD")}
-            icon={<TrendingUp />}
-            iconColor={summary.profit >= 0 ? "from-green-500 to-emerald-600" : "from-red-500 to-rose-600"}
-          />
-          <StatCard
-            title="Créditos Pendientes"
-            value={summary.pending_credits.toLocaleString()}
-            icon={<CreditCard />}
-            iconColor="from-purple-500 to-pink-600"
-          />
-        </StatsGrid>
+      ) : summary ? (
+        <>
+          <StatsGrid columns={4} className="mb-6">
+            <StatCard
+              title="Ingresos Recibidos"
+              value={formatCurrency(summary.payments_received, "USD")}
+              icon={<Wallet />}
+              iconColor="from-emerald-500 to-green-600"
+            />
+            <StatCard
+              title="Valor Generado"
+              value={formatCurrency(summary.leads_ready_value, "USD")}
+              icon={<DollarSign />}
+              iconColor="from-blue-500 to-cyan-600"
+            />
+            <StatCard
+              title="Profit Real"
+              value={formatCurrency(summary.profit, "USD")}
+              icon={<TrendingUp />}
+              iconColor={summary.profit >= 0 ? "from-green-500 to-emerald-600" : "from-red-500 to-rose-600"}
+            />
+            <StatCard
+              title="Créditos Pendientes"
+              value={summary.pending_credits.toLocaleString()}
+              icon={<CreditCard />}
+              iconColor="from-purple-500 to-pink-600"
+            />
+          </StatsGrid>
+
+          {/* Secondary Stats Row */}
+          <StatsGrid columns={4} className="mb-6">
+            <StatCard
+              title="Gasto en Ads (Total)"
+              value={formatCurrency(summary.platform_spend, "USD")}
+              icon={<TrendingDown />}
+              iconColor="from-red-500 to-rose-600"
+            />
+            <StatCard
+              title="Gasto Atribuido"
+              value={formatCurrency(summary.attributed_spend, "USD")}
+              icon={<Target />}
+              iconColor="from-orange-500 to-amber-600"
+            />
+            <StatCard
+              title="Leads Ready"
+              value={summary.leads_ready_count}
+              icon={<Users />}
+              iconColor="from-amber-500 to-orange-600"
+            />
+            <StatCard
+              title="Margen Promedio"
+              value={`${summary.margin_pct.toFixed(1)}%`}
+              icon={<BarChart3 />}
+              iconColor={summary.margin_pct >= 30 ? "from-green-500 to-emerald-600" : "from-amber-500 to-orange-600"}
+            />
+          </StatsGrid>
+
+          {/* Info Card explaining metrics */}
+          <Card className="mb-6 bg-[var(--bg-secondary)] border-[var(--border-primary)]">
+            <CardContent className="py-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <div>
+                  <span className="font-medium text-[var(--text-primary)]">Ingresos Recibidos:</span>
+                  <span className="text-[var(--text-secondary)] ml-2">Pagos de tenants en el período</span>
+                </div>
+                <div>
+                  <span className="font-medium text-[var(--text-primary)]">Valor Generado:</span>
+                  <span className="text-[var(--text-secondary)] ml-2">Leads ready × precio CPL</span>
+                </div>
+                <div>
+                  <span className="font-medium text-[var(--text-primary)]">Gasto Atribuido:</span>
+                  <span className="text-[var(--text-secondary)] ml-2">Costo de ads proporcional a leads</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </>
       ) : null}
-
-      {/* Secondary Stats Row */}
-      {hasData && (
-        <StatsGrid columns={4} className="mb-6">
-          <StatCard
-            title="Gasto en Ads (Total)"
-            value={formatCurrency(summary!.platform_spend, "USD")}
-            icon={<TrendingDown />}
-            iconColor="from-red-500 to-rose-600"
-          />
-          <StatCard
-            title="Gasto Atribuido"
-            value={formatCurrency(summary!.attributed_spend, "USD")}
-            icon={<Target />}
-            iconColor="from-orange-500 to-amber-600"
-          />
-          <StatCard
-            title="Leads Ready"
-            value={summary!.leads_ready_count}
-            icon={<Users />}
-            iconColor="from-amber-500 to-orange-600"
-          />
-          <StatCard
-            title="Margen Promedio"
-            value={`${summary!.margin_pct.toFixed(1)}%`}
-            icon={<BarChart3 />}
-            iconColor={summary!.margin_pct >= 30 ? "from-green-500 to-emerald-600" : "from-amber-500 to-orange-600"}
-          />
-        </StatsGrid>
-      )}
-
-      {/* Info Card explaining metrics */}
-      {hasData && (
-        <Card className="mb-6 bg-[var(--bg-secondary)] border-[var(--border-primary)]">
-          <CardContent className="py-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-              <div>
-                <span className="font-medium text-[var(--text-primary)]">Ingresos Recibidos:</span>
-                <span className="text-[var(--text-secondary)] ml-2">Pagos de tenants en el período</span>
-              </div>
-              <div>
-                <span className="font-medium text-[var(--text-primary)]">Valor Generado:</span>
-                <span className="text-[var(--text-secondary)] ml-2">Leads ready × precio CPL</span>
-              </div>
-              <div>
-                <span className="font-medium text-[var(--text-primary)]">Gasto Atribuido:</span>
-                <span className="text-[var(--text-secondary)] ml-2">Costo de ads proporcional a leads</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Tabs for Tenant/Offer breakdown */}
       <Tabs defaultValue="tenants">
