@@ -391,7 +391,7 @@ export default function UsersPage() {
                   placeholder="Buscar por nombre o email..."
                   className="flex-1 max-w-md"
                 />
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-3">
                   {/* Vertical filter */}
                   <CustomSelect
                     value={verticalFilter}
