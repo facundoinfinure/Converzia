@@ -2769,7 +2769,8 @@ CREATE TRIGGER trg_whatsapp_templates_updated_at BEFORE UPDATE ON whatsapp_templ
 -- ============================================
 CREATE TABLE tenant_integrations (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  -- tenant_id can be NULL for global integrations (e.g., Admin-level Meta Ads)
+  tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
   
   -- Integration type
   integration_type integration_type NOT NULL,
