@@ -462,6 +462,7 @@ export default function RevenueDashboardPage() {
                 <DataTable
                   data={tenantRevenue}
                   columns={tenantColumns}
+                  keyExtractor={(row) => row.tenant_id}
                   stickyHeader
                 />
               )}
@@ -487,6 +488,7 @@ export default function RevenueDashboardPage() {
                 <DataTable
                   data={offerRevenue}
                   columns={offerColumns}
+                  keyExtractor={(row) => row.offer_id}
                   stickyHeader
                 />
               )}
