@@ -85,6 +85,7 @@ export default function SettingsPage() {
   // Unified Meta OAuth state
   const [metaConnected, setMetaConnected] = useState<boolean | null>(null);
   const [metaConnecting, setMetaConnecting] = useState(false);
+  const [metaChecking, setMetaChecking] = useState(true); // Loading state
   const [metaConfig, setMetaConfig] = useState<{
     user_name?: string;
     ad_accounts?: any[];
@@ -97,9 +98,12 @@ export default function SettingsPage() {
 
   // Check Meta OAuth connection
   const checkMetaConnection = useCallback(async () => {
+    setMetaChecking(true);
     try {
       const response = await fetch("/api/integrations/meta/config");
       const data = await response.json();
+      
+      console.log("Meta config response:", data); // Debug log
       
       if (response.ok && data.connected) {
         setMetaConnected(true);
@@ -108,9 +112,12 @@ export default function SettingsPage() {
         setMetaConnected(false);
         setMetaConfig(null);
       }
-    } catch {
+    } catch (error) {
+      console.error("Error checking Meta connection:", error);
       setMetaConnected(false);
       setMetaConfig(null);
+    } finally {
+      setMetaChecking(false);
     }
   }, []);
 
@@ -518,19 +525,33 @@ export default function SettingsPage() {
                     </p>
                   </div>
                 </div>
-                {metaConnected === true && (
+                {metaChecking && (
+                  <Badge variant="secondary">
+                    <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                    Verificando...
+                  </Badge>
+                )}
+                {!metaChecking && metaConnected === true && (
                   <Badge variant="success" dot>
                     Conectado
                   </Badge>
                 )}
-                {metaConnected === false && (
+                {!metaChecking && metaConnected === false && (
                   <Badge variant="secondary">
                     No conectado
                   </Badge>
                 )}
               </CardHeader>
               <CardContent>
-                {metaConnected === true && metaConfig ? (
+                {/* Loading state */}
+                {metaChecking && (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-[var(--accent-primary)]" />
+                    <span className="ml-3 text-[var(--text-secondary)]">Verificando conexión...</span>
+                  </div>
+                )}
+
+                {!metaChecking && metaConnected === true && metaConfig ? (
                   <div className="space-y-6">
                     {/* User info */}
                     <div className="flex items-center justify-between p-4 bg-[var(--bg-tertiary)] rounded-lg">
@@ -545,14 +566,24 @@ export default function SettingsPage() {
                           </p>
                         </div>
                       </div>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={handleDisconnectMeta}
-                        leftIcon={<Unlink className="h-4 w-4" />}
-                      >
-                        Desconectar
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={checkMetaConnection}
+                          leftIcon={<RefreshCw className="h-4 w-4" />}
+                        >
+                          Actualizar
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={handleDisconnectMeta}
+                          leftIcon={<Unlink className="h-4 w-4" />}
+                        >
+                          Desconectar
+                        </Button>
+                      </div>
                     </div>
 
                     {/* Ad Accounts */}
@@ -687,7 +718,9 @@ export default function SettingsPage() {
                       </Alert>
                     )}
                   </div>
-                ) : (
+                ) : null}
+
+                {!metaChecking && !metaConnected && (
                   <div className="space-y-4">
                     <p className="text-[var(--text-secondary)]">
                       Conectá tu cuenta de Meta Business para poder:
