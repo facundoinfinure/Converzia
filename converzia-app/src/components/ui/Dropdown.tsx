@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, ReactNode, Fragment } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDown, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -32,18 +33,48 @@ export function Dropdown({
   className,
 }: DropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Calculate menu position when opened
+  useEffect(() => {
+    if (isOpen && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      const menuWidth = 192; // min-w-[12rem] = 12 * 16 = 192px
+      
+      setMenuPosition({
+        top: rect.bottom + 8,
+        left: align === "right" ? rect.right - menuWidth : rect.left,
+      });
+    }
+  }, [isOpen, align]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        containerRef.current && 
+        !containerRef.current.contains(target) &&
+        menuRef.current &&
+        !menuRef.current.contains(target)
+      ) {
         setIsOpen(false);
       }
     }
 
+    function handleScroll() {
+      if (isOpen) setIsOpen(false);
+    }
+
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+    window.addEventListener("scroll", handleScroll, true);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("scroll", handleScroll, true);
+    };
+  }, [isOpen]);
 
   const handleTriggerClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -60,47 +91,54 @@ export function Dropdown({
     }
   };
 
+  const menuContent = isOpen && typeof document !== 'undefined' ? createPortal(
+    <div
+      ref={menuRef}
+      style={{
+        position: 'fixed',
+        top: menuPosition.top,
+        left: menuPosition.left,
+      }}
+      className={cn(
+        "z-[9999] min-w-[12rem] py-1 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-lg shadow-xl",
+        "animate-in fade-in zoom-in-95 duration-150"
+      )}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {items.map((item, index) =>
+        item.divider ? (
+          <div
+            key={`divider-${index}`}
+            className="my-1 h-px bg-[var(--border-primary)]"
+          />
+        ) : (
+          <button
+            key={item.value || item.label}
+            type="button"
+            onClick={(e) => handleItemClick(e, item)}
+            disabled={item.disabled}
+            className={cn(
+              "w-full flex items-center gap-3 px-4 py-2 text-sm text-left transition-colors",
+              item.disabled
+                ? "text-[var(--text-tertiary)] cursor-not-allowed"
+                : item.danger
+                ? "text-red-400 hover:bg-red-500/10"
+                : "text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]"
+            )}
+          >
+            {item.icon && <span className="h-4 w-4 flex-shrink-0">{item.icon}</span>}
+            {item.label}
+          </button>
+        )
+      )}
+    </div>,
+    document.body
+  ) : null;
+
   return (
     <div className={cn("relative inline-block", className)} ref={containerRef} onClick={(e) => e.stopPropagation()}>
-      <div onClick={handleTriggerClick}>{trigger}</div>
-
-      {isOpen && (
-        <div
-          className={cn(
-            "absolute z-[100] mt-2 min-w-[12rem] py-1 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-lg shadow-xl",
-            "animate-in fade-in zoom-in-95 duration-150",
-            align === "right" ? "right-0" : "left-0"
-          )}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {items.map((item, index) =>
-            item.divider ? (
-              <div
-                key={`divider-${index}`}
-                className="my-1 h-px bg-[var(--border-primary)]"
-              />
-            ) : (
-              <button
-                key={item.value || item.label}
-                type="button"
-                onClick={(e) => handleItemClick(e, item)}
-                disabled={item.disabled}
-                className={cn(
-                  "w-full flex items-center gap-3 px-4 py-2 text-sm text-left transition-colors",
-                  item.disabled
-                    ? "text-[var(--text-tertiary)] cursor-not-allowed"
-                    : item.danger
-                    ? "text-red-400 hover:bg-red-500/10"
-                    : "text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]"
-                )}
-              >
-                {item.icon && <span className="h-4 w-4 flex-shrink-0">{item.icon}</span>}
-                {item.label}
-              </button>
-            )
-          )}
-        </div>
-      )}
+      <div ref={triggerRef} onClick={handleTriggerClick}>{trigger}</div>
+      {menuContent}
     </div>
   );
 }
