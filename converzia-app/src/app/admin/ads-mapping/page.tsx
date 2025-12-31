@@ -33,6 +33,8 @@ import { Input } from "@/components/ui/Input";
 import { useUnmappedAds, useAdMappings, useAdMappingMutations, useOffersForMapping } from "@/lib/hooks/use-ads";
 import { formatRelativeTime, formatDate, formatCurrency } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
+import { PlatformSelector, type PlatformType } from "@/components/admin/PlatformButton";
+import { PlatformAdPicker } from "@/components/admin/PlatformAdPicker";
 import type { UnmappedAd } from "@/types";
 
 interface OfferWithoutAd {
@@ -69,6 +71,10 @@ export default function AdsMappingPage() {
   const [manualMappingOffer, setManualMappingOffer] = useState<OfferWithoutAd | null>(null);
   const [manualAdId, setManualAdId] = useState("");
   const [manualCampaignId, setManualCampaignId] = useState("");
+  
+  // State for platform ad picker
+  const [platformPickerOffer, setPlatformPickerOffer] = useState<OfferWithoutAd | null>(null);
+  const [selectedPlatform, setSelectedPlatform] = useState<PlatformType>("META");
 
   const { unmappedAds, total: unmappedTotal, isLoading: loadingUnmapped, error: unmappedError, refetch: refetchUnmapped } = useUnmappedAds();
   const { mappings, total: mappingsTotal, isLoading: loadingMappings, error: mappingsError, refetch: refetchMappings } = useAdMappings({
@@ -139,6 +145,38 @@ export default function AdsMappingPage() {
       setManualMappingOffer(null);
       setManualAdId("");
       setManualCampaignId("");
+      fetchOffersWithoutAds();
+      refetchMappings();
+    } catch (error) {
+      toast.error("Error al crear el mapeo");
+    }
+  };
+
+  // Handle platform ad picker selection
+  const handlePlatformAdSelect = async (adData: {
+    platform: PlatformType;
+    ad_id: string;
+    ad_name: string;
+    adset_id: string;
+    adset_name: string;
+    campaign_id: string;
+    campaign_name: string;
+  }) => {
+    if (!platformPickerOffer) return;
+
+    try {
+      await createMapping({
+        tenant_id: platformPickerOffer.tenant.id,
+        offer_id: platformPickerOffer.id,
+        ad_id: adData.ad_id,
+        ad_name: adData.ad_name,
+        adset_id: adData.adset_id,
+        adset_name: adData.adset_name,
+        campaign_id: adData.campaign_id,
+        campaign_name: adData.campaign_name,
+      });
+      toast.success(`Ad "${adData.ad_name}" vinculado a ${platformPickerOffer.name}`);
+      setPlatformPickerOffer(null);
       fetchOffersWithoutAds();
       refetchMappings();
     } catch (error) {
@@ -330,20 +368,31 @@ export default function AdsMappingPage() {
     },
     {
       key: "actions",
-      header: "",
-      width: "140px",
+      header: "Conectar plataforma",
+      width: "320px",
       cell: (offer) => (
-        <Button
-          size="sm"
-          onClick={(e) => {
-            e.stopPropagation();
-            e.preventDefault();
-            setManualMappingOffer(offer);
-          }}
-          leftIcon={<Plus className="h-4 w-4" />}
-        >
-          Crear mapeo
-        </Button>
+        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+          <PlatformSelector
+            size="sm"
+            onSelect={(platform) => {
+              if (platform === "META") {
+                setPlatformPickerOffer(offer);
+                setSelectedPlatform(platform);
+              }
+            }}
+          />
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              setManualMappingOffer(offer);
+            }}
+          >
+            Manual
+          </Button>
+        </div>
       ),
     },
   ];
@@ -794,6 +843,17 @@ export default function AdsMappingPage() {
           </div>
         )}
       </Modal>
+
+      {/* Platform Ad Picker Modal */}
+      {platformPickerOffer && (
+        <PlatformAdPicker
+          isOpen={!!platformPickerOffer}
+          onClose={() => setPlatformPickerOffer(null)}
+          onSelect={handlePlatformAdSelect}
+          tenantId={platformPickerOffer.tenant.id}
+          platform={selectedPlatform}
+        />
+      )}
     </PageContainer>
   );
 }

@@ -178,7 +178,16 @@ CREATE TYPE integration_type AS ENUM (
   'TOKKO',
   'PROPERATI',
   'WEBHOOK',
-  'ZAPIER'
+  'ZAPIER',
+  'META_ADS'
+);
+
+-- Ad platforms for cost tracking and ad mapping
+CREATE TYPE ad_platform AS ENUM (
+  'META',
+  'TIKTOK',
+  'GOOGLE',
+  'LINKEDIN'
 );
 
 CREATE TYPE integration_status AS ENUM (
@@ -218,6 +227,12 @@ CREATE TABLE tenants (
   -- Contact info
   contact_email TEXT,
   contact_phone TEXT,
+  
+  -- Trial credits
+  trial_credits_granted BOOLEAN DEFAULT FALSE,
+  trial_credits_amount INTEGER DEFAULT 0,
+  trial_granted_at TIMESTAMPTZ,
+  trial_granted_by UUID,
   
   -- Metadata
   settings JSONB DEFAULT '{}',
@@ -447,7 +462,10 @@ CREATE TABLE ad_offer_map (
   tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   offer_id UUID NOT NULL REFERENCES offers(id) ON DELETE CASCADE,
   
-  -- Meta Ads identifiers
+  -- Platform
+  platform ad_platform NOT NULL DEFAULT 'META',
+  
+  -- Ad identifiers
   ad_id TEXT NOT NULL,
   ad_name TEXT,
   adset_id TEXT,
@@ -465,12 +483,55 @@ CREATE TABLE ad_offer_map (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_by UUID REFERENCES user_profiles(id),
   
-  UNIQUE(tenant_id, ad_id)
+  UNIQUE(tenant_id, platform, ad_id)
 );
 
 CREATE INDEX idx_ad_offer_map_tenant ON ad_offer_map(tenant_id);
 CREATE INDEX idx_ad_offer_map_ad ON ad_offer_map(ad_id);
 CREATE INDEX idx_ad_offer_map_offer ON ad_offer_map(offer_id);
+CREATE INDEX idx_ad_offer_map_platform ON ad_offer_map(platform);
+
+-- ============================================
+-- PLATFORM COSTS (for ad spend tracking)
+-- ============================================
+CREATE TABLE platform_costs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+  offer_id UUID REFERENCES offers(id) ON DELETE SET NULL,
+  
+  -- Platform info
+  platform ad_platform NOT NULL,
+  campaign_id TEXT,
+  campaign_name TEXT,
+  adset_id TEXT,
+  adset_name TEXT,
+  ad_id TEXT,
+  ad_name TEXT,
+  
+  -- Cost data
+  spend DECIMAL(12, 2) NOT NULL DEFAULT 0,
+  impressions INTEGER DEFAULT 0,
+  clicks INTEGER DEFAULT 0,
+  leads_raw INTEGER DEFAULT 0,
+  
+  -- Period
+  date_start DATE NOT NULL,
+  date_end DATE NOT NULL,
+  
+  -- Sync metadata
+  synced_at TIMESTAMPTZ DEFAULT NOW(),
+  platform_data JSONB DEFAULT '{}',
+  
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  UNIQUE(tenant_id, platform, ad_id, date_start, date_end)
+);
+
+CREATE INDEX idx_platform_costs_tenant ON platform_costs(tenant_id);
+CREATE INDEX idx_platform_costs_offer ON platform_costs(offer_id);
+CREATE INDEX idx_platform_costs_platform ON platform_costs(platform);
+CREATE INDEX idx_platform_costs_date ON platform_costs(date_start, date_end);
 
 -- <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 -- END: 003_core_tables
@@ -816,6 +877,9 @@ CREATE TABLE tenant_pricing (
   
   -- Thresholds
   low_credit_threshold INTEGER DEFAULT 10,
+  
+  -- Trial credits
+  default_trial_credits INTEGER DEFAULT 5,
   
   -- Auto-refund rules
   auto_refund_duplicates BOOLEAN DEFAULT TRUE,

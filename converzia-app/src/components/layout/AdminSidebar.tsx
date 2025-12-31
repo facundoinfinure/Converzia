@@ -15,6 +15,7 @@ import {
   Zap,
   ChevronDown,
   CreditCard,
+  TrendingUp,
   X,
 } from "lucide-react";
 import { useState } from "react";
@@ -48,6 +49,7 @@ const baseNavigation: Omit<NavItem, "badge">[] = [
   { name: "Knowledge", href: "/admin/knowledge", icon: Brain },
   { name: "Usuarios", href: "/admin/users", icon: Users },
   { name: "Operaciones", href: "/admin/operations", icon: Activity },
+  { name: "Revenue", href: "/admin/revenue", icon: TrendingUp },
   { name: "Facturación", href: "/admin/billing", icon: CreditCard },
 ];
 

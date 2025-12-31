@@ -133,12 +133,17 @@ export default function TenantDetailPage({ params }: Props) {
     }
   }, [searchParams, router, id, toast]);
   const { tenant, pricing, isLoading, error, refetch } = useTenant(id);
-  const { updateTenantStatus, isLoading: isMutating } = useTenantMutations();
+  const { updateTenantStatus, grantTrialCredits, isLoading: isMutating } = useTenantMutations();
   const [showStatusModal, setShowStatusModal] = useState<"activate" | "suspend" | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("VIEWER");
   const [isInviting, setIsInviting] = useState(false);
+  
+  // Trial credits state
+  const [showTrialCreditsModal, setShowTrialCreditsModal] = useState(false);
+  const [trialCreditsAmount, setTrialCreditsAmount] = useState(5);
+  const [isGrantingCredits, setIsGrantingCredits] = useState(false);
 
   // Integration state
   const [integrations, setIntegrations] = useState<TenantIntegration[]>([]);
@@ -599,6 +604,15 @@ export default function TenantDetailPage({ params }: Props) {
                       danger: true,
                     },
                 { divider: true, label: "" },
+                ...(!tenant.trial_credits_granted
+                  ? [
+                      {
+                        label: "Otorgar leads de prueba",
+                        onClick: () => setShowTrialCreditsModal(true),
+                        icon: <CreditCard className="h-4 w-4" />,
+                      },
+                    ]
+                  : []),
                 {
                   label: "Ver como tenant",
                   onClick: handleViewAsTenant,
@@ -1030,6 +1044,74 @@ export default function TenantDetailPage({ params }: Props) {
             value={inviteRole}
             onChange={(e) => setInviteRole(e.target.value)}
           />
+        </div>
+      </Modal>
+
+      {/* Trial Credits Modal */}
+      <Modal
+        isOpen={showTrialCreditsModal}
+        onClose={() => {
+          setShowTrialCreditsModal(false);
+          setTrialCreditsAmount(5);
+        }}
+        title="Otorgar leads de prueba"
+        description="Estos créditos son gratuitos y se otorgan una única vez para que el tenant pueda probar la plataforma."
+        size="sm"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setShowTrialCreditsModal(false);
+                setTrialCreditsAmount(5);
+              }}
+              disabled={isGrantingCredits}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!tenant) return;
+                setIsGrantingCredits(true);
+                try {
+                  await grantTrialCredits(tenant.id, trialCreditsAmount);
+                  toast.success(`${trialCreditsAmount} créditos de prueba otorgados a ${tenant.name}`);
+                  setShowTrialCreditsModal(false);
+                  setTrialCreditsAmount(5);
+                  refetch();
+                } catch (error: any) {
+                  toast.error(error.message || "Error al otorgar créditos");
+                } finally {
+                  setIsGrantingCredits(false);
+                }
+              }}
+              isLoading={isGrantingCredits}
+            >
+              Otorgar créditos
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Input
+            label="Cantidad de créditos"
+            type="number"
+            min={1}
+            max={100}
+            value={trialCreditsAmount}
+            onChange={(e) => setTrialCreditsAmount(parseInt(e.target.value) || 5)}
+            hint="Por defecto: 5 créditos. Cada crédito equivale a 1 lead entregado."
+          />
+          {tenant && (
+            <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)]">
+              <p className="text-sm text-[var(--text-secondary)]">
+                Tenant: <span className="text-[var(--text-primary)] font-medium">{tenant.name}</span>
+              </p>
+              <p className="text-sm text-[var(--text-secondary)] mt-1">
+                Balance actual: <span className="text-[var(--text-primary)] font-medium">{tenant.credit_balance || 0} créditos</span>
+              </p>
+            </div>
+          )}
         </div>
       </Modal>
     </PageContainer>

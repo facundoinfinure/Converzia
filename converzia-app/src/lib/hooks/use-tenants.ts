@@ -482,6 +482,7 @@ export function useTenantMutations() {
             tenant_id: tenantId,
             charge_model: "PER_LEAD",
             cost_per_lead: 10,
+            default_trial_credits: 5,
             packages: [
               { id: "starter", name: "Starter", credits: 50, price: 400 },
               { id: "growth", name: "Growth", credits: 100, price: 700, discount_pct: 12.5, is_popular: true },
@@ -497,6 +498,24 @@ export function useTenantMutations() {
           console.error("Error creating default pricing:", pricingInsertError);
           // Don't throw - tenant is already approved
         }
+      }
+
+      // Auto-grant trial credits on approval
+      try {
+        const response = await fetch(`/api/tenants/${tenantId}/trial-credits`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ amount: 5 }),
+        });
+        
+        if (!response.ok) {
+          const result = await response.json();
+          console.warn("Trial credits not granted:", result.error);
+          // Don't throw - tenant is already approved
+        }
+      } catch (trialError) {
+        console.warn("Error granting trial credits:", trialError);
+        // Don't throw - tenant is already approved
       }
 
       return { success: true };
@@ -543,6 +562,29 @@ export function useTenantMutations() {
     }
   };
 
+  const grantTrialCredits = async (tenantId: string, amount: number = 5) => {
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/tenants/${tenantId}/trial-credits`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ amount }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Error al otorgar créditos de prueba");
+      }
+
+      return result;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return {
     createTenant,
     updateTenant,
@@ -551,6 +593,7 @@ export function useTenantMutations() {
     deleteTenant,
     approveTenant,
     rejectTenant,
+    grantTrialCredits,
     isLoading,
   };
 }

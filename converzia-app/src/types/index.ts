@@ -104,6 +104,10 @@ export interface Tenant {
   duplicate_window_days?: number;
   stripe_customer_id: string | null;
   activated_at?: string | null;
+  // Trial credits
+  trial_credits_granted?: boolean;
+  trial_credits_amount?: number;
+  trial_granted_at?: string | null;
   created_at: string;
   updated_at: string;
 }
