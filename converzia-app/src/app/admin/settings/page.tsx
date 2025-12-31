@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Settings,
   Facebook,
@@ -15,6 +15,8 @@ import {
   Save,
   Palette,
   RefreshCw,
+  Unlink,
+  BarChart3,
 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/Card";
@@ -79,6 +81,88 @@ export default function SettingsPage() {
 
   // Connection status
   const [connectionStatus, setConnectionStatus] = useState<Record<string, "success" | "error" | "testing" | null>>({});
+
+  // Meta Ads OAuth state
+  const [metaAdsConnected, setMetaAdsConnected] = useState<boolean | null>(null);
+  const [metaAdsConnecting, setMetaAdsConnecting] = useState(false);
+  const [metaAdsInfo, setMetaAdsInfo] = useState<{ userName?: string; adAccounts?: any[] } | null>(null);
+
+  // Check Meta Ads OAuth connection
+  const checkMetaAdsConnection = useCallback(async () => {
+    try {
+      const response = await fetch("/api/integrations/meta/ads");
+      const data = await response.json();
+      
+      if (response.ok) {
+        setMetaAdsConnected(true);
+        setMetaAdsInfo({
+          adAccounts: data.ad_accounts || [],
+        });
+      } else {
+        setMetaAdsConnected(false);
+        setMetaAdsInfo(null);
+      }
+    } catch {
+      setMetaAdsConnected(false);
+      setMetaAdsInfo(null);
+    }
+  }, []);
+
+  // Connect Meta Ads
+  const handleConnectMetaAds = async () => {
+    setMetaAdsConnecting(true);
+    try {
+      const response = await fetch("/api/integrations/meta/auth");
+      const data = await response.json();
+      
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        toast.error("Error al iniciar conexión con Meta Ads");
+        setMetaAdsConnecting(false);
+      }
+    } catch {
+      toast.error("Error al conectar con Meta Ads");
+      setMetaAdsConnecting(false);
+    }
+  };
+
+  // Disconnect Meta Ads
+  const handleDisconnectMetaAds = async () => {
+    try {
+      const response = await fetch("/api/integrations/meta/disconnect", {
+        method: "POST",
+      });
+      
+      if (response.ok) {
+        setMetaAdsConnected(false);
+        setMetaAdsInfo(null);
+        toast.success("Meta Ads desconectado correctamente");
+      } else {
+        toast.error("Error al desconectar Meta Ads");
+      }
+    } catch {
+      toast.error("Error al desconectar Meta Ads");
+    }
+  };
+
+  // Check Meta Ads on mount and handle URL params
+  useEffect(() => {
+    checkMetaAdsConnection();
+    
+    // Handle OAuth callback params
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.get("meta_success") === "true") {
+      toast.success("¡Meta Ads conectado correctamente!");
+      checkMetaAdsConnection();
+      window.history.replaceState({}, "", "/admin/settings");
+    }
+    if (searchParams.get("meta_error")) {
+      const error = searchParams.get("meta_error");
+      toast.error(`Error al conectar Meta: ${error}`);
+      window.history.replaceState({}, "", "/admin/settings");
+    }
+  }, [checkMetaAdsConnection, toast]);
 
   // Fetch default prompts from files
   const fetchDefaultPrompts = async () => {
@@ -387,7 +471,108 @@ export default function SettingsPage() {
         {/* Integrations Tab - All integrations in one view */}
         <TabContent value="integrations">
           <div className="space-y-6">
-            {/* Meta Settings */}
+            
+            {/* Meta Ads - Marketing API (OAuth) */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-[#1877F2]/10 flex items-center justify-center">
+                    <svg viewBox="0 0 24 24" className="h-6 w-6 text-[#1877F2]" fill="currentColor">
+                      <path d="M12 2.04c-5.5 0-10 4.49-10 10.02 0 5 3.66 9.15 8.44 9.9v-7H7.9v-2.9h2.54V9.85c0-2.51 1.49-3.89 3.78-3.89 1.09 0 2.23.19 2.23.19v2.47h-1.26c-1.24 0-1.63.77-1.63 1.56v1.88h2.78l-.45 2.9h-2.33v7a10 10 0 0 0 8.44-9.9c0-5.53-4.5-10.02-10-10.02Z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <CardTitle>Meta Ads - Marketing API</CardTitle>
+                    <p className="text-sm text-[var(--text-tertiary)] mt-1">
+                      Conectá tu cuenta de Meta para mapear anuncios y sincronizar costos
+                    </p>
+                  </div>
+                </div>
+                {metaAdsConnected === true && (
+                  <Badge variant="success" dot>
+                    Conectado
+                  </Badge>
+                )}
+                {metaAdsConnected === false && (
+                  <Badge variant="secondary">
+                    No conectado
+                  </Badge>
+                )}
+              </CardHeader>
+              <CardContent>
+                {metaAdsConnected === true && metaAdsInfo ? (
+                  <div className="space-y-4">
+                    {/* Connected info */}
+                    <div className="p-4 bg-[var(--bg-tertiary)] rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-[var(--text-tertiary)]">Cuentas publicitarias disponibles</p>
+                          <p className="font-medium text-[var(--text-primary)]">
+                            {metaAdsInfo.adAccounts?.length || 0} cuenta(s)
+                          </p>
+                          {metaAdsInfo.adAccounts && metaAdsInfo.adAccounts.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {metaAdsInfo.adAccounts.slice(0, 3).map((acc: any) => (
+                                <Badge key={acc.id} variant="info" size="sm">
+                                  {acc.name || acc.account_id || acc.id}
+                                </Badge>
+                              ))}
+                              {metaAdsInfo.adAccounts.length > 3 && (
+                                <Badge variant="secondary" size="sm">
+                                  +{metaAdsInfo.adAccounts.length - 3} más
+                                </Badge>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={handleDisconnectMetaAds}
+                          leftIcon={<Unlink className="h-4 w-4" />}
+                        >
+                          Desconectar
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    <Alert variant="info">
+                      <div className="flex items-center gap-2">
+                        <BarChart3 className="h-4 w-4" />
+                        <span>
+                          Esta conexión se usa para <strong>mapear anuncios a ofertas</strong> y 
+                          <strong> sincronizar costos de publicidad</strong> para analytics.
+                        </span>
+                      </div>
+                    </Alert>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <p className="text-[var(--text-secondary)]">
+                      Conectá tu cuenta de Meta Business para poder:
+                    </p>
+                    <ul className="list-disc list-inside text-sm text-[var(--text-tertiary)] space-y-1">
+                      <li>Seleccionar anuncios existentes para mapear a ofertas</li>
+                      <li>Sincronizar costos de publicidad (spend, impressions, clicks)</li>
+                      <li>Calcular CPL real y margen de ganancia por oferta</li>
+                    </ul>
+                    <Button
+                      onClick={handleConnectMetaAds}
+                      isLoading={metaAdsConnecting}
+                      leftIcon={
+                        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
+                          <path d="M12 2.04c-5.5 0-10 4.49-10 10.02 0 5 3.66 9.15 8.44 9.9v-7H7.9v-2.9h2.54V9.85c0-2.51 1.49-3.89 3.78-3.89 1.09 0 2.23.19 2.23.19v2.47h-1.26c-1.24 0-1.63.77-1.63 1.56v1.88h2.78l-.45 2.9h-2.33v7a10 10 0 0 0 8.44-9.9c0-5.53-4.5-10.02-10-10.02Z" />
+                        </svg>
+                      }
+                    >
+                      Conectar con Meta
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Meta Settings - Lead Ads Webhook */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>

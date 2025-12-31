@@ -168,9 +168,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Redirect to ads mapping page with success
+    // Redirect to settings page with success
     return NextResponse.redirect(
-      new URL("/admin/ads-mapping?meta_success=true", request.url)
+      new URL("/admin/settings?meta_success=true", request.url)
     );
   } catch (error) {
     console.error("Error in Meta OAuth callback:", error);

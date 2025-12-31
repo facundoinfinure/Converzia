@@ -78,7 +78,6 @@ export default function AdsMappingPage() {
   
   // Meta connection state
   const [metaConnected, setMetaConnected] = useState<boolean | null>(null);
-  const [metaConnecting, setMetaConnecting] = useState(false);
   const [metaAccountName, setMetaAccountName] = useState<string | null>(null);
 
   const { unmappedAds, total: unmappedTotal, isLoading: loadingUnmapped, error: unmappedError, refetch: refetchUnmapped } = useUnmappedAds();
@@ -160,41 +159,6 @@ export default function AdsMappingPage() {
   useEffect(() => {
     checkMetaConnection();
   }, [checkMetaConnection]);
-
-  // Handle URL params for OAuth success/error
-  useEffect(() => {
-    const searchParams = new URLSearchParams(window.location.search);
-    if (searchParams.get("meta_success") === "true") {
-      toast.success("¡Meta Ads conectado correctamente!");
-      checkMetaConnection();
-      // Clean URL
-      window.history.replaceState({}, "", "/admin/ads-mapping");
-    }
-    if (searchParams.get("meta_error")) {
-      const error = searchParams.get("meta_error");
-      toast.error(`Error al conectar Meta: ${error}`);
-      window.history.replaceState({}, "", "/admin/ads-mapping");
-    }
-  }, [toast, checkMetaConnection]);
-
-  // Connect Meta Ads
-  const handleConnectMeta = async () => {
-    setMetaConnecting(true);
-    try {
-      const response = await fetch("/api/integrations/meta/auth");
-      const data = await response.json();
-      
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        toast.error("Error al iniciar conexión con Meta");
-        setMetaConnecting(false);
-      }
-    } catch {
-      toast.error("Error al conectar con Meta");
-      setMetaConnecting(false);
-    }
-  };
 
   // Handle manual mapping creation
   const handleManualMapping = async () => {
@@ -534,26 +498,11 @@ export default function AdsMappingPage() {
           { label: "Mapeo de Ads" },
         ]}
         actions={
-          <div className="flex items-center gap-3">
-            {metaConnected === false && (
-              <Button
-                onClick={handleConnectMeta}
-                isLoading={metaConnecting}
-                leftIcon={
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
-                    <path d="M12 2.04c-5.5 0-10 4.49-10 10.02 0 5 3.66 9.15 8.44 9.9v-7H7.9v-2.9h2.54V9.85c0-2.51 1.49-3.89 3.78-3.89 1.09 0 2.23.19 2.23.19v2.47h-1.26c-1.24 0-1.63.77-1.63 1.56v1.88h2.78l-.45 2.9h-2.33v7a10 10 0 0 0 8.44-9.9c0-5.53-4.5-10.02-10-10.02Z" />
-                  </svg>
-                }
-              >
-                Conectar Meta Ads
-              </Button>
-            )}
-            {metaConnected === true && (
-              <Badge variant="success" dot>
-                Meta conectado{metaAccountName ? `: ${metaAccountName}` : ""}
-              </Badge>
-            )}
-          </div>
+          metaConnected === true ? (
+            <Badge variant="success" dot>
+              Meta conectado{metaAccountName ? `: ${metaAccountName}` : ""}
+            </Badge>
+          ) : null
         }
       />
 
@@ -561,6 +510,22 @@ export default function AdsMappingPage() {
         <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400">
           {unmappedError || mappingsError}
         </div>
+      )}
+
+      {/* Alert if Meta not connected */}
+      {metaConnected === false && (
+        <Alert variant="warning" className="mb-6" title="Meta Ads no conectado">
+          <div className="flex items-center justify-between gap-4">
+            <span>Para mapear anuncios desde Meta, primero conectá tu cuenta en Configuración.</span>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => router.push("/admin/settings")}
+            >
+              Ir a Configuración
+            </Button>
+          </div>
+        </Alert>
       )}
 
       {/* Alert if unmapped */}
