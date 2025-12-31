@@ -9,9 +9,10 @@ import {
   Users,
   Target,
   RefreshCw,
-  Calendar,
   Building2,
   Package,
+  CreditCard,
+  Wallet,
 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -23,183 +24,114 @@ import { Badge } from "@/components/ui/Badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
+import { DateRangePicker, DateRange, DatePresetId, DEFAULT_DATE_PRESETS } from "@/components/ui/DatePicker";
 import { formatCurrency } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
 
-interface RevenueMetrics {
-  total_spend: number;
-  total_revenue: number;
-  total_profit: number;
-  total_leads_raw: number;
-  total_leads_ready: number;
-  total_leads_delivered: number;
-  avg_cpl_ready: number;
-  avg_margin_pct: number;
+interface RevenueSummary {
+  payments_received: number;
+  leads_ready_count: number;
+  leads_ready_value: number;
+  leads_delivered_count: number;
+  leads_delivered_value: number;
+  attributed_spend: number;
+  platform_spend: number;
+  leads_raw_count: number;
+  profit: number;
+  margin_pct: number;
+  pending_credits: number;
 }
 
 interface TenantRevenue {
   tenant_id: string;
   tenant_name: string;
+  payments_received: number;
+  leads_ready_count: number;
+  leads_ready_value: number;
+  leads_delivered_count: number;
+  leads_delivered_value: number;
+  attributed_spend: number;
   platform_spend: number;
-  revenue: number;
+  leads_raw_count: number;
   profit: number;
-  leads_raw: number;
-  leads_ready: number;
-  leads_delivered: number;
-  cpl_ready: number;
   margin_pct: number;
   cost_per_lead: number;
+  cpl_attributed: number;
 }
 
 interface OfferRevenue {
   offer_id: string;
   offer_name: string;
+  tenant_id: string;
   tenant_name: string;
-  platform_spend: number;
-  revenue: number;
+  leads_ready_count: number;
+  leads_ready_value: number;
+  attributed_spend: number;
   profit: number;
-  leads_raw: number;
-  leads_ready: number;
-  leads_delivered: number;
-  cpl_ready: number;
   margin_pct: number;
 }
 
 export default function RevenueDashboardPage() {
   const toast = useToast();
-  const supabase = createClient();
 
   const [isLoading, setIsLoading] = useState(true);
-  const [metrics, setMetrics] = useState<RevenueMetrics | null>(null);
+  const [summary, setSummary] = useState<RevenueSummary | null>(null);
   const [tenantRevenue, setTenantRevenue] = useState<TenantRevenue[]>([]);
   const [offerRevenue, setOfferRevenue] = useState<OfferRevenue[]>([]);
+  
+  // Date range state
+  const [dateRange, setDateRange] = useState<DateRange>({
+    from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+    to: new Date(),
+  });
+  const [selectedPreset, setSelectedPreset] = useState<DatePresetId>("last_30_days");
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (refresh = false) => {
     setIsLoading(true);
     try {
-      // Fetch company summary
-      const { data: summaryData, error: summaryError } = await supabase
-        .from("company_revenue_summary")
-        .select("*")
-        .maybeSingle();
-
-      if (summaryError && summaryError.code !== "PGRST116") {
-        console.error("Error fetching summary:", summaryError);
+      const params = new URLSearchParams();
+      
+      if (dateRange.from) {
+        params.set("date_start", dateRange.from.toISOString().split("T")[0]);
+      }
+      if (dateRange.to) {
+        params.set("date_end", dateRange.to.toISOString().split("T")[0]);
+      }
+      if (refresh) {
+        params.set("refresh", "true");
       }
 
-      // Initialize metrics with defaults - handle null/undefined data
-      const defaultMetrics: RevenueMetrics = {
-        total_spend: 0,
-        total_revenue: 0,
-        total_profit: 0,
-        total_leads_raw: 0,
-        total_leads_ready: 0,
-        total_leads_delivered: 0,
-        avg_cpl_ready: 0,
-        avg_margin_pct: 0,
-      };
+      const response = await fetch(`/api/admin/revenue?${params}`);
+      const result = await response.json();
 
-      if (summaryData) {
-        setMetrics({
-          total_spend: parseFloat(summaryData.total_spend) || 0,
-          total_revenue: parseFloat(summaryData.total_revenue) || 0,
-          total_profit: parseFloat(summaryData.total_profit) || 0,
-          total_leads_raw: parseInt(summaryData.total_leads_raw) || 0,
-          total_leads_ready: parseInt(summaryData.total_leads_ready) || 0,
-          total_leads_delivered: parseInt(summaryData.total_leads_delivered) || 0,
-          avg_cpl_ready: parseFloat(summaryData.avg_cpl_ready) || 0,
-          avg_margin_pct: parseFloat(summaryData.avg_margin_pct) || 0,
-        });
-      } else {
-        // No data yet - set defaults
-        setMetrics(defaultMetrics);
+      if (!response.ok) {
+        throw new Error(result.error || "Error fetching revenue data");
       }
 
-      // Fetch revenue by tenant - handle case where view might not exist yet
-      let tenantData: any[] = [];
-      try {
-        const { data, error: tenantError } = await supabase
-          .from("revenue_analytics")
-          .select("*")
-          .not("tenant_id", "is", null)
-          .order("revenue", { ascending: false });
-
-        if (tenantError) {
-          // View might not exist yet if migrations haven't run
-          console.error("Error fetching tenant revenue:", tenantError);
-        } else {
-          tenantData = data || [];
-        }
-      } catch (err) {
-        console.error("Error fetching revenue_analytics:", err);
-      }
-
-      // Aggregate by tenant
-      const tenantMap = new Map<string, TenantRevenue>();
-      tenantData.forEach((row: any) => {
-        const existing = tenantMap.get(row.tenant_id);
-        if (existing) {
-          existing.platform_spend += parseFloat(row.platform_spend) || 0;
-          existing.revenue += parseFloat(row.revenue) || 0;
-          existing.profit += parseFloat(row.profit) || 0;
-          existing.leads_raw += parseInt(row.leads_raw) || 0;
-          existing.leads_ready += parseInt(row.leads_ready) || 0;
-          existing.leads_delivered += parseInt(row.leads_delivered) || 0;
-        } else {
-          tenantMap.set(row.tenant_id, {
-            tenant_id: row.tenant_id,
-            tenant_name: row.tenant_name || "Unknown",
-            platform_spend: parseFloat(row.platform_spend) || 0,
-            revenue: parseFloat(row.revenue) || 0,
-            profit: parseFloat(row.profit) || 0,
-            leads_raw: parseInt(row.leads_raw) || 0,
-            leads_ready: parseInt(row.leads_ready) || 0,
-            leads_delivered: parseInt(row.leads_delivered) || 0,
-            cpl_ready: parseFloat(row.cpl_ready) || 0,
-            margin_pct: parseFloat(row.margin_pct) || 0,
-            cost_per_lead: parseFloat(row.cost_per_lead) || 0,
-          });
-        }
-      });
-
-      // Recalculate aggregated metrics
-      const tenants = Array.from(tenantMap.values()).map((t) => ({
-        ...t,
-        cpl_ready: t.leads_ready > 0 ? t.platform_spend / t.leads_ready : 0,
-        margin_pct: t.revenue > 0 ? ((t.revenue - t.platform_spend) / t.revenue) * 100 : 0,
-      }));
-
-      setTenantRevenue(tenants);
-
-      // Fetch revenue by offer
-      const offers = tenantData
-        .filter((row: any) => row.offer_id)
-        .map((row: any) => ({
-          offer_id: row.offer_id,
-          offer_name: row.offer_name || "Unknown",
-          tenant_name: row.tenant_name || "Unknown",
-          platform_spend: parseFloat(row.platform_spend) || 0,
-          revenue: parseFloat(row.revenue) || 0,
-          profit: parseFloat(row.profit) || 0,
-          leads_raw: parseInt(row.leads_raw) || 0,
-          leads_ready: parseInt(row.leads_ready) || 0,
-          leads_delivered: parseInt(row.leads_delivered) || 0,
-          cpl_ready: parseFloat(row.cpl_ready) || 0,
-          margin_pct: parseFloat(row.margin_pct) || 0,
-        }));
-
-      setOfferRevenue(offers);
-    } catch (error) {
+      setSummary(result.summary);
+      setTenantRevenue(result.by_tenant || []);
+      setOfferRevenue(result.by_offer || []);
+    } catch (error: any) {
       console.error("Error fetching revenue data:", error);
-      toast.error("Error al cargar datos de revenue");
+      toast.error(error.message || "Error al cargar datos de revenue");
     } finally {
       setIsLoading(false);
     }
-  }, [supabase, toast]);
+  }, [dateRange, toast]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const handleDateRangeChange = (range: DateRange, presetId?: DatePresetId) => {
+    setDateRange(range);
+    if (presetId) {
+      setSelectedPreset(presetId);
+    }
+  };
+
+  const handleRefresh = () => {
+    fetchData(true);
+  };
 
   const tenantColumns: Column<TenantRevenue>[] = [
     {
@@ -217,42 +149,56 @@ export default function RevenueDashboardPage() {
       ),
     },
     {
-      key: "platform_spend",
-      header: "Gasto Ads",
+      key: "leads_ready_value",
+      header: "Valor Generado",
       cell: (row) => (
-        <span className="text-red-400">{formatCurrency(row.platform_spend, "USD")}</span>
+        <span className="text-green-400 font-medium">
+          {formatCurrency(row.leads_ready_value, "USD")}
+        </span>
       ),
     },
     {
-      key: "revenue",
-      header: "Revenue",
+      key: "attributed_spend",
+      header: "Gasto Atribuido",
       cell: (row) => (
-        <span className="text-green-400">{formatCurrency(row.revenue, "USD")}</span>
+        <span className="text-red-400">
+          {formatCurrency(row.attributed_spend, "USD")}
+        </span>
       ),
     },
     {
       key: "profit",
       header: "Profit",
       cell: (row) => (
-        <span className={row.profit >= 0 ? "text-green-400" : "text-red-400"}>
+        <span className={row.profit >= 0 ? "text-green-400 font-medium" : "text-red-400 font-medium"}>
           {formatCurrency(row.profit, "USD")}
         </span>
       ),
     },
     {
-      key: "leads_ready",
+      key: "leads_ready_count",
       header: "Leads Ready",
-      cell: (row) => row.leads_ready,
+      cell: (row) => (
+        <span className="text-[var(--text-primary)]">{row.leads_ready_count}</span>
+      ),
     },
     {
-      key: "cpl_ready",
-      header: "CPL Ready",
-      cell: (row) => formatCurrency(row.cpl_ready, "USD"),
+      key: "cpl_attributed",
+      header: "CPL Atribuido",
+      cell: (row) => (
+        <span className="text-[var(--text-secondary)]">
+          {formatCurrency(row.cpl_attributed, "USD")}
+        </span>
+      ),
     },
     {
       key: "cost_per_lead",
       header: "Precio CPL",
-      cell: (row) => formatCurrency(row.cost_per_lead, "USD"),
+      cell: (row) => (
+        <span className="text-[var(--text-primary)]">
+          {formatCurrency(row.cost_per_lead, "USD")}
+        </span>
+      ),
     },
     {
       key: "margin_pct",
@@ -279,42 +225,36 @@ export default function RevenueDashboardPage() {
       ),
     },
     {
-      key: "platform_spend",
-      header: "Gasto Ads",
+      key: "leads_ready_value",
+      header: "Valor Generado",
       cell: (row) => (
-        <span className="text-red-400">{formatCurrency(row.platform_spend, "USD")}</span>
+        <span className="text-green-400 font-medium">
+          {formatCurrency(row.leads_ready_value, "USD")}
+        </span>
       ),
     },
     {
-      key: "revenue",
-      header: "Revenue",
+      key: "attributed_spend",
+      header: "Gasto Atribuido",
       cell: (row) => (
-        <span className="text-green-400">{formatCurrency(row.revenue, "USD")}</span>
+        <span className="text-red-400">
+          {formatCurrency(row.attributed_spend, "USD")}
+        </span>
       ),
     },
     {
       key: "profit",
       header: "Profit",
       cell: (row) => (
-        <span className={row.profit >= 0 ? "text-green-400" : "text-red-400"}>
+        <span className={row.profit >= 0 ? "text-green-400 font-medium" : "text-red-400 font-medium"}>
           {formatCurrency(row.profit, "USD")}
         </span>
       ),
     },
     {
-      key: "leads_raw",
-      header: "Leads Raw",
-      cell: (row) => row.leads_raw,
-    },
-    {
-      key: "leads_ready",
+      key: "leads_ready_count",
       header: "Leads Ready",
-      cell: (row) => row.leads_ready,
-    },
-    {
-      key: "cpl_ready",
-      header: "CPL Ready",
-      cell: (row) => formatCurrency(row.cpl_ready, "USD"),
+      cell: (row) => row.leads_ready_count,
     },
     {
       key: "margin_pct",
@@ -327,29 +267,45 @@ export default function RevenueDashboardPage() {
     },
   ];
 
+  const hasData = summary && (
+    summary.leads_ready_count > 0 || 
+    summary.platform_spend > 0 || 
+    summary.payments_received > 0
+  );
+
   return (
     <PageContainer>
       <PageHeader
         title="Revenue Dashboard"
-        description="Análisis de costos, revenue y profit por tenant y oferta"
+        description="Análisis de ingresos, costos atribuidos y profit por tenant y oferta"
         breadcrumbs={[
           { label: "Admin", href: "/admin" },
           { label: "Revenue" },
         ]}
         actions={
-          <Button
-            variant="secondary"
-            leftIcon={<RefreshCw className="h-4 w-4" />}
-            onClick={fetchData}
-            isLoading={isLoading}
-          >
-            Actualizar
-          </Button>
+          <div className="flex items-center gap-3">
+            <DateRangePicker
+              value={dateRange}
+              onChange={handleDateRangeChange}
+              selectedPreset={selectedPreset}
+              onPresetChange={setSelectedPreset}
+              presets={DEFAULT_DATE_PRESETS}
+              compact
+            />
+            <Button
+              variant="secondary"
+              leftIcon={<RefreshCw className="h-4 w-4" />}
+              onClick={handleRefresh}
+              isLoading={isLoading}
+            >
+              Actualizar
+            </Button>
+          </div>
         }
       />
 
       {/* Empty State if no data */}
-      {!isLoading && metrics && metrics.total_leads_raw === 0 && metrics.total_spend === 0 && (
+      {!isLoading && !hasData && (
         <Card className="mb-6">
           <CardContent className="py-12">
             <EmptyState
@@ -365,70 +321,92 @@ export default function RevenueDashboardPage() {
         </Card>
       )}
 
-      {/* Summary Stats */}
+      {/* Main Stats Row - Key Metrics */}
       {isLoading ? (
         <StatsGrid columns={4} className="mb-6">
           {[1, 2, 3, 4].map((i) => (
             <Skeleton key={i} className="h-32" />
           ))}
         </StatsGrid>
-      ) : metrics && (metrics.total_leads_raw > 0 || metrics.total_spend > 0) ? (
+      ) : hasData ? (
         <StatsGrid columns={4} className="mb-6">
           <StatCard
-            title="Gasto en Ads"
-            value={formatCurrency(metrics.total_spend, "USD")}
-            icon={<TrendingDown />}
-            iconColor="from-red-500 to-rose-600"
+            title="Ingresos Recibidos"
+            value={formatCurrency(summary.payments_received, "USD")}
+            icon={<Wallet />}
+            iconColor="from-emerald-500 to-green-600"
           />
           <StatCard
-            title="Revenue"
-            value={formatCurrency(metrics.total_revenue, "USD")}
+            title="Valor Generado"
+            value={formatCurrency(summary.leads_ready_value, "USD")}
             icon={<DollarSign />}
-            iconColor="from-green-500 to-emerald-600"
+            iconColor="from-blue-500 to-cyan-600"
           />
           <StatCard
-            title="Profit"
-            value={formatCurrency(metrics.total_profit, "USD")}
+            title="Profit Real"
+            value={formatCurrency(summary.profit, "USD")}
             icon={<TrendingUp />}
-            iconColor={metrics.total_profit >= 0 ? "from-blue-500 to-cyan-600" : "from-red-500 to-rose-600"}
+            iconColor={summary.profit >= 0 ? "from-green-500 to-emerald-600" : "from-red-500 to-rose-600"}
           />
           <StatCard
-            title="CPL Ready (Promedio)"
-            value={formatCurrency(metrics.avg_cpl_ready, "USD")}
-            icon={<Target />}
+            title="Créditos Pendientes"
+            value={summary.pending_credits.toLocaleString()}
+            icon={<CreditCard />}
             iconColor="from-purple-500 to-pink-600"
           />
         </StatsGrid>
       ) : null}
 
-      {/* Additional Stats Row */}
-      {metrics && (metrics.total_leads_raw > 0 || metrics.total_spend > 0) && (
+      {/* Secondary Stats Row */}
+      {hasData && (
         <StatsGrid columns={4} className="mb-6">
           <StatCard
-            title="Leads Raw"
-            value={metrics.total_leads_raw}
-            icon={<Users />}
-            iconColor="from-slate-500 to-slate-600"
+            title="Gasto en Ads (Total)"
+            value={formatCurrency(summary!.platform_spend, "USD")}
+            icon={<TrendingDown />}
+            iconColor="from-red-500 to-rose-600"
+          />
+          <StatCard
+            title="Gasto Atribuido"
+            value={formatCurrency(summary!.attributed_spend, "USD")}
+            icon={<Target />}
+            iconColor="from-orange-500 to-amber-600"
           />
           <StatCard
             title="Leads Ready"
-            value={metrics.total_leads_ready}
+            value={summary!.leads_ready_count}
             icon={<Users />}
             iconColor="from-amber-500 to-orange-600"
           />
           <StatCard
-            title="Leads Entregados"
-            value={metrics.total_leads_delivered}
-            icon={<Users />}
-            iconColor="from-green-500 to-emerald-600"
-          />
-          <StatCard
             title="Margen Promedio"
-            value={`${metrics.avg_margin_pct.toFixed(1)}%`}
+            value={`${summary!.margin_pct.toFixed(1)}%`}
             icon={<BarChart3 />}
-            iconColor={metrics.avg_margin_pct >= 30 ? "from-green-500 to-emerald-600" : "from-amber-500 to-orange-600"}
+            iconColor={summary!.margin_pct >= 30 ? "from-green-500 to-emerald-600" : "from-amber-500 to-orange-600"}
           />
         </StatsGrid>
+      )}
+
+      {/* Info Card explaining metrics */}
+      {hasData && (
+        <Card className="mb-6 bg-[var(--bg-secondary)] border-[var(--border-primary)]">
+          <CardContent className="py-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+              <div>
+                <span className="font-medium text-[var(--text-primary)]">Ingresos Recibidos:</span>
+                <span className="text-[var(--text-secondary)] ml-2">Pagos de tenants en el período</span>
+              </div>
+              <div>
+                <span className="font-medium text-[var(--text-primary)]">Valor Generado:</span>
+                <span className="text-[var(--text-secondary)] ml-2">Leads ready × precio CPL</span>
+              </div>
+              <div>
+                <span className="font-medium text-[var(--text-primary)]">Gasto Atribuido:</span>
+                <span className="text-[var(--text-secondary)] ml-2">Costo de ads proporcional a leads</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Tabs for Tenant/Offer breakdown */}
@@ -456,7 +434,7 @@ export default function RevenueDashboardPage() {
                 <EmptyState
                   icon={<Building2 className="h-12 w-12" />}
                   title="Sin datos de revenue"
-                  description="Conectá Meta Ads y sincronizá los costos para ver el análisis de revenue."
+                  description="No hay datos de revenue para el período seleccionado."
                 />
               ) : (
                 <DataTable
@@ -482,7 +460,7 @@ export default function RevenueDashboardPage() {
                 <EmptyState
                   icon={<Package className="h-12 w-12" />}
                   title="Sin datos de revenue"
-                  description="Conectá Meta Ads y sincronizá los costos para ver el análisis de revenue por oferta."
+                  description="No hay datos de revenue por oferta para el período seleccionado."
                 />
               ) : (
                 <DataTable
@@ -499,4 +477,3 @@ export default function RevenueDashboardPage() {
     </PageContainer>
   );
 }
-
