@@ -207,11 +207,11 @@ export function UserAvatar({
     <div className={cn("flex items-center gap-3", className)}>
       <Avatar src={src} name={name} size={avatarSizes[size]} status={status} />
       <div className="min-w-0">
-        <p className={cn("font-medium text-white truncate", textSizes[size].name)}>
+        <p className={cn("font-medium text-[var(--text-primary)] truncate", textSizes[size].name)}>
           {name}
         </p>
         {(email || role) && (
-          <p className={cn("text-slate-500 truncate", textSizes[size].detail)}>
+          <p className={cn("text-[var(--text-secondary)] truncate", textSizes[size].detail)}>
             {email || role}
           </p>
         )}
@@ -219,6 +219,7 @@ export function UserAvatar({
     </div>
   );
 }
+
 
 
 

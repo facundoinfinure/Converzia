@@ -167,7 +167,7 @@ export default function TenantsPage() {
       header: "Tenant",
       cell: (tenant) => (
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-[var(--text-primary)] font-medium">
+          <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-medium">
             {tenant.name.slice(0, 2).toUpperCase()}
           </div>
           <div>

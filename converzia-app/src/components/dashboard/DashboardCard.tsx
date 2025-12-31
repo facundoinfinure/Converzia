@@ -225,22 +225,22 @@ export function HeroMetric({
     primary: {
       gradient: "from-[var(--accent-primary)]/10 via-[var(--accent-primary)]/5 to-transparent",
       border: "border-[var(--accent-primary)]/20",
-      icon: "text-[var(--accent-primary)] bg-gradient-to-br from-[var(--accent-primary-light)] to-white",
+      icon: "text-[var(--accent-primary)] bg-gradient-to-br from-[var(--accent-primary-light)] to-[var(--bg-secondary)]",
     },
     success: {
       gradient: "from-[var(--success)]/10 via-[var(--success)]/5 to-transparent",
       border: "border-[var(--success)]/20",
-      icon: "text-[var(--success)] bg-gradient-to-br from-[var(--success-light)] to-white",
+      icon: "text-[var(--success)] bg-gradient-to-br from-[var(--success-light)] to-[var(--bg-secondary)]",
     },
     warning: {
       gradient: "from-[var(--warning)]/10 via-[var(--warning)]/5 to-transparent",
       border: "border-[var(--warning)]/20",
-      icon: "text-[var(--warning)] bg-gradient-to-br from-[var(--warning-light)] to-white",
+      icon: "text-[var(--warning)] bg-gradient-to-br from-[var(--warning-light)] to-[var(--bg-secondary)]",
     },
     danger: {
       gradient: "from-[var(--error)]/10 via-[var(--error)]/5 to-transparent",
       border: "border-[var(--error)]/20",
-      icon: "text-[var(--error)] bg-gradient-to-br from-[var(--error-light)] to-white",
+      icon: "text-[var(--error)] bg-gradient-to-br from-[var(--error-light)] to-[var(--bg-secondary)]",
     },
   };
 

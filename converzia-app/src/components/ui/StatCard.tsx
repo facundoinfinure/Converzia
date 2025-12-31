@@ -62,8 +62,10 @@ export function StatCard({
           {icon && (
             <div
               className={cn(
-                "h-12 w-12 rounded-xl flex items-center justify-center",
-                iconColor || "bg-[var(--accent-primary-light)] text-[var(--accent-primary)]"
+                "h-12 w-12 rounded-xl flex items-center justify-center text-white",
+                iconColor?.includes("from-") 
+                  ? `bg-gradient-to-br ${iconColor}` 
+                  : iconColor || "bg-[var(--accent-primary-light)] text-[var(--accent-primary)]"
               )}
             >
               <span className="h-6 w-6">{icon}</span>
@@ -243,6 +245,7 @@ export function ProgressStatCard({
     </Card>
   );
 }
+
 
 
 
