@@ -30,7 +30,6 @@ const timezoneOptions = [
 const chargeModelOptions = [
   { value: "PER_LEAD", label: "Por Lead" },
   { value: "PER_SALE", label: "Por Venta" },
-  { value: "SUBSCRIPTION", label: "Suscripción" },
 ];
 
 // Default package structure
@@ -58,11 +57,10 @@ export default function EditTenantPage({ params }: Props) {
 
   // Pricing state
   const [pricingForm, setPricingForm] = useState({
-    charge_model: "PER_LEAD" as "PER_LEAD" | "PER_SALE" | "SUBSCRIPTION",
+    charge_model: "PER_LEAD" as "PER_LEAD" | "PER_SALE",
     cost_per_lead: 10,
     success_fee_percentage: 0,
     success_fee_flat: 0,
-    monthly_fee: 0,
     low_credit_threshold: 10,
     auto_refund_duplicates: true,
     auto_refund_spam: true,
@@ -101,11 +99,10 @@ export default function EditTenantPage({ params }: Props) {
   useEffect(() => {
     if (pricing) {
       setPricingForm({
-        charge_model: pricing.charge_model || "PER_LEAD",
+        charge_model: (pricing.charge_model === "SUBSCRIPTION" ? "PER_LEAD" : pricing.charge_model) || "PER_LEAD",
         cost_per_lead: pricing.cost_per_lead || 10,
         success_fee_percentage: (pricing as any).success_fee_percentage || 0,
         success_fee_flat: (pricing as any).success_fee_flat || 0,
-        monthly_fee: (pricing as any).monthly_fee || 0,
         low_credit_threshold: pricing.low_credit_threshold || 10,
         auto_refund_duplicates: pricing.auto_refund_duplicates ?? true,
         auto_refund_spam: pricing.auto_refund_spam ?? true,
@@ -423,24 +420,6 @@ export default function EditTenantPage({ params }: Props) {
                 </>
               )}
 
-              {/* SUBSCRIPTION: Show monthly fee */}
-              {pricingForm.charge_model === "SUBSCRIPTION" && (
-                <Input
-                  label="Valor mensual (USD)"
-                  type="number"
-                  min={0}
-                  step={0.01}
-                  value={pricingForm.monthly_fee}
-                  onChange={(e) =>
-                    setPricingForm((prev) => ({
-                      ...prev,
-                      monthly_fee: parseFloat(e.target.value) || 0,
-                    }))
-                  }
-                  hint="Costo mensual de la suscripción"
-                />
-              )}
-
               <Input
                 label="Umbral bajo de créditos"
                 type="number"
@@ -487,97 +466,97 @@ export default function EditTenantPage({ params }: Props) {
             description="Configurá los paquetes disponibles para compra"
             className="mt-8"
           >
-            <div className="space-y-4">
-              {pricingForm.packages.map((pkg, index) => (
-                <div
-                  key={pkg.id}
-                  className="flex items-center gap-4 p-4 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)]"
-                >
-                  <Input
-                    label="Nombre"
-                    value={pkg.name}
-                    onChange={(e) => updatePackage(index, "name", e.target.value)}
-                    placeholder="Ej: Starter"
-                    className="flex-1"
-                  />
-                  <Input
-                    label="Créditos"
-                    type="number"
-                    min={1}
-                    value={pkg.credits}
-                    onChange={(e) =>
-                      updatePackage(index, "credits", parseInt(e.target.value) || 0)
-                    }
-                    className="w-28"
-                  />
-                  {/* Price: calculated for PER_LEAD, editable otherwise */}
-                  {pricingForm.charge_model === "PER_LEAD" ? (
-                    <div className="w-32">
-                      <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
-                        Precio (USD)
-                      </label>
-                      <div className="h-10 px-3 flex items-center rounded-lg bg-[var(--bg-primary)] border border-[var(--border-primary)] text-[var(--text-primary)] font-medium">
-                        ${pkg.price.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
-                      </div>
-                    </div>
-                  ) : (
-                    <Input
-                      label="Precio (USD)"
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      value={pkg.price}
-                      onChange={(e) =>
-                        updatePackage(index, "price", parseFloat(e.target.value) || 0)
-                      }
-                      className="w-32"
-                    />
-                  )}
-                  <Input
-                    label="Descuento %"
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={pkg.discount_pct || ""}
-                    onChange={(e) =>
-                      updatePackage(
-                        index,
-                        "discount_pct",
-                        e.target.value ? parseFloat(e.target.value) : undefined
-                      )
-                    }
-                    className="w-28"
-                  />
-                  <div className="flex items-end gap-2 pb-1">
-                    <Switch
-                      label="Popular"
-                      checked={pkg.is_popular || false}
-                      onCheckedChange={(checked) =>
-                        updatePackage(index, "is_popular", checked)
-                      }
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removePackage(index)}
-                      className="text-red-400 hover:text-red-300"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
+            {pricingForm.packages.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="text-left text-xs font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
+                      <th className="pb-3 pr-4">Nombre</th>
+                      <th className="pb-3 pr-4">Créditos</th>
+                      <th className="pb-3 pr-4">Precio (USD)</th>
+                      <th className="pb-3 pr-4">Descuento %</th>
+                      <th className="pb-3 pr-4 text-center">Popular</th>
+                      <th className="pb-3 w-10"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--border-primary)]">
+                    {pricingForm.packages.map((pkg, index) => (
+                      <tr key={pkg.id} className="group">
+                        <td className="py-3 pr-4">
+                          <input
+                            type="text"
+                            value={pkg.name}
+                            onChange={(e) => updatePackage(index, "name", e.target.value)}
+                            placeholder="Nombre"
+                            className="w-full px-3 py-2 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-lg text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] focus:border-transparent"
+                          />
+                        </td>
+                        <td className="py-3 pr-4">
+                          <input
+                            type="number"
+                            min={1}
+                            value={pkg.credits}
+                            onChange={(e) => updatePackage(index, "credits", parseInt(e.target.value) || 0)}
+                            className="w-24 px-3 py-2 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-lg text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] focus:border-transparent"
+                          />
+                        </td>
+                        <td className="py-3 pr-4">
+                          {pricingForm.charge_model === "PER_LEAD" ? (
+                            <span className="px-3 py-2 text-sm font-medium text-[var(--text-primary)]">
+                              ${pkg.price.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                            </span>
+                          ) : (
+                            <input
+                              type="number"
+                              min={0}
+                              step={0.01}
+                              value={pkg.price}
+                              onChange={(e) => updatePackage(index, "price", parseFloat(e.target.value) || 0)}
+                              className="w-28 px-3 py-2 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-lg text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] focus:border-transparent"
+                            />
+                          )}
+                        </td>
+                        <td className="py-3 pr-4">
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={pkg.discount_pct || ""}
+                            onChange={(e) => updatePackage(index, "discount_pct", e.target.value ? parseFloat(e.target.value) : undefined)}
+                            className="w-20 px-3 py-2 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-lg text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] focus:border-transparent"
+                          />
+                        </td>
+                        <td className="py-3 pr-4 text-center">
+                          <Switch
+                            checked={pkg.is_popular || false}
+                            onCheckedChange={(checked) => updatePackage(index, "is_popular", checked)}
+                          />
+                        </td>
+                        <td className="py-3">
+                          <button
+                            type="button"
+                            onClick={() => removePackage(index)}
+                            className="p-1.5 text-[var(--text-tertiary)] hover:text-red-400 rounded transition-colors opacity-0 group-hover:opacity-100"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={addPackage}
-                leftIcon={<Plus className="h-4 w-4" />}
-              >
-                Agregar paquete
-              </Button>
-            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={addPackage}
+              leftIcon={<Plus className="h-4 w-4" />}
+              className={pricingForm.packages.length > 0 ? "mt-4" : ""}
+            >
+              Agregar paquete
+            </Button>
           </CardSection>
         </CardContent>
 
