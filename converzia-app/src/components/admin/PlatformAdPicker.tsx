@@ -67,7 +67,7 @@ interface PlatformAdPickerProps {
     campaign_id: string;
     campaign_name: string;
   }) => void;
-  tenantId: string;
+  tenantId?: string; // Optional - Meta connection is global
   platform: PlatformType;
 }
 
@@ -103,7 +103,7 @@ export function PlatformAdPicker({
     if (isOpen && platform === "META") {
       fetchAdAccounts();
     }
-  }, [isOpen, tenantId, platform]);
+  }, [isOpen, platform]);
 
   // Fetch campaigns when account is selected
   useEffect(() => {
@@ -117,9 +117,8 @@ export function PlatformAdPicker({
     setError(null);
     
     try {
-      const response = await fetch(
-        `/api/integrations/meta/ads?tenant_id=${tenantId}`
-      );
+      // Meta connection is global (Admin's account), no tenant_id needed
+      const response = await fetch(`/api/integrations/meta/ads`);
       const data = await response.json();
       
       if (!response.ok) {
@@ -144,9 +143,7 @@ export function PlatformAdPicker({
     setError(null);
     
     try {
-      const response = await fetch(
-        `/api/integrations/meta/ads?tenant_id=${tenantId}&account_id=${accountId}`
-      );
+      const response = await fetch(`/api/integrations/meta/ads?account_id=${accountId}`);
       const data = await response.json();
       
       if (!response.ok) {

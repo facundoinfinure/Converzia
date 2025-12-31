@@ -5,6 +5,7 @@ const META_APP_ID = process.env.META_APP_ID;
 const META_REDIRECT_URI = process.env.META_REDIRECT_URI || `${process.env.NEXT_PUBLIC_APP_URL}/api/integrations/meta/callback`;
 
 // GET /api/integrations/meta/auth - Initiate Meta OAuth flow
+// Meta Ads is a global integration (Admin connects their account)
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
@@ -19,17 +20,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get tenant_id from query params
-    const searchParams = request.nextUrl.searchParams;
-    const tenantId = searchParams.get("tenant_id");
-
-    if (!tenantId) {
-      return NextResponse.json(
-        { error: "tenant_id is required" },
-        { status: 400 }
-      );
-    }
-
     if (!META_APP_ID) {
       return NextResponse.json(
         { error: "Meta App ID not configured" },
@@ -37,10 +27,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Create state parameter with tenant_id
+    // Create state parameter - Meta integration is global (no tenant_id)
     const state = Buffer.from(
       JSON.stringify({
-        tenant_id: tenantId,
         user_id: user.id,
         timestamp: Date.now(),
       })

@@ -7,6 +7,7 @@ import {
 } from "@/lib/services/meta-ads";
 
 // GET /api/integrations/meta/ads - List ads from connected Meta account
+// The Meta connection is global (Admin's account), not per-tenant
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
@@ -21,38 +22,46 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get tenant_id from query params
     const searchParams = request.nextUrl.searchParams;
-    const tenantId = searchParams.get("tenant_id");
     const accountId = searchParams.get("account_id");
 
-    if (!tenantId) {
-      return NextResponse.json(
-        { error: "tenant_id is required" },
-        { status: 400 }
-      );
-    }
-
-    // Get Meta integration for this tenant
-    const { data: integration, error: integrationError } = await supabase
+    // Look for a global Meta Ads integration (any active one - Admin's connection)
+    // First try to find one without tenant_id (global), then fall back to any active one
+    let integration;
+    
+    const { data: globalIntegration } = await supabase
       .from("tenant_integrations")
       .select("*")
-      .eq("tenant_id", tenantId)
       .eq("integration_type", "META_ADS")
       .eq("is_active", true)
+      .is("tenant_id", null)
       .maybeSingle();
 
-    if (integrationError) {
-      console.error("Error fetching Meta integration:", integrationError);
-      return NextResponse.json(
-        { error: "Failed to fetch integration" },
-        { status: 500 }
-      );
+    if (globalIntegration) {
+      integration = globalIntegration;
+    } else {
+      // Fall back to any active META_ADS integration (legacy per-tenant setup)
+      const { data: anyIntegration, error: integrationError } = await supabase
+        .from("tenant_integrations")
+        .select("*")
+        .eq("integration_type", "META_ADS")
+        .eq("is_active", true)
+        .limit(1)
+        .maybeSingle();
+
+      if (integrationError) {
+        console.error("Error fetching Meta integration:", integrationError);
+        return NextResponse.json(
+          { error: "Failed to fetch integration" },
+          { status: 500 }
+        );
+      }
+      integration = anyIntegration;
     }
 
     if (!integration) {
       return NextResponse.json(
-        { error: "Meta Ads not connected for this tenant" },
+        { error: "Meta Ads no conectado. Conectá tu cuenta de Meta desde Configuración.", not_connected: true },
         { status: 404 }
       );
     }

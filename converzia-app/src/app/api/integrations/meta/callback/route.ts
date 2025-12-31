@@ -40,27 +40,27 @@ export async function GET(request: NextRequest) {
     }
 
     // Decode state
-    let stateData: { tenant_id: string; user_id: string; timestamp: number };
+    let stateData: { user_id: string; timestamp: number };
     try {
       stateData = JSON.parse(Buffer.from(state, "base64").toString("utf-8"));
     } catch {
       return NextResponse.redirect(
-        new URL("/admin/tenants?meta_error=invalid_state", request.url)
+        new URL("/admin/settings?meta_error=invalid_state", request.url)
       );
     }
 
-    const { tenant_id, user_id } = stateData;
+    const { user_id } = stateData;
 
     // Validate state timestamp (5 minute expiry)
     if (Date.now() - stateData.timestamp > 5 * 60 * 1000) {
       return NextResponse.redirect(
-        new URL(`/admin/tenants/${tenant_id}?meta_error=expired`, request.url)
+        new URL("/admin/settings?meta_error=expired", request.url)
       );
     }
 
     if (!META_APP_ID || !META_APP_SECRET) {
       return NextResponse.redirect(
-        new URL(`/admin/tenants/${tenant_id}?meta_error=config_missing`, request.url)
+        new URL("/admin/settings?meta_error=config_missing", request.url)
       );
     }
 
@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
     if (!tokenResponse.ok || !tokenData.access_token) {
       console.error("Failed to get Meta access token:", tokenData);
       return NextResponse.redirect(
-        new URL(`/admin/tenants/${tenant_id}?meta_error=token_failed`, request.url)
+        new URL("/admin/settings?meta_error=token_failed", request.url)
       );
     }
 
@@ -108,9 +108,10 @@ export async function GET(request: NextRequest) {
 
     const supabase = await createClient();
 
-    // Store integration
+    // Store integration - Meta Ads is a GLOBAL integration (Admin's account)
+    // We store it without tenant_id so it can be used for all tenants
     const integrationData = {
-      tenant_id,
+      tenant_id: null, // Global integration, not tied to a specific tenant
       integration_type: "META_ADS" as const,
       name: `Meta Ads - ${userData.name || "Connected"}`,
       status: "ACTIVE",
@@ -119,6 +120,7 @@ export async function GET(request: NextRequest) {
         user_id: userData.id,
         user_name: userData.name,
         ad_accounts: adAccountsData.data || [],
+        connected_by: user_id, // Track which admin connected it
       },
       oauth_tokens: {
         access_token: accessToken,
@@ -128,12 +130,12 @@ export async function GET(request: NextRequest) {
       },
     };
 
-    // Check if integration already exists
+    // Check if a global Meta Ads integration already exists
     const { data: existing } = await supabase
       .from("tenant_integrations")
       .select("id")
-      .eq("tenant_id", tenant_id)
       .eq("integration_type", "META_ADS")
+      .is("tenant_id", null)
       .maybeSingle();
 
     if (existing) {
@@ -149,7 +151,7 @@ export async function GET(request: NextRequest) {
       if (updateError) {
         console.error("Error updating Meta integration:", updateError);
         return NextResponse.redirect(
-          new URL(`/admin/tenants/${tenant_id}?meta_error=save_failed`, request.url)
+          new URL("/admin/settings?meta_error=save_failed", request.url)
         );
       }
     } else {
@@ -161,19 +163,19 @@ export async function GET(request: NextRequest) {
       if (insertError) {
         console.error("Error creating Meta integration:", insertError);
         return NextResponse.redirect(
-          new URL(`/admin/tenants/${tenant_id}?meta_error=save_failed`, request.url)
+          new URL("/admin/settings?meta_error=save_failed", request.url)
         );
       }
     }
 
-    // Redirect back to tenant page with success
+    // Redirect to ads mapping page with success
     return NextResponse.redirect(
-      new URL(`/admin/tenants/${tenant_id}?meta_success=true`, request.url)
+      new URL("/admin/ads-mapping?meta_success=true", request.url)
     );
   } catch (error) {
     console.error("Error in Meta OAuth callback:", error);
     return NextResponse.redirect(
-      new URL("/admin/tenants?meta_error=unknown", request.url)
+      new URL("/admin/settings?meta_error=unknown", request.url)
     );
   }
 }

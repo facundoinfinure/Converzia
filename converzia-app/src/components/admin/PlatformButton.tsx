@@ -89,6 +89,7 @@ interface PlatformButtonProps {
   selected?: boolean;
   disabled?: boolean;
   size?: "sm" | "md" | "lg";
+  iconOnly?: boolean;
 }
 
 export function PlatformButton({
@@ -97,9 +98,40 @@ export function PlatformButton({
   selected = false,
   disabled = false,
   size = "md",
+  iconOnly = false,
 }: PlatformButtonProps) {
   const config = platforms[platform];
   const isAvailable = config.available && !disabled;
+
+  // Icon-only mode for compact table display
+  if (iconOnly) {
+    return (
+      <button
+        type="button"
+        onClick={isAvailable ? onClick : undefined}
+        disabled={!isAvailable}
+        title={isAvailable ? config.name : `${config.name} - Próximamente`}
+        className={cn(
+          "relative flex items-center justify-center rounded-lg transition-all duration-200",
+          "h-9 w-9",
+          isAvailable
+            ? cn(
+                config.bgColor,
+                "cursor-pointer hover:scale-105",
+                selected && "ring-2 ring-[var(--accent-primary)]"
+              )
+            : "bg-[var(--bg-tertiary)] cursor-not-allowed opacity-40"
+        )}
+      >
+        <div className={cn(
+          "h-5 w-5",
+          isAvailable ? config.color : "text-[var(--text-tertiary)]"
+        )}>
+          <config.logo />
+        </div>
+      </button>
+    );
+  }
 
   const sizeClasses = {
     sm: "h-16 w-20",
@@ -150,15 +182,17 @@ interface PlatformSelectorProps {
   selectedPlatform?: PlatformType;
   onSelect: (platform: PlatformType) => void;
   size?: "sm" | "md" | "lg";
+  iconOnly?: boolean;
 }
 
 export function PlatformSelector({
   selectedPlatform,
   onSelect,
   size = "md",
+  iconOnly = false,
 }: PlatformSelectorProps) {
   return (
-    <div className="flex flex-wrap gap-3">
+    <div className={cn("flex", iconOnly ? "gap-1.5" : "flex-wrap gap-3")}>
       {(Object.keys(platforms) as PlatformType[]).map((platform) => (
         <PlatformButton
           key={platform}
@@ -166,6 +200,7 @@ export function PlatformSelector({
           selected={selectedPlatform === platform}
           onClick={() => onSelect(platform)}
           size={size}
+          iconOnly={iconOnly}
         />
       ))}
     </div>
