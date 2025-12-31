@@ -83,22 +83,34 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // If no account_id specified, return list of ad accounts
+    const config = integration.config as any;
+    const selectedAccountId = config?.selected_ad_account_id;
+
+    // If no account_id specified, return info about selected account or list of accounts
     if (!accountId) {
-      const adAccounts = (integration.config as any)?.ad_accounts || [];
+      const adAccounts = config?.ad_accounts || [];
       
       // If no cached accounts, fetch from API
       if (adAccounts.length === 0) {
         const accounts = await getAdAccounts(tokens.access_token);
-        return NextResponse.json({ ad_accounts: accounts });
+        return NextResponse.json({ 
+          ad_accounts: accounts,
+          selected_ad_account_id: selectedAccountId,
+        });
       }
 
-      return NextResponse.json({ ad_accounts: adAccounts });
+      return NextResponse.json({ 
+        ad_accounts: adAccounts,
+        selected_ad_account_id: selectedAccountId,
+      });
     }
+
+    // Use the provided accountId or the selected one
+    const targetAccountId = accountId;
 
     // Fetch campaign structure for specified account
     const { campaigns, adsets, ads } = await getCampaignStructure(
-      accountId,
+      targetAccountId,
       tokens.access_token
     );
 
@@ -151,7 +163,7 @@ export async function GET(request: NextRequest) {
     }));
 
     return NextResponse.json({
-      account_id: accountId,
+      account_id: targetAccountId,
       campaigns: structure,
       totals: {
         campaigns: campaigns.length,

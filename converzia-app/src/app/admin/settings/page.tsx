@@ -91,6 +91,7 @@ export default function SettingsPage() {
     ad_accounts?: any[];
     pages?: any[];
     whatsapp_business_accounts?: any[];
+    selected_ad_account_id?: string;
     selected_page_id?: string;
     selected_waba_id?: string;
     selected_phone_number_id?: string;
@@ -586,20 +587,39 @@ export default function SettingsPage() {
                       </div>
                     </div>
 
-                    {/* Ad Accounts */}
+                    {/* Ad Account Selector */}
                     {metaConfig.ad_accounts && metaConfig.ad_accounts.length > 0 && (
                       <div>
                         <h4 className="text-sm font-medium text-[var(--text-primary)] mb-2 flex items-center gap-2">
                           <BarChart3 className="h-4 w-4" />
-                          Cuentas Publicitarias (Marketing API)
+                          Cuenta Publicitaria (para Ads y Costos)
                         </h4>
-                        <div className="flex flex-wrap gap-2">
+                        <p className="text-xs text-[var(--text-tertiary)] mb-3">
+                          Seleccioná la cuenta que usás para tus campañas. Se usará para mapear ads y sincronizar costos.
+                        </p>
+                        <select
+                          value={metaConfig.selected_ad_account_id || ""}
+                          onChange={(e) => handleUpdateMetaConfig({ selected_ad_account_id: e.target.value })}
+                          className="w-full px-4 py-2.5 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] focus:border-[var(--accent-primary)]"
+                        >
+                          <option value="">Seleccionar cuenta publicitaria...</option>
                           {metaConfig.ad_accounts.map((acc: any) => (
-                            <Badge key={acc.id} variant="info" size="sm">
+                            <option key={acc.id} value={acc.account_id || acc.id}>
                               {acc.name || acc.account_id || acc.id}
-                            </Badge>
+                            </option>
                           ))}
-                        </div>
+                        </select>
+                        {metaConfig.selected_ad_account_id && (
+                          <p className="text-xs text-green-500 mt-2 flex items-center gap-1">
+                            <CheckCircle className="h-3 w-3" />
+                            Cuenta seleccionada: {metaConfig.ad_accounts.find((a: any) => (a.account_id || a.id) === metaConfig.selected_ad_account_id)?.name || metaConfig.selected_ad_account_id}
+                          </p>
+                        )}
+                        {!metaConfig.selected_ad_account_id && (
+                          <p className="text-xs text-amber-500 mt-2">
+                            ⚠️ Seleccioná una cuenta para poder mapear ads y sincronizar costos
+                          </p>
+                        )}
                       </div>
                     )}
 

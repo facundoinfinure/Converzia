@@ -57,6 +57,7 @@ export async function GET(request: NextRequest) {
         business_name: waba.business_name,
         phone_numbers: waba.phone_numbers || [],
       })),
+      selected_ad_account_id: config?.selected_ad_account_id,
       selected_page_id: config?.selected_page_id,
       selected_waba_id: config?.selected_waba_id,
       selected_phone_number_id: config?.selected_phone_number_id,
@@ -86,7 +87,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { selected_page_id, selected_waba_id, selected_phone_number_id } = body;
+    const { selected_ad_account_id, selected_page_id, selected_waba_id, selected_phone_number_id } = body;
 
     // Get existing integration
     const { data: integration, error: fetchError } = await supabase
@@ -107,6 +108,7 @@ export async function PATCH(request: NextRequest) {
     const currentConfig = integration.config as any;
     const updatedConfig = {
       ...currentConfig,
+      ...(selected_ad_account_id !== undefined && { selected_ad_account_id }),
       ...(selected_page_id !== undefined && { selected_page_id }),
       ...(selected_waba_id !== undefined && { selected_waba_id }),
       ...(selected_phone_number_id !== undefined && { selected_phone_number_id }),

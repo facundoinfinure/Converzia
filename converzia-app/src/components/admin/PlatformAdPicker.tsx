@@ -85,6 +85,7 @@ export function PlatformAdPicker({
   // Ad accounts
   const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [hasConfiguredAccount, setHasConfiguredAccount] = useState(false);
   
   // Campaign structure
   const [campaigns, setCampaigns] = useState<MetaCampaign[]>([]);
@@ -127,9 +128,16 @@ export function PlatformAdPicker({
       
       setAdAccounts(data.ad_accounts || []);
       
-      // Auto-select first account if only one
-      if (data.ad_accounts?.length === 1) {
+      // Auto-select the configured account from global settings
+      if (data.selected_ad_account_id) {
+        setSelectedAccountId(data.selected_ad_account_id);
+        setHasConfiguredAccount(true);
+      } else if (data.ad_accounts?.length === 1) {
+        // Fallback: auto-select first account if only one
         setSelectedAccountId(data.ad_accounts[0].account_id || data.ad_accounts[0].id);
+        setHasConfiguredAccount(false);
+      } else {
+        setHasConfiguredAccount(false);
       }
     } catch (err: any) {
       setError(err.message);
@@ -256,8 +264,8 @@ export function PlatformAdPicker({
       }
     >
       <div className="space-y-4">
-        {/* Account selector */}
-        {adAccounts.length > 1 && (
+        {/* Account selector - only show if not configured globally or multiple accounts */}
+        {!hasConfiguredAccount && adAccounts.length > 1 && (
           <div>
             <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
               Cuenta publicitaria
@@ -274,6 +282,19 @@ export function PlatformAdPicker({
                 </option>
               ))}
             </select>
+            <p className="text-xs text-[var(--text-tertiary)] mt-1">
+              💡 Podés configurar una cuenta por defecto en Configuración → Meta Business
+            </p>
+          </div>
+        )}
+        
+        {/* Show selected account info if configured */}
+        {hasConfiguredAccount && selectedAccountId && (
+          <div className="flex items-center gap-2 p-3 bg-[var(--bg-tertiary)] rounded-lg">
+            <Check className="h-4 w-4 text-green-500" />
+            <span className="text-sm text-[var(--text-primary)]">
+              Cuenta: <strong>{adAccounts.find(a => (a.account_id || a.id) === selectedAccountId)?.name || selectedAccountId}</strong>
+            </span>
           </div>
         )}
 
