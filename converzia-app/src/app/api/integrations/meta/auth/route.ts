@@ -47,12 +47,11 @@ export async function GET(request: NextRequest) {
     ).toString("base64");
 
     // Build Meta OAuth URL
-    // Scopes needed: ads_read for reading ads, ads_management for creating/managing
+    // Scopes needed for reading ad metrics and costs
     const scopes = [
       "ads_read",
-      "ads_management",
-      "business_management",
-      "pages_read_engagement",
+      "ads_management", 
+      "read_insights",
     ].join(",");
 
     const authUrl = new URL("https://www.facebook.com/v18.0/dialog/oauth");

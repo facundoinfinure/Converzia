@@ -124,7 +124,7 @@ export async function GET(request: NextRequest) {
         access_token: accessToken,
         token_type: "bearer",
         expires_at: Date.now() + expiresIn * 1000,
-        scope: "ads_read,ads_management,business_management",
+        scope: "ads_read,ads_management,read_insights",
       },
     };
 
