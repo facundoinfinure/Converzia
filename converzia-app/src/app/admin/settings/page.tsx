@@ -82,35 +82,41 @@ export default function SettingsPage() {
   // Connection status
   const [connectionStatus, setConnectionStatus] = useState<Record<string, "success" | "error" | "testing" | null>>({});
 
-  // Meta Ads OAuth state
-  const [metaAdsConnected, setMetaAdsConnected] = useState<boolean | null>(null);
-  const [metaAdsConnecting, setMetaAdsConnecting] = useState(false);
-  const [metaAdsInfo, setMetaAdsInfo] = useState<{ userName?: string; adAccounts?: any[] } | null>(null);
+  // Unified Meta OAuth state
+  const [metaConnected, setMetaConnected] = useState<boolean | null>(null);
+  const [metaConnecting, setMetaConnecting] = useState(false);
+  const [metaConfig, setMetaConfig] = useState<{
+    user_name?: string;
+    ad_accounts?: any[];
+    pages?: any[];
+    whatsapp_business_accounts?: any[];
+    selected_page_id?: string;
+    selected_waba_id?: string;
+    selected_phone_number_id?: string;
+  } | null>(null);
 
-  // Check Meta Ads OAuth connection
-  const checkMetaAdsConnection = useCallback(async () => {
+  // Check Meta OAuth connection
+  const checkMetaConnection = useCallback(async () => {
     try {
-      const response = await fetch("/api/integrations/meta/ads");
+      const response = await fetch("/api/integrations/meta/config");
       const data = await response.json();
       
-      if (response.ok) {
-        setMetaAdsConnected(true);
-        setMetaAdsInfo({
-          adAccounts: data.ad_accounts || [],
-        });
+      if (response.ok && data.connected) {
+        setMetaConnected(true);
+        setMetaConfig(data);
       } else {
-        setMetaAdsConnected(false);
-        setMetaAdsInfo(null);
+        setMetaConnected(false);
+        setMetaConfig(null);
       }
     } catch {
-      setMetaAdsConnected(false);
-      setMetaAdsInfo(null);
+      setMetaConnected(false);
+      setMetaConfig(null);
     }
   }, []);
 
-  // Connect Meta Ads
-  const handleConnectMetaAds = async () => {
-    setMetaAdsConnecting(true);
+  // Connect Meta (unified OAuth)
+  const handleConnectMeta = async () => {
+    setMetaConnecting(true);
     try {
       const response = await fetch("/api/integrations/meta/auth");
       const data = await response.json();
@@ -118,43 +124,67 @@ export default function SettingsPage() {
       if (data.url) {
         window.location.href = data.url;
       } else {
-        toast.error("Error al iniciar conexión con Meta Ads");
-        setMetaAdsConnecting(false);
+        toast.error(data.error || "Error al iniciar conexión con Meta");
+        setMetaConnecting(false);
       }
     } catch {
-      toast.error("Error al conectar con Meta Ads");
-      setMetaAdsConnecting(false);
+      toast.error("Error al conectar con Meta");
+      setMetaConnecting(false);
     }
   };
 
-  // Disconnect Meta Ads
-  const handleDisconnectMetaAds = async () => {
+  // Disconnect Meta
+  const handleDisconnectMeta = async () => {
     try {
       const response = await fetch("/api/integrations/meta/disconnect", {
         method: "POST",
       });
       
       if (response.ok) {
-        setMetaAdsConnected(false);
-        setMetaAdsInfo(null);
-        toast.success("Meta Ads desconectado correctamente");
+        setMetaConnected(false);
+        setMetaConfig(null);
+        toast.success("Meta desconectado correctamente");
       } else {
-        toast.error("Error al desconectar Meta Ads");
+        toast.error("Error al desconectar Meta");
       }
     } catch {
-      toast.error("Error al desconectar Meta Ads");
+      toast.error("Error al desconectar Meta");
     }
   };
 
-  // Check Meta Ads on mount and handle URL params
+  // Update Meta config selections
+  const handleUpdateMetaConfig = async (updates: {
+    selected_page_id?: string;
+    selected_waba_id?: string;
+    selected_phone_number_id?: string;
+  }) => {
+    try {
+      const response = await fetch("/api/integrations/meta/config", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      });
+      
+      if (response.ok) {
+        setMetaConfig((prev) => prev ? { ...prev, ...updates } : null);
+        toast.success("Configuración actualizada");
+      } else {
+        toast.error("Error al actualizar configuración");
+      }
+    } catch {
+      toast.error("Error al actualizar configuración");
+    }
+  };
+
+  // Check Meta on mount and handle URL params
   useEffect(() => {
-    checkMetaAdsConnection();
+    checkMetaConnection();
     
     // Handle OAuth callback params
     const searchParams = new URLSearchParams(window.location.search);
     if (searchParams.get("meta_success") === "true") {
-      toast.success("¡Meta Ads conectado correctamente!");
-      checkMetaAdsConnection();
+      toast.success("¡Meta conectado correctamente!");
+      checkMetaConnection();
       window.history.replaceState({}, "", "/admin/settings");
     }
     if (searchParams.get("meta_error")) {
@@ -162,7 +192,7 @@ export default function SettingsPage() {
       toast.error(`Error al conectar Meta: ${error}`);
       window.history.replaceState({}, "", "/admin/settings");
     }
-  }, [checkMetaAdsConnection, toast]);
+  }, [checkMetaConnection, toast]);
 
   // Fetch default prompts from files
   const fetchDefaultPrompts = async () => {
@@ -472,7 +502,7 @@ export default function SettingsPage() {
         <TabContent value="integrations">
           <div className="space-y-6">
             
-            {/* Meta Ads - Marketing API (OAuth) */}
+            {/* Unified Meta Integration (Marketing API + Lead Ads + WhatsApp) */}
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -482,69 +512,180 @@ export default function SettingsPage() {
                     </svg>
                   </div>
                   <div>
-                    <CardTitle>Meta Ads - Marketing API</CardTitle>
+                    <CardTitle>Meta Business</CardTitle>
                     <p className="text-sm text-[var(--text-tertiary)] mt-1">
-                      Conectá tu cuenta de Meta para mapear anuncios y sincronizar costos
+                      Conexión unificada para Ads, Lead Ads y WhatsApp
                     </p>
                   </div>
                 </div>
-                {metaAdsConnected === true && (
+                {metaConnected === true && (
                   <Badge variant="success" dot>
                     Conectado
                   </Badge>
                 )}
-                {metaAdsConnected === false && (
+                {metaConnected === false && (
                   <Badge variant="secondary">
                     No conectado
                   </Badge>
                 )}
               </CardHeader>
               <CardContent>
-                {metaAdsConnected === true && metaAdsInfo ? (
-                  <div className="space-y-4">
-                    {/* Connected info */}
-                    <div className="p-4 bg-[var(--bg-tertiary)] rounded-lg">
-                      <div className="flex items-center justify-between">
+                {metaConnected === true && metaConfig ? (
+                  <div className="space-y-6">
+                    {/* User info */}
+                    <div className="flex items-center justify-between p-4 bg-[var(--bg-tertiary)] rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <CheckCircle className="h-5 w-5 text-green-500" />
                         <div>
-                          <p className="text-sm text-[var(--text-tertiary)]">Cuentas publicitarias disponibles</p>
                           <p className="font-medium text-[var(--text-primary)]">
-                            {metaAdsInfo.adAccounts?.length || 0} cuenta(s)
+                            Conectado como {metaConfig.user_name || "Usuario de Meta"}
                           </p>
-                          {metaAdsInfo.adAccounts && metaAdsInfo.adAccounts.length > 0 && (
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              {metaAdsInfo.adAccounts.slice(0, 3).map((acc: any) => (
-                                <Badge key={acc.id} variant="info" size="sm">
-                                  {acc.name || acc.account_id || acc.id}
-                                </Badge>
-                              ))}
-                              {metaAdsInfo.adAccounts.length > 3 && (
-                                <Badge variant="secondary" size="sm">
-                                  +{metaAdsInfo.adAccounts.length - 3} más
-                                </Badge>
+                          <p className="text-sm text-[var(--text-tertiary)]">
+                            {metaConfig.ad_accounts?.length || 0} Ad Accounts • {metaConfig.pages?.length || 0} Pages • {metaConfig.whatsapp_business_accounts?.length || 0} WhatsApp
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={handleDisconnectMeta}
+                        leftIcon={<Unlink className="h-4 w-4" />}
+                      >
+                        Desconectar
+                      </Button>
+                    </div>
+
+                    {/* Ad Accounts */}
+                    {metaConfig.ad_accounts && metaConfig.ad_accounts.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-medium text-[var(--text-primary)] mb-2 flex items-center gap-2">
+                          <BarChart3 className="h-4 w-4" />
+                          Cuentas Publicitarias (Marketing API)
+                        </h4>
+                        <div className="flex flex-wrap gap-2">
+                          {metaConfig.ad_accounts.map((acc: any) => (
+                            <Badge key={acc.id} variant="info" size="sm">
+                              {acc.name || acc.account_id || acc.id}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Pages for Lead Ads */}
+                    {metaConfig.pages && metaConfig.pages.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-medium text-[var(--text-primary)] mb-2 flex items-center gap-2">
+                          <Facebook className="h-4 w-4" />
+                          Páginas (Lead Ads)
+                        </h4>
+                        <div className="space-y-2">
+                          {metaConfig.pages.map((page: any) => (
+                            <label
+                              key={page.id}
+                              className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                                metaConfig.selected_page_id === page.id
+                                  ? "border-[var(--accent-primary)] bg-[var(--accent-primary-light)]"
+                                  : "border-[var(--border-primary)] hover:border-[var(--border-secondary)]"
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name="selected_page"
+                                checked={metaConfig.selected_page_id === page.id}
+                                onChange={() => handleUpdateMetaConfig({ selected_page_id: page.id })}
+                                className="sr-only"
+                              />
+                              <div className="flex-1">
+                                <p className="font-medium text-[var(--text-primary)]">{page.name}</p>
+                                <p className="text-xs text-[var(--text-tertiary)]">{page.category || "Página"}</p>
+                              </div>
+                              {metaConfig.selected_page_id === page.id && (
+                                <CheckCircle className="h-5 w-5 text-[var(--accent-primary)]" />
+                              )}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* WhatsApp Business Accounts */}
+                    {metaConfig.whatsapp_business_accounts && metaConfig.whatsapp_business_accounts.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-medium text-[var(--text-primary)] mb-2 flex items-center gap-2">
+                          <MessageCircle className="h-4 w-4" />
+                          WhatsApp Business
+                        </h4>
+                        <div className="space-y-2">
+                          {metaConfig.whatsapp_business_accounts.map((waba: any) => (
+                            <div key={waba.id} className="space-y-2">
+                              <label
+                                className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                                  metaConfig.selected_waba_id === waba.id
+                                    ? "border-[var(--accent-primary)] bg-[var(--accent-primary-light)]"
+                                    : "border-[var(--border-primary)] hover:border-[var(--border-secondary)]"
+                                }`}
+                              >
+                                <input
+                                  type="radio"
+                                  name="selected_waba"
+                                  checked={metaConfig.selected_waba_id === waba.id}
+                                  onChange={() => handleUpdateMetaConfig({ selected_waba_id: waba.id })}
+                                  className="sr-only"
+                                />
+                                <div className="flex-1">
+                                  <p className="font-medium text-[var(--text-primary)]">{waba.name}</p>
+                                  <p className="text-xs text-[var(--text-tertiary)]">{waba.business_name || waba.id}</p>
+                                </div>
+                                {metaConfig.selected_waba_id === waba.id && (
+                                  <CheckCircle className="h-5 w-5 text-[var(--accent-primary)]" />
+                                )}
+                              </label>
+                              
+                              {/* Phone numbers for this WABA */}
+                              {metaConfig.selected_waba_id === waba.id && waba.phone_numbers && waba.phone_numbers.length > 0 && (
+                                <div className="ml-6 space-y-2">
+                                  {waba.phone_numbers.map((phone: any) => (
+                                    <label
+                                      key={phone.id}
+                                      className={`flex items-center gap-3 p-2 rounded-lg border cursor-pointer transition-colors ${
+                                        metaConfig.selected_phone_number_id === phone.id
+                                          ? "border-green-500 bg-green-500/10"
+                                          : "border-[var(--border-primary)] hover:border-[var(--border-secondary)]"
+                                      }`}
+                                    >
+                                      <input
+                                        type="radio"
+                                        name="selected_phone"
+                                        checked={metaConfig.selected_phone_number_id === phone.id}
+                                        onChange={() => handleUpdateMetaConfig({ selected_phone_number_id: phone.id })}
+                                        className="sr-only"
+                                      />
+                                      <div className="flex-1">
+                                        <p className="text-sm text-[var(--text-primary)]">{phone.display_phone_number}</p>
+                                        <p className="text-xs text-[var(--text-tertiary)]">{phone.verified_name}</p>
+                                      </div>
+                                      {metaConfig.selected_phone_number_id === phone.id && (
+                                        <CheckCircle className="h-4 w-4 text-green-500" />
+                                      )}
+                                    </label>
+                                  ))}
+                                </div>
                               )}
                             </div>
-                          )}
+                          ))}
                         </div>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={handleDisconnectMetaAds}
-                          leftIcon={<Unlink className="h-4 w-4" />}
-                        >
-                          Desconectar
-                        </Button>
                       </div>
-                    </div>
-                    
-                    <Alert variant="info">
-                      <div className="flex items-center gap-2">
-                        <BarChart3 className="h-4 w-4" />
-                        <span>
-                          Esta conexión se usa para <strong>mapear anuncios a ofertas</strong> y 
-                          <strong> sincronizar costos de publicidad</strong> para analytics.
-                        </span>
-                      </div>
-                    </Alert>
+                    )}
+
+                    {/* No assets warning */}
+                    {(!metaConfig.pages || metaConfig.pages.length === 0) && 
+                     (!metaConfig.whatsapp_business_accounts || metaConfig.whatsapp_business_accounts.length === 0) && (
+                      <Alert variant="warning">
+                        No se encontraron Pages ni WhatsApp Business Accounts. 
+                        Verificá que tu app de Meta tenga los permisos necesarios aprobados.
+                      </Alert>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -552,13 +693,13 @@ export default function SettingsPage() {
                       Conectá tu cuenta de Meta Business para poder:
                     </p>
                     <ul className="list-disc list-inside text-sm text-[var(--text-tertiary)] space-y-1">
-                      <li>Seleccionar anuncios existentes para mapear a ofertas</li>
-                      <li>Sincronizar costos de publicidad (spend, impressions, clicks)</li>
-                      <li>Calcular CPL real y margen de ganancia por oferta</li>
+                      <li><strong>Marketing API:</strong> Mapear anuncios a ofertas y sincronizar costos</li>
+                      <li><strong>Lead Ads:</strong> Recibir leads de formularios de Facebook e Instagram</li>
+                      <li><strong>WhatsApp:</strong> Enviar mensajes y gestionar conversaciones</li>
                     </ul>
                     <Button
-                      onClick={handleConnectMetaAds}
-                      isLoading={metaAdsConnecting}
+                      onClick={handleConnectMeta}
+                      isLoading={metaConnecting}
                       leftIcon={
                         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
                           <path d="M12 2.04c-5.5 0-10 4.49-10 10.02 0 5 3.66 9.15 8.44 9.9v-7H7.9v-2.9h2.54V9.85c0-2.51 1.49-3.89 3.78-3.89 1.09 0 2.23.19 2.23.19v2.47h-1.26c-1.24 0-1.63.77-1.63 1.56v1.88h2.78l-.45 2.9h-2.33v7a10 10 0 0 0 8.44-9.9c0-5.53-4.5-10.02-10-10.02Z" />
@@ -572,135 +713,73 @@ export default function SettingsPage() {
               </CardContent>
             </Card>
 
-            {/* Meta Settings - Lead Ads Webhook */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>Meta / Facebook Lead Ads</CardTitle>
-                <p className="text-sm text-[var(--text-tertiary)] mt-1">
-                  Configurá la integración con Meta para recibir leads de Facebook e Instagram
-                </p>
-              </div>
-              <ConnectionBadge status={connectionStatus.meta || null} />
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Input
-                  label="App ID"
-                  value={metaSettings.meta_app_id}
-                  onChange={(e) => setMetaSettings({ ...metaSettings, meta_app_id: e.target.value })}
-                  placeholder="123456789012345"
-                />
-                <div className="relative">
-                  <Input
-                    label="App Secret"
-                    type={getInputType("meta_app_secret")}
-                    value={metaSettings.meta_app_secret}
-                    onChange={(e) => setMetaSettings({ ...metaSettings, meta_app_secret: e.target.value })}
-                    placeholder="••••••••••••••••"
-                    rightIcon={
-                      <button type="button" onClick={() => toggleSecret("meta_app_secret")}>
-                        {showSecrets.meta_app_secret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    }
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <Input
-                    label="Page Access Token"
-                    type={getInputType("meta_page_access_token")}
-                    value={metaSettings.meta_page_access_token}
-                    onChange={(e) => setMetaSettings({ ...metaSettings, meta_page_access_token: e.target.value })}
-                    placeholder="••••••••••••••••"
-                    rightIcon={
-                      <button type="button" onClick={() => toggleSecret("meta_page_access_token")}>
-                        {showSecrets.meta_page_access_token ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    }
-                  />
-                </div>
-                <Input
-                  label="Webhook Verify Token"
-                  value={metaSettings.meta_webhook_verify_token}
-                  onChange={(e) => setMetaSettings({ ...metaSettings, meta_webhook_verify_token: e.target.value })}
-                  placeholder="my-verify-token"
-                  hint="Token para verificar las solicitudes del webhook"
-                />
-              </div>
-
-              <Alert variant="info">
-                <strong>URL del Webhook:</strong>{" "}
-                <code className="bg-card-border px-2 py-0.5 rounded">{typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/meta-leads</code>
-              </Alert>
-            </CardContent>
-            <CardFooter>
-              <Button
-                variant="secondary"
-                onClick={() => handleTestConnection("meta")}
-                disabled={connectionStatus.meta === "testing"}
-              >
-                Probar conexión
-              </Button>
-              <Button onClick={() => handleSave("meta")} isLoading={isSaving} leftIcon={<Save className="h-4 w-4" />}>
-                Guardar
-              </Button>
-            </CardFooter>
-          </Card>
-
-            {/* WhatsApp Settings */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>WhatsApp Business API</CardTitle>
-                <p className="text-sm text-[var(--text-tertiary)] mt-1">
-                  Configurá la conexión con WhatsApp Cloud API
-                </p>
-              </div>
-              <ConnectionBadge status={connectionStatus.whatsapp || null} />
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Input
-                  label="Phone Number ID"
-                  value={whatsappSettings.whatsapp_phone_number_id}
-                  onChange={(e) => setWhatsappSettings({ ...whatsappSettings, whatsapp_phone_number_id: e.target.value })}
-                  placeholder="123456789012345"
-                />
-                <Input
-                  label="Business Account ID"
-                  value={whatsappSettings.whatsapp_business_account_id}
-                  onChange={(e) => setWhatsappSettings({ ...whatsappSettings, whatsapp_business_account_id: e.target.value })}
-                  placeholder="123456789012345"
-                />
-                <div className="md:col-span-2">
-                  <Input
-                    label="Access Token"
-                    type={getInputType("whatsapp_access_token")}
-                    value={whatsappSettings.whatsapp_access_token}
-                    onChange={(e) => setWhatsappSettings({ ...whatsappSettings, whatsapp_access_token: e.target.value })}
-                    placeholder="••••••••••••••••"
-                    rightIcon={
-                      <button type="button" onClick={() => toggleSecret("whatsapp_access_token")}>
-                        {showSecrets.whatsapp_access_token ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    }
-                  />
-                </div>
-              </div>
-            </CardContent>
-            <CardFooter>
-              <Button
-                variant="secondary"
-                onClick={() => handleTestConnection("whatsapp")}
-                disabled={connectionStatus.whatsapp === "testing"}
-              >
-                Probar conexión
-              </Button>
-              <Button onClick={() => handleSave("whatsapp")} isLoading={isSaving} leftIcon={<Save className="h-4 w-4" />}>
-                Guardar
-              </Button>
-            </CardFooter>
-          </Card>
+            {/* Advanced Meta Settings (Manual fallback) */}
+            <Card>
+              <CardHeader>
+                <details className="group">
+                  <summary className="flex items-center justify-between cursor-pointer list-none">
+                    <div>
+                      <CardTitle className="text-sm">Configuración Avanzada de Meta</CardTitle>
+                      <p className="text-xs text-[var(--text-tertiary)] mt-1">
+                        App ID, Secret y Webhook (solo si OAuth no funciona)
+                      </p>
+                    </div>
+                    <svg className="h-5 w-5 text-[var(--text-tertiary)] group-open:rotate-180 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </summary>
+                  <div className="pt-4 space-y-4">
+                    <Alert variant="info" size="sm">
+                      Estos campos son opcionales si usás OAuth. Solo necesarios si tu app de Meta no tiene los permisos aprobados.
+                    </Alert>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Input
+                        label="App ID"
+                        value={metaSettings.meta_app_id}
+                        onChange={(e) => setMetaSettings({ ...metaSettings, meta_app_id: e.target.value })}
+                        placeholder="123456789012345"
+                      />
+                      <Input
+                        label="App Secret"
+                        type={getInputType("meta_app_secret")}
+                        value={metaSettings.meta_app_secret}
+                        onChange={(e) => setMetaSettings({ ...metaSettings, meta_app_secret: e.target.value })}
+                        placeholder="••••••••••••••••"
+                        rightIcon={
+                          <button type="button" onClick={() => toggleSecret("meta_app_secret")}>
+                            {showSecrets.meta_app_secret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </button>
+                        }
+                      />
+                      <Input
+                        label="Webhook Verify Token"
+                        value={metaSettings.meta_webhook_verify_token}
+                        onChange={(e) => setMetaSettings({ ...metaSettings, meta_webhook_verify_token: e.target.value })}
+                        placeholder="my-verify-token"
+                        hint="Token para verificar webhooks"
+                      />
+                    </div>
+                    <Alert variant="info" size="sm">
+                      <strong>URL del Webhook:</strong>{" "}
+                      <code className="bg-card-border px-1 py-0.5 rounded text-xs">{typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/meta-leads</code>
+                    </Alert>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => handleTestConnection("meta")}
+                        disabled={connectionStatus.meta === "testing"}
+                      >
+                        Probar conexión
+                      </Button>
+                      <Button size="sm" onClick={() => handleSave("meta")} isLoading={isSaving} leftIcon={<Save className="h-4 w-4" />}>
+                        Guardar
+                      </Button>
+                    </div>
+                  </div>
+                </details>
+              </CardHeader>
+            </Card>
 
             {/* Chatwoot Settings */}
           <Card>

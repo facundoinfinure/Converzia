@@ -24,6 +24,18 @@ export async function GET(request: NextRequest) {
 
   const supabase = createAdminClient();
   
+  // Check for OAuth Meta integration first
+  const { data: metaIntegration } = await supabase
+    .from("tenant_integrations")
+    .select("config, is_active")
+    .eq("integration_type", "META_ADS")
+    .is("tenant_id", null)
+    .maybeSingle();
+
+  const hasMetaOAuth = !!(metaIntegration?.is_active && metaIntegration?.config);
+  const metaConfig = metaIntegration?.config as any;
+  const hasSelectedPage = hasMetaOAuth && !!metaConfig?.selected_page_id;
+  
   // Obtener settings de app_settings
   const { data: settings } = await supabase
     .from("app_settings")
@@ -46,7 +58,8 @@ export async function GET(request: NextRequest) {
     meta: {
       META_APP_SECRET: !!process.env.META_APP_SECRET,
       META_WEBHOOK_VERIFY_TOKEN: !!process.env.META_WEBHOOK_VERIFY_TOKEN,
-      META_PAGE_ACCESS_TOKEN: !!(process.env.META_PAGE_ACCESS_TOKEN || settingsMap.meta_page_access_token),
+      META_PAGE_ACCESS_TOKEN: !!(hasSelectedPage || process.env.META_PAGE_ACCESS_TOKEN || settingsMap.meta_page_access_token),
+      META_OAUTH_CONNECTED: hasMetaOAuth,
     },
     chatwoot: {
       CHATWOOT_BASE_URL: !!(process.env.CHATWOOT_BASE_URL || settingsMap.chatwoot_base_url),
@@ -106,10 +119,11 @@ export async function GET(request: NextRequest) {
       description: "Número de ads mapeados a ofertas (necesario para que los leads se procesen)"
     },
     tips: allReady ? [] : [
-      !metaReady && "Configura META_APP_SECRET, META_WEBHOOK_VERIFY_TOKEN y META_PAGE_ACCESS_TOKEN",
+      !metaReady && "Conectá Meta en Configuración → Integraciones (o configura variables manualmente)",
       !chatwootReady && "Configura las variables de Chatwoot en .env.local o en app_settings",
       !openaiReady && "Configura OPENAI_API_KEY para el bot de calificación",
       (adMappingsCount || 0) === 0 && "No hay ads mapeados - los leads llegarán en estado PENDING_MAPPING",
+      hasMetaOAuth && !hasSelectedPage && "Seleccioná una página en Configuración → Meta Business para recibir leads",
     ].filter(Boolean),
   });
 }

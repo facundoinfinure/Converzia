@@ -315,23 +315,48 @@ export async function POST(request: NextRequest) {
 // ============================================
 
 async function fetchLeadDetails(leadgenId: string): Promise<any> {
-  // Get access token from settings
   const supabase = createAdminClient();
-  const { data: setting } = await queryWithTimeout(
-    supabase
-      .from("app_settings")
-      .select("value")
-      .eq("key", "meta_page_access_token")
-      .single(),
-    10000,
-    "get Meta access token",
-    false // Don't retry settings
-  );
+  let accessToken: string | null = null;
 
-  const accessToken = (setting as any)?.value || process.env.META_PAGE_ACCESS_TOKEN;
+  // First, try to get Page Access Token from unified OAuth integration
+  const { data: metaIntegration } = await (supabase as any)
+    .from("tenant_integrations")
+    .select("config")
+    .eq("integration_type", "META_ADS")
+    .is("tenant_id", null)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (metaIntegration?.config) {
+    const config = metaIntegration.config;
+    const selectedPageId = config.selected_page_id;
+    const pages = config.pages || [];
+    
+    // Find the selected page's access token
+    const selectedPage = pages.find((p: any) => p.id === selectedPageId);
+    if (selectedPage?.access_token) {
+      accessToken = selectedPage.access_token;
+      logger.info("Using OAuth Page Access Token for lead fetch", { pageId: selectedPageId });
+    }
+  }
+
+  // Fallback to legacy settings if OAuth not configured
+  if (!accessToken) {
+    const { data: setting } = await queryWithTimeout(
+      supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", "meta_page_access_token")
+        .single(),
+      10000,
+      "get Meta access token",
+      false // Don't retry settings
+    );
+    accessToken = (setting as any)?.value || process.env.META_PAGE_ACCESS_TOKEN || null;
+  }
 
   if (!accessToken) {
-    logger.error("No Meta access token configured");
+    logger.error("No Meta access token configured (OAuth or legacy)");
     return null;
   }
 

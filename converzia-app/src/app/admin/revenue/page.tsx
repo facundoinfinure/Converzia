@@ -81,11 +81,23 @@ export default function RevenueDashboardPage() {
       const { data: summaryData, error: summaryError } = await supabase
         .from("company_revenue_summary")
         .select("*")
-        .single();
+        .maybeSingle();
 
       if (summaryError && summaryError.code !== "PGRST116") {
         console.error("Error fetching summary:", summaryError);
       }
+
+      // Initialize metrics with defaults - handle null/undefined data
+      const defaultMetrics: RevenueMetrics = {
+        total_spend: 0,
+        total_revenue: 0,
+        total_profit: 0,
+        total_leads_raw: 0,
+        total_leads_ready: 0,
+        total_leads_delivered: 0,
+        avg_cpl_ready: 0,
+        avg_margin_pct: 0,
+      };
 
       if (summaryData) {
         setMetrics({
@@ -98,22 +110,33 @@ export default function RevenueDashboardPage() {
           avg_cpl_ready: parseFloat(summaryData.avg_cpl_ready) || 0,
           avg_margin_pct: parseFloat(summaryData.avg_margin_pct) || 0,
         });
+      } else {
+        // No data yet - set defaults
+        setMetrics(defaultMetrics);
       }
 
-      // Fetch revenue by tenant
-      const { data: tenantData, error: tenantError } = await supabase
-        .from("revenue_analytics")
-        .select("*")
-        .not("tenant_id", "is", null)
-        .order("revenue", { ascending: false });
+      // Fetch revenue by tenant - handle case where view might not exist yet
+      let tenantData: any[] = [];
+      try {
+        const { data, error: tenantError } = await supabase
+          .from("revenue_analytics")
+          .select("*")
+          .not("tenant_id", "is", null)
+          .order("revenue", { ascending: false });
 
-      if (tenantError) {
-        console.error("Error fetching tenant revenue:", tenantError);
+        if (tenantError) {
+          // View might not exist yet if migrations haven't run
+          console.error("Error fetching tenant revenue:", tenantError);
+        } else {
+          tenantData = data || [];
+        }
+      } catch (err) {
+        console.error("Error fetching revenue_analytics:", err);
       }
 
       // Aggregate by tenant
       const tenantMap = new Map<string, TenantRevenue>();
-      (tenantData || []).forEach((row: any) => {
+      tenantData.forEach((row: any) => {
         const existing = tenantMap.get(row.tenant_id);
         if (existing) {
           existing.platform_spend += parseFloat(row.platform_spend) || 0;
@@ -149,7 +172,7 @@ export default function RevenueDashboardPage() {
       setTenantRevenue(tenants);
 
       // Fetch revenue by offer
-      const offers = (tenantData || [])
+      const offers = tenantData
         .filter((row: any) => row.offer_id)
         .map((row: any) => ({
           offer_id: row.offer_id,
@@ -325,6 +348,23 @@ export default function RevenueDashboardPage() {
         }
       />
 
+      {/* Empty State if no data */}
+      {!isLoading && metrics && metrics.total_leads_raw === 0 && metrics.total_spend === 0 && (
+        <Card className="mb-6">
+          <CardContent className="py-12">
+            <EmptyState
+              icon={<BarChart3 className="h-12 w-12" />}
+              title="Sin datos de revenue"
+              description="Conectá Meta Ads en Configuración y sincronizá los costos de publicidad para ver el análisis de revenue."
+              action={{
+                label: "Ir a Configuración",
+                onClick: () => window.location.href = "/admin/settings",
+              }}
+            />
+          </CardContent>
+        </Card>
+      )}
+
       {/* Summary Stats */}
       {isLoading ? (
         <StatsGrid columns={4} className="mb-6">
@@ -332,7 +372,7 @@ export default function RevenueDashboardPage() {
             <Skeleton key={i} className="h-32" />
           ))}
         </StatsGrid>
-      ) : metrics ? (
+      ) : metrics && (metrics.total_leads_raw > 0 || metrics.total_spend > 0) ? (
         <StatsGrid columns={4} className="mb-6">
           <StatCard
             title="Gasto en Ads"
@@ -362,7 +402,7 @@ export default function RevenueDashboardPage() {
       ) : null}
 
       {/* Additional Stats Row */}
-      {metrics && (
+      {metrics && (metrics.total_leads_raw > 0 || metrics.total_spend > 0) && (
         <StatsGrid columns={4} className="mb-6">
           <StatCard
             title="Leads Raw"
