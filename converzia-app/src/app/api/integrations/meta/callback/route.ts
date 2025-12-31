@@ -126,21 +126,39 @@ export async function GET(request: NextRequest) {
     const userData: MetaUserResponse = await userResponse.json();
     console.log("Meta user data:", userData);
 
-    // Get ad accounts (for Marketing API)
-    const adAccountsResponse = await fetch(
-      `https://graph.facebook.com/v18.0/me/adaccounts?fields=id,name,account_id&access_token=${accessToken}`
-    );
-    const adAccountsData = await adAccountsResponse.json();
-    console.log("Ad accounts:", adAccountsData.data?.length || 0);
+    // Get ALL ad accounts (for Marketing API) - paginate through all results
+    let allAdAccounts: any[] = [];
+    let adAccountsUrl = `https://graph.facebook.com/v18.0/me/adaccounts?fields=id,name,account_id&limit=100&access_token=${accessToken}`;
+    
+    while (adAccountsUrl) {
+      const adAccountsResponse = await fetch(adAccountsUrl);
+      const adAccountsData = await adAccountsResponse.json();
+      
+      if (adAccountsData.data) {
+        allAdAccounts = [...allAdAccounts, ...adAccountsData.data];
+      }
+      
+      // Check for next page
+      adAccountsUrl = adAccountsData.paging?.next || null;
+    }
+    console.log("Total Ad accounts fetched:", allAdAccounts.length);
 
-    // Get pages with page access tokens (for Lead Ads)
-    let pagesData: any = { data: [] };
+    // Get ALL pages with page access tokens (for Lead Ads) - paginate
+    let allPages: any[] = [];
+    let pagesUrl: string | null = `https://graph.facebook.com/v18.0/me/accounts?fields=id,name,access_token,category&limit=100&access_token=${accessToken}`;
+    
     try {
-      const pagesResponse = await fetch(
-        `https://graph.facebook.com/v18.0/me/accounts?fields=id,name,access_token,category&access_token=${accessToken}`
-      );
-      pagesData = await pagesResponse.json();
-      console.log("Pages:", pagesData.data?.length || 0);
+      while (pagesUrl) {
+        const pagesResponse = await fetch(pagesUrl);
+        const pagesData = await pagesResponse.json();
+        
+        if (pagesData.data) {
+          allPages = [...allPages, ...pagesData.data];
+        }
+        
+        pagesUrl = pagesData.paging?.next || null;
+      }
+      console.log("Total Pages fetched:", allPages.length);
     } catch (err) {
       console.error("Error fetching pages:", err);
     }
@@ -205,9 +223,9 @@ export async function GET(request: NextRequest) {
         user_name: userData.name,
         connected_by: user_id,
         // Marketing API assets
-        ad_accounts: adAccountsData.data || [],
+        ad_accounts: allAdAccounts,
         // Lead Ads assets (Pages with their access tokens)
-        pages: (pagesData.data || []).map((page: any) => ({
+        pages: allPages.map((page: any) => ({
           id: page.id,
           name: page.name,
           category: page.category,
@@ -216,7 +234,7 @@ export async function GET(request: NextRequest) {
         // WhatsApp assets
         whatsapp_business_accounts: wabaData.data || [],
         // Selected items (to be set in Settings UI)
-        selected_page_id: (pagesData.data || [])[0]?.id || null,
+        selected_page_id: allPages[0]?.id || null,
         selected_waba_id: (wabaData.data || [])[0]?.id || null,
         selected_phone_number_id: (wabaData.data || [])[0]?.phone_numbers?.[0]?.id || null,
       },
