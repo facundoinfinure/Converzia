@@ -118,7 +118,7 @@ export function TabTrigger({
         "flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-all duration-200",
         "focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-background",
         isActive
-          ? "bg-primary-500/20 text-primary-400 border border-primary-500/30"
+          ? "bg-primary-500/30 text-white border border-primary-500/50"
           : "text-slate-400 hover:text-white hover:bg-card-border",
         disabled && "opacity-50 cursor-not-allowed",
         className
@@ -129,9 +129,9 @@ export function TabTrigger({
       {count !== undefined && (
         <span
           className={cn(
-            "ml-1 px-1.5 py-0.5 text-xs rounded-md",
+            "ml-1 px-1.5 py-0.5 text-xs rounded-md font-semibold",
             isActive
-              ? "bg-primary-500/30 text-primary-300"
+              ? "bg-primary-500/50 text-white"
               : "bg-slate-700 text-slate-400"
           )}
         >
@@ -231,6 +231,7 @@ export function VerticalTabs({
     </Tabs>
   );
 }
+
 
 
 

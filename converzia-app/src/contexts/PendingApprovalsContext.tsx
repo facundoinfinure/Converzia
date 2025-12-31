@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { queryWithTimeout } from "@/lib/utils/timeout";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 
 interface PendingApproval {
   id: string;
