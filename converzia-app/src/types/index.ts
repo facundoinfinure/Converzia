@@ -137,6 +137,7 @@ export interface TenantIntegration {
   tenant_id: string;
   integration_type: "GOOGLE_SHEETS" | "TOKKO" | "WEBHOOK";
   config: GoogleSheetsConfig | TokkoConfig | WebhookConfig;
+  oauth_tokens?: GoogleOAuthTokens | null;
   is_active: boolean;
   last_sync_at: string | null;
   created_at: string;
@@ -147,6 +148,17 @@ export interface GoogleSheetsConfig {
   spreadsheet_id: string;
   sheet_name: string;
   column_mapping: Record<string, string>;
+  // Legacy: Service Account (optional, for backwards compatibility)
+  service_account_json?: string;
+}
+
+export interface GoogleOAuthTokens {
+  access_token: string;
+  refresh_token: string;
+  expires_at: number; // Unix timestamp
+  email: string;
+  token_type: string;
+  scope: string;
 }
 
 export interface TokkoConfig {

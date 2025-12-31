@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   Building2,
@@ -106,8 +106,32 @@ interface Props {
 export default function TenantDetailPage({ params }: Props) {
   const { id } = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const toast = useToast();
   const supabase = createClient();
+
+  // Handle OAuth callback success message
+  useEffect(() => {
+    const googleConnected = searchParams.get("google_connected");
+    const error = searchParams.get("error");
+
+    if (googleConnected === "true") {
+      toast.success("Cuenta de Google conectada correctamente");
+      // Clean up URL
+      router.replace(`/admin/tenants/${id}`, { scroll: false });
+    } else if (error) {
+      const errorMessages: Record<string, string> = {
+        google_auth_denied: "Acceso a Google denegado",
+        google_auth_invalid: "Error de autenticación con Google",
+        google_auth_no_tokens: "No se recibieron tokens de Google",
+        google_auth_save_failed: "Error al guardar la conexión",
+        google_not_configured: "Google OAuth no está configurado",
+        google_auth_failed: "Error de autenticación con Google",
+      };
+      toast.error(errorMessages[error] || "Error de autenticación");
+      router.replace(`/admin/tenants/${id}`, { scroll: false });
+    }
+  }, [searchParams, router, id, toast]);
   const { tenant, pricing, isLoading, error, refetch } = useTenant(id);
   const { updateTenantStatus, isLoading: isMutating } = useTenantMutations();
   const [showStatusModal, setShowStatusModal] = useState<"activate" | "suspend" | null>(null);

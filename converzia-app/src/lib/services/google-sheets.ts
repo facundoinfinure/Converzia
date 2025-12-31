@@ -1,16 +1,20 @@
 import { google } from "googleapis";
 import { createClient } from "@/lib/supabase/server";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
-import type { Delivery, QualificationFields, ScoreBreakdown } from "@/types";
+import type { Delivery, QualificationFields, ScoreBreakdown, GoogleOAuthTokens } from "@/types";
 
 // ============================================
 // Google Sheets Integration Service
 // ============================================
 
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
 export interface GoogleSheetsConfig {
   spreadsheet_id: string;
   sheet_name: string;
-  service_account_json: string; // JSON string of service account credentials
+  service_account_json?: string; // Legacy: JSON string of service account credentials
   column_mapping?: Record<string, string>; // Custom column mapping
   include_headers?: boolean;
 }
@@ -22,33 +26,117 @@ export interface SheetsAppendResult {
 }
 
 // ============================================
+// OAuth Helper Functions
+// ============================================
+
+/**
+ * Get authenticated OAuth2 client from tokens, with automatic refresh
+ */
+async function getOAuthClient(
+  tokens: GoogleOAuthTokens,
+  integrationId: string
+): Promise<InstanceType<typeof google.auth.OAuth2> | null> {
+  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+    console.error("Google OAuth not configured");
+    return null;
+  }
+
+  const oauth2Client = new google.auth.OAuth2(
+    GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET,
+    `${APP_URL}/api/integrations/google/callback`
+  );
+
+  oauth2Client.setCredentials({
+    access_token: tokens.access_token,
+    refresh_token: tokens.refresh_token,
+    expiry_date: tokens.expires_at,
+  });
+
+  // Check if token needs refresh (expires in less than 5 minutes)
+  const now = Date.now();
+  const needsRefresh = tokens.expires_at - now < 5 * 60 * 1000;
+
+  if (needsRefresh && tokens.refresh_token) {
+    try {
+      const { credentials } = await oauth2Client.refreshAccessToken();
+      
+      // Update tokens in database
+      const supabase = await createClient();
+      await supabase
+        .from("tenant_integrations")
+        .update({
+          oauth_tokens: {
+            ...tokens,
+            access_token: credentials.access_token,
+            expires_at: credentials.expiry_date || Date.now() + 3600 * 1000,
+          },
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", integrationId);
+
+      oauth2Client.setCredentials(credentials);
+    } catch (error) {
+      console.error("Error refreshing Google token:", error);
+      return null;
+    }
+  }
+
+  return oauth2Client;
+}
+
+/**
+ * Create auth client - supports both OAuth tokens and legacy service account
+ */
+async function createSheetsAuth(
+  config: GoogleSheetsConfig,
+  oauthTokens?: GoogleOAuthTokens | null,
+  integrationId?: string
+): Promise<InstanceType<typeof google.auth.OAuth2> | InstanceType<typeof google.auth.GoogleAuth> | null> {
+  // Prefer OAuth tokens if available
+  if (oauthTokens && integrationId) {
+    return getOAuthClient(oauthTokens, integrationId);
+  }
+
+  // Fall back to service account (legacy)
+  if (config.service_account_json) {
+    try {
+      const credentials = JSON.parse(config.service_account_json);
+      return new google.auth.GoogleAuth({
+        credentials,
+        scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+// ============================================
 // Main Functions
 // ============================================
 
 /**
- * Append a lead delivery to Google Sheets
+ * Append a lead delivery to Google Sheets (supports OAuth and legacy service account)
  */
 export async function appendToGoogleSheets(
   delivery: Delivery,
-  config: GoogleSheetsConfig
+  config: GoogleSheetsConfig,
+  oauthTokens?: GoogleOAuthTokens | null,
+  integrationId?: string
 ): Promise<SheetsAppendResult> {
   try {
-    // Parse service account credentials
-    let credentials: any;
-    try {
-      credentials = JSON.parse(config.service_account_json);
-    } catch {
+    // Create auth client (OAuth or service account)
+    const auth = await createSheetsAuth(config, oauthTokens, integrationId);
+    
+    if (!auth) {
       return {
         success: false,
-        error: "Invalid service account JSON",
+        error: "No se pudo autenticar con Google Sheets",
       };
     }
-
-    // Create auth client
-    const auth = new google.auth.GoogleAuth({
-      credentials,
-      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-    });
 
     const sheets = google.sheets({ version: "v4", auth });
 
@@ -264,28 +352,27 @@ async function logSheetsSync(
 // ============================================
 
 /**
- * Test Google Sheets connection
+ * Test Google Sheets connection (supports OAuth and legacy service account)
  */
-export async function testGoogleSheetsConnection(config: GoogleSheetsConfig): Promise<{
+export async function testGoogleSheetsConnection(
+  config: GoogleSheetsConfig,
+  oauthTokens?: GoogleOAuthTokens | null,
+  integrationId?: string
+): Promise<{
   success: boolean;
   message: string;
   sheet_title?: string;
 }> {
   try {
-    let credentials: any;
-    try {
-      credentials = JSON.parse(config.service_account_json);
-    } catch {
+    // Create auth client (OAuth or service account)
+    const auth = await createSheetsAuth(config, oauthTokens, integrationId);
+    
+    if (!auth) {
       return {
         success: false,
-        message: "JSON de service account inválido",
+        message: "No se pudo autenticar con Google Sheets. Verificá tu conexión.",
       };
     }
-
-    const auth = new google.auth.GoogleAuth({
-      credentials,
-      scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"],
-    });
 
     const sheets = google.sheets({ version: "v4", auth });
 
@@ -324,7 +411,7 @@ export async function testGoogleSheetsConnection(config: GoogleSheetsConfig): Pr
     if (error.code === 403) {
       return {
         success: false,
-        message: "Sin permisos. Compartí el spreadsheet con el service account.",
+        message: "Sin permisos para acceder al spreadsheet.",
       };
     }
     return {
@@ -335,19 +422,25 @@ export async function testGoogleSheetsConnection(config: GoogleSheetsConfig): Pr
 }
 
 /**
- * Create headers row in sheet
+ * Create headers row in sheet (supports OAuth and legacy service account)
  */
-export async function createSheetHeaders(config: GoogleSheetsConfig): Promise<{
+export async function createSheetHeaders(
+  config: GoogleSheetsConfig,
+  oauthTokens?: GoogleOAuthTokens | null,
+  integrationId?: string
+): Promise<{
   success: boolean;
   message: string;
 }> {
   try {
-    const credentials = JSON.parse(config.service_account_json);
-
-    const auth = new google.auth.GoogleAuth({
-      credentials,
-      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-    });
+    const auth = await createSheetsAuth(config, oauthTokens, integrationId);
+    
+    if (!auth) {
+      return {
+        success: false,
+        message: "No se pudo autenticar con Google Sheets",
+      };
+    }
 
     const sheets = google.sheets({ version: "v4", auth });
 
@@ -399,12 +492,18 @@ export async function createSheetHeaders(config: GoogleSheetsConfig): Promise<{
 // Helper: Get Sheets Config for Tenant
 // ============================================
 
-export async function getGoogleSheetsConfig(tenantId: string): Promise<GoogleSheetsConfig | null> {
+export interface GoogleSheetsIntegrationData {
+  id: string;
+  config: GoogleSheetsConfig;
+  oauth_tokens: GoogleOAuthTokens | null;
+}
+
+export async function getGoogleSheetsConfig(tenantId: string): Promise<GoogleSheetsIntegrationData | null> {
   const supabase = await createClient();
 
   const { data: integration } = await supabase
     .from("tenant_integrations")
-    .select("config")
+    .select("id, config, oauth_tokens")
     .eq("tenant_id", tenantId)
     .eq("integration_type", "GOOGLE_SHEETS")
     .eq("is_active", true)
@@ -412,6 +511,10 @@ export async function getGoogleSheetsConfig(tenantId: string): Promise<GoogleShe
 
   if (!integration) return null;
 
-  return integration.config as GoogleSheetsConfig;
+  return {
+    id: integration.id,
+    config: integration.config as GoogleSheetsConfig,
+    oauth_tokens: integration.oauth_tokens as GoogleOAuthTokens | null,
+  };
 }
 

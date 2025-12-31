@@ -3,6 +3,7 @@ import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import type { Delivery, TenantIntegration } from "@/types";
 import { createTokkoLead, TokkoConfig } from "./tokko";
 import { appendToGoogleSheets, GoogleSheetsConfig } from "./google-sheets";
+import type { GoogleOAuthTokens } from "@/types";
 import { logger, Metrics, Alerts, startTimer } from "@/lib/monitoring";
 
 // ============================================
@@ -133,11 +134,11 @@ export async function processDelivery(deliveryId: string): Promise<DeliveryResul
     };
   }
 
-  // Get tenant integrations
+  // Get tenant integrations (including OAuth tokens for Google Sheets)
   const { data: integrations } = await queryWithTimeout(
     supabase
       .from("tenant_integrations")
-      .select("*")
+      .select("*, oauth_tokens")
       .eq("tenant_id", delivery.tenant_id)
       .eq("is_active", true),
     10000,
@@ -456,15 +457,24 @@ async function consumeCredit(
 
 async function deliverToGoogleSheets(
   delivery: Delivery,
-  integration: TenantIntegration
+  integration: TenantIntegration & { oauth_tokens?: GoogleOAuthTokens | null }
 ): Promise<void> {
   const config = integration.config as GoogleSheetsConfig;
+  const oauthTokens = integration.oauth_tokens;
 
-  if (!config.spreadsheet_id || !config.sheet_name || !(config as { service_account_json?: string }).service_account_json) {
-    throw new Error("Google Sheets not properly configured - missing required fields");
+  // Validate config - either OAuth tokens or service account must be present
+  if (!config.spreadsheet_id || !config.sheet_name) {
+    throw new Error("Google Sheets not properly configured - missing spreadsheet ID or sheet name");
   }
 
-  const result = await appendToGoogleSheets(delivery, config);
+  const hasOAuth = !!oauthTokens?.access_token;
+  const hasServiceAccount = !!(config as { service_account_json?: string }).service_account_json;
+
+  if (!hasOAuth && !hasServiceAccount) {
+    throw new Error("Google Sheets not properly configured - no authentication method available");
+  }
+
+  const result = await appendToGoogleSheets(delivery, config, oauthTokens, integration.id);
 
   if (!result.success) {
     throw new Error(result.error || "Failed to append to Google Sheets");

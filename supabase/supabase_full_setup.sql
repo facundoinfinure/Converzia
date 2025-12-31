@@ -2719,9 +2719,13 @@ CREATE TABLE tenant_integrations (
   -- Configuration (encrypted sensitive fields should be handled app-side)
   config JSONB NOT NULL DEFAULT '{}',
   -- Example configs:
-  -- GOOGLE_SHEETS: { "spreadsheet_id": "...", "sheet_name": "...", "service_account_email": "..." }
+  -- GOOGLE_SHEETS: { "spreadsheet_id": "...", "sheet_name": "..." }
   -- TOKKO: { "api_key": "...", "api_url": "https://www.tokkobroker.com/api/v1" }
   -- WEBHOOK: { "url": "...", "method": "POST", "headers": {}, "auth_type": "bearer" }
+  
+  -- OAuth tokens for user-authenticated integrations (e.g., Google Sheets OAuth)
+  oauth_tokens JSONB DEFAULT NULL,
+  -- Example: { "access_token": "...", "refresh_token": "...", "expires_at": 1234567890, "email": "user@gmail.com" }
   
   -- Field mapping for delivery
   field_mapping JSONB NOT NULL DEFAULT '{}',

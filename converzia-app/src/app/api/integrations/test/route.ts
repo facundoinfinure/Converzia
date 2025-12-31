@@ -66,7 +66,26 @@ export async function POST(request: NextRequest) {
         break;
 
       case "GOOGLE_SHEETS":
-        result = await testGoogleSheetsConnection(config as GoogleSheetsConfig);
+        // For OAuth-based connections, get tokens from database
+        const { data: integration } = await queryWithTimeout(
+          supabase
+            .from("tenant_integrations")
+            .select("id, oauth_tokens")
+            .eq("tenant_id", tenant_id)
+            .eq("integration_type", "GOOGLE_SHEETS")
+            .single(),
+          10000,
+          "get integration for test"
+        );
+        
+        const oauthTokens = (integration as any)?.oauth_tokens || null;
+        const integrationId = (integration as any)?.id;
+        
+        result = await testGoogleSheetsConnection(
+          config as GoogleSheetsConfig,
+          oauthTokens,
+          integrationId
+        );
         break;
 
       case "WEBHOOK":
