@@ -4,7 +4,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 // ============================================
-// Page Header Component - Mobile-First Design
+// Page Header Component - shadcn compatible
 // ============================================
 
 interface PageHeaderProps {
@@ -28,8 +28,8 @@ export function PageHeader({
   compact = false,
 }: PageHeaderProps) {
   return (
-    <div className={cn("mb-6 lg:mb-8 page-enter", className)}>
-      {/* Breadcrumbs - Minimal, only show on desktop when truly needed */}
+    <div className={cn("mb-6 lg:mb-8 animate-fade-in-up", className)}>
+      {/* Breadcrumbs */}
       {breadcrumbs && breadcrumbs.length > 1 && (
         <nav className="hidden lg:flex items-center gap-1.5 text-xs mb-3 text-muted-foreground">
           {breadcrumbs.map((item, index) => (
@@ -54,12 +54,12 @@ export function PageHeader({
         </nav>
       )}
 
-      {/* Title and Actions - Clean, prominent title */}
+      {/* Title and Actions */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <h1 
             className={cn(
-              "font-semibold text-foreground tracking-tight",
+              "font-bold text-foreground tracking-tight",
               compact 
                 ? "text-lg lg:text-xl" 
                 : "text-xl lg:text-2xl"
@@ -77,7 +77,6 @@ export function PageHeader({
           )}
         </div>
 
-        {/* Actions */}
         {actions && (
           <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap sm:flex-shrink-0">
             {actions}
@@ -89,7 +88,7 @@ export function PageHeader({
 }
 
 // ============================================
-// Section Header (for card sections)
+// Section Header
 // ============================================
 
 interface SectionHeaderProps {
@@ -113,11 +112,11 @@ export function SectionHeader({
       )}
     >
       <div className="min-w-0">
-        <h2 className="text-lg font-semibold text-[var(--text-primary)] font-[var(--font-display)]">
+        <h2 className="text-lg font-semibold text-foreground">
           {title}
         </h2>
         {description && (
-          <p className="text-sm text-[var(--text-tertiary)] mt-0.5">
+          <p className="text-sm text-muted-foreground mt-0.5">
             {description}
           </p>
         )}
@@ -131,7 +130,7 @@ export function SectionHeader({
 }
 
 // ============================================
-// Page Container - Mobile-First
+// Page Container
 // ============================================
 
 interface PageContainerProps {
@@ -157,11 +156,8 @@ export function PageContainer({
   return (
     <div 
       className={cn(
-        // Mobile-first padding - generous whitespace
         "px-4 py-6",
-        // Larger padding on desktop
         "sm:px-6 lg:px-8 lg:py-8",
-        // Max width
         maxWidths[maxWidth],
         className
       )}
@@ -172,7 +168,7 @@ export function PageContainer({
 }
 
 // ============================================
-// Mobile Page Title (for simple mobile headers)
+// Mobile Page Title
 // ============================================
 
 interface MobileTitleProps {
@@ -192,7 +188,7 @@ export function MobileTitle({
     <div
       className={cn(
         "flex items-center justify-between py-4 px-4 lg:hidden",
-        "border-b border-[var(--border-primary)] bg-[var(--bg-primary)]",
+        "border-b border-border bg-card",
         "sticky top-0 z-20",
         className
       )}
@@ -201,12 +197,12 @@ export function MobileTitle({
         {backHref && (
           <Link
             href={backHref}
-            className="flex items-center justify-center w-10 h-10 rounded-xl bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+            className="flex items-center justify-center w-10 h-10 rounded-xl bg-muted text-muted-foreground hover:text-foreground transition-colors"
           >
             <ChevronRight className="h-5 w-5 rotate-180" />
           </Link>
         )}
-        <h1 className="text-lg font-semibold text-[var(--text-primary)] truncate">
+        <h1 className="text-lg font-semibold text-foreground truncate">
           {title}
         </h1>
       </div>
@@ -214,5 +210,3 @@ export function MobileTitle({
     </div>
   );
 }
-
-

@@ -3,11 +3,11 @@ import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ============================================
-// Button Component - Mobile-First, Touch-Friendly
+// Button Component - shadcn compatible
 // ============================================
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "primary" | "secondary" | "outline" | "ghost" | "danger" | "success" | "link";
+  variant?: "primary" | "secondary" | "outline" | "ghost" | "danger" | "success" | "link" | "default" | "destructive";
   size?: "xs" | "sm" | "md" | "lg" | "xl";
   isLoading?: boolean;
   leftIcon?: ReactNode;
@@ -38,13 +38,13 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       "inline-flex items-center justify-center gap-2 font-semibold",
       // Transitions
       "transition-all duration-200 ease-out",
-      // Focus states - accessible
-      "focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]",
+      // Focus states
+      "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
       // Disabled states
       "disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none",
       // Touch feedback
       "active:scale-[0.97]",
-      // Prevent text selection on tap
+      // Prevent text selection
       "select-none",
       // Shape
       pill ? "rounded-full" : "rounded-xl",
@@ -54,54 +54,55 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 
     const variants = {
       primary: cn(
-        "bg-[var(--accent-primary)] text-white",
-        "hover:bg-[var(--accent-primary-hover)]",
-        "focus-visible:ring-[var(--accent-primary)]",
-        "shadow-sm hover:shadow-md",
-        // Gradient on hover for premium feel
-        "hover:shadow-[var(--accent-primary)]/25"
+        "bg-primary text-primary-foreground",
+        "hover:bg-primary/90",
+        "shadow-sm hover:shadow-md"
+      ),
+      default: cn(
+        "bg-primary text-primary-foreground",
+        "hover:bg-primary/90",
+        "shadow-sm hover:shadow-md"
       ),
       secondary: cn(
-        "bg-[var(--bg-tertiary)] text-[var(--text-primary)]",
-        "border border-[var(--border-primary)]",
-        "hover:bg-[var(--bg-secondary)] hover:border-[var(--border-secondary)]",
-        "focus-visible:ring-[var(--border-secondary)]"
+        "bg-secondary text-secondary-foreground",
+        "border border-border",
+        "hover:bg-secondary/80"
       ),
       outline: cn(
-        "border-2 border-[var(--border-primary)] text-[var(--text-primary)] bg-transparent",
-        "hover:bg-[var(--bg-tertiary)] hover:border-[var(--border-secondary)]",
-        "focus-visible:ring-[var(--border-secondary)]"
+        "border-2 border-border text-foreground bg-transparent",
+        "hover:bg-accent hover:text-accent-foreground"
       ),
       ghost: cn(
-        "text-[var(--text-secondary)] bg-transparent",
-        "hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]",
-        "focus-visible:ring-[var(--border-secondary)]"
+        "text-muted-foreground bg-transparent",
+        "hover:bg-accent hover:text-accent-foreground"
       ),
       danger: cn(
-        "bg-[var(--error)] text-white",
-        "hover:bg-[var(--error-dark)]",
-        "focus-visible:ring-[var(--error)]",
+        "bg-red-600 text-white",
+        "hover:bg-red-700",
+        "shadow-sm hover:shadow-md"
+      ),
+      destructive: cn(
+        "bg-destructive text-destructive-foreground",
+        "hover:bg-destructive/90",
         "shadow-sm hover:shadow-md"
       ),
       success: cn(
-        "bg-[var(--success)] text-white",
-        "hover:bg-[var(--success-dark)]",
-        "focus-visible:ring-[var(--success)]",
+        "bg-emerald-600 text-white",
+        "hover:bg-emerald-700",
         "shadow-sm hover:shadow-md"
       ),
       link: cn(
-        "text-[var(--accent-primary)] bg-transparent underline-offset-4",
-        "hover:underline hover:text-[var(--accent-primary-hover)]",
-        "focus-visible:ring-[var(--accent-primary)]",
+        "text-primary bg-transparent underline-offset-4",
+        "hover:underline",
         "p-0 h-auto"
       ),
     };
 
-    // Touch-friendly sizes (minimum 44px height on mobile)
+    // Touch-friendly sizes
     const sizes = {
       xs: "h-8 px-3 text-xs min-h-[32px]",
       sm: "h-9 px-3.5 text-sm min-h-[36px]",
-      md: "h-11 px-5 text-sm min-h-[44px]", // Mobile-friendly default
+      md: "h-11 px-5 text-sm min-h-[44px]",
       lg: "h-12 px-6 text-base min-h-[48px]",
       xl: "h-14 px-8 text-base min-h-[56px]",
     };
@@ -143,7 +144,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 Button.displayName = "Button";
 
 // ============================================
-// Icon Button - Touch-Friendly
+// Icon Button
 // ============================================
 
 export interface IconButtonProps extends Omit<ButtonProps, "leftIcon" | "rightIcon" | "children"> {
@@ -153,7 +154,6 @@ export interface IconButtonProps extends Omit<ButtonProps, "leftIcon" | "rightIc
 
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
   ({ icon, size = "md", className, variant = "ghost", ...props }, ref) => {
-    // Touch-friendly sizes (minimum 44px)
     const sizes = {
       xs: "h-8 w-8 min-h-[32px] min-w-[32px]",
       sm: "h-9 w-9 min-h-[36px] min-w-[36px]",
@@ -205,8 +205,8 @@ export function ButtonGroup({ children, className }: ButtonGroupProps) {
     <div className={cn("flex items-center", className)}>
       <div className={cn(
         "inline-flex overflow-hidden",
-        "border border-[var(--border-primary)] rounded-xl",
-        "divide-x divide-[var(--border-primary)]",
+        "border border-border rounded-xl",
+        "divide-x divide-border",
         "[&>button]:rounded-none [&>button]:border-0"
       )}>
         {children}
@@ -216,7 +216,7 @@ export function ButtonGroup({ children, className }: ButtonGroupProps) {
 }
 
 // ============================================
-// Action Button Group (for row actions)
+// Action Button Group
 // ============================================
 
 interface ActionButtonProps {

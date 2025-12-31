@@ -5,7 +5,7 @@ import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ============================================
-// Card Component - Mobile-First, Modern Design
+// Card Component - shadcn compatible
 // ============================================
 
 export interface CardProps extends HTMLAttributes<HTMLDivElement> {
@@ -30,18 +30,14 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
     ref
   ) => {
     const variants = {
-      default: "bg-[var(--bg-primary)] border border-[var(--border-primary)] shadow-[var(--shadow-card)]",
-      elevated: "bg-[var(--bg-primary)] border border-[var(--border-primary)] shadow-[var(--shadow-lg)]",
-      outlined: "bg-transparent border border-[var(--border-primary)]",
+      default: "bg-card border border-border shadow-sm",
+      elevated: "bg-card border border-border shadow-lg",
+      outlined: "bg-transparent border border-border",
       ghost: "bg-transparent",
-      highlight: "bg-[var(--accent-primary-light)] border border-[var(--accent-primary-muted)]",
-      gradient: cn(
-        "bg-gradient-to-br from-[var(--bg-primary)] to-[var(--bg-tertiary)]",
-        "border border-[var(--border-primary)]"
-      ),
+      highlight: "bg-primary/5 border border-primary/20",
+      gradient: "bg-gradient-to-br from-card to-muted border border-border",
     };
 
-    // Mobile-friendly padding
     const paddings = {
       none: "",
       sm: "p-4",
@@ -54,13 +50,13 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
       <div
         ref={ref}
         className={cn(
-          "rounded-2xl transition-all duration-200",
+          "rounded-xl transition-all duration-200",
           variants[variant],
           paddings[padding],
-          hover && "hover:border-[var(--border-secondary)] hover:shadow-[var(--shadow-md)]",
+          hover && "hover:border-border/80 hover:shadow-md",
           interactive && cn(
             "cursor-pointer",
-            "hover:shadow-[var(--shadow-lg)] hover:-translate-y-0.5",
+            "hover:shadow-lg hover:-translate-y-0.5",
             "active:scale-[0.99] active:translate-y-0"
           ),
           className
@@ -76,7 +72,7 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
 Card.displayName = "Card";
 
 // ============================================
-// Card Header - Mobile-First
+// Card Header
 // ============================================
 
 interface CardHeaderProps {
@@ -91,9 +87,8 @@ export function CardHeader({ children, className, action, noBorder = false }: Ca
     <div
       className={cn(
         "flex items-center justify-between gap-4",
-        // Mobile-first padding
         "px-4 py-4 sm:px-6",
-        !noBorder && "border-b border-[var(--border-primary)]",
+        !noBorder && "border-b border-border",
         className
       )}
     >
@@ -104,7 +99,7 @@ export function CardHeader({ children, className, action, noBorder = false }: Ca
 }
 
 // ============================================
-// Card Title - Mobile-First
+// Card Title
 // ============================================
 
 interface CardTitleProps {
@@ -124,7 +119,7 @@ export function CardTitle({ children, className, as: Tag = "h3", size = "md" }: 
   return (
     <Tag className={cn(
       sizes[size], 
-      "text-[var(--text-primary)] font-[var(--font-display)] tracking-tight",
+      "text-foreground tracking-tight",
       className
     )}>
       {children}
@@ -143,14 +138,14 @@ interface CardDescriptionProps {
 
 export function CardDescription({ children, className }: CardDescriptionProps) {
   return (
-    <p className={cn("text-sm text-[var(--text-secondary)] mt-1", className)}>
+    <p className={cn("text-sm text-muted-foreground mt-1", className)}>
       {children}
     </p>
   );
 }
 
 // ============================================
-// Card Content - Mobile-First
+// Card Content
 // ============================================
 
 interface CardContentProps {
@@ -168,7 +163,7 @@ export function CardContent({ children, className, noPadding = false }: CardCont
 }
 
 // ============================================
-// Card Footer - Mobile-First
+// Card Footer
 // ============================================
 
 interface CardFooterProps {
@@ -195,9 +190,8 @@ export function CardFooter({
     <div
       className={cn(
         "flex items-center gap-3 flex-wrap",
-        // Mobile-first padding
         "px-4 py-4 sm:px-6",
-        !noBorder && "border-t border-[var(--border-primary)]",
+        !noBorder && "border-t border-border",
         alignments[align],
         className
       )}
@@ -208,7 +202,7 @@ export function CardFooter({
 }
 
 // ============================================
-// Card Section (for grouping content)
+// Card Section
 // ============================================
 
 interface CardSectionProps {
@@ -232,12 +226,12 @@ export function CardSection({
         <div className="flex items-start justify-between gap-4 mb-4">
           <div>
             {title && (
-              <h4 className="text-sm font-semibold text-[var(--text-primary)]">
+              <h4 className="text-sm font-semibold text-foreground">
                 {title}
               </h4>
             )}
             {description && (
-              <p className="text-sm text-[var(--text-tertiary)] mt-0.5">
+              <p className="text-sm text-muted-foreground mt-0.5">
                 {description}
               </p>
             )}
@@ -251,7 +245,7 @@ export function CardSection({
 }
 
 // ============================================
-// Collapsible Card - Touch-Friendly
+// Collapsible Card
 // ============================================
 
 interface CollapsibleCardProps {
@@ -280,24 +274,23 @@ export function CollapsibleCard({
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
           "w-full flex items-center justify-between gap-4 text-left group",
-          // Touch-friendly padding and min-height
           "p-4 sm:p-6 min-h-[56px]",
           "transition-colors duration-200",
-          "active:bg-[var(--bg-tertiary)]"
+          "active:bg-muted/50"
         )}
       >
         <div className="flex items-center gap-3 min-w-0">
           {icon && (
-            <div className="flex-shrink-0 text-[var(--text-tertiary)] group-hover:text-[var(--accent-primary)] transition-colors">
+            <div className="flex-shrink-0 text-muted-foreground group-hover:text-primary transition-colors">
               {icon}
             </div>
           )}
           <div className="min-w-0">
-            <h3 className="text-base font-semibold text-[var(--text-primary)] group-hover:text-[var(--accent-primary)] transition-colors truncate">
+            <h3 className="text-base font-semibold text-foreground group-hover:text-primary transition-colors truncate">
               {title}
             </h3>
             {description && (
-              <p className="text-sm text-[var(--text-secondary)] mt-0.5 line-clamp-1">
+              <p className="text-sm text-muted-foreground mt-0.5 line-clamp-1">
                 {description}
               </p>
             )}
@@ -305,14 +298,14 @@ export function CollapsibleCard({
         </div>
         <div className={cn(
           "flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg",
-          "bg-[var(--bg-tertiary)] group-hover:bg-[var(--accent-primary-light)]",
+          "bg-muted group-hover:bg-primary/10",
           "transition-all duration-200"
         )}>
           <ChevronDown
             className={cn(
-              "h-4 w-4 text-[var(--text-tertiary)] transition-transform duration-300",
+              "h-4 w-4 text-muted-foreground transition-transform duration-300",
               isOpen && "rotate-180",
-              "group-hover:text-[var(--accent-primary)]"
+              "group-hover:text-primary"
             )}
           />
         </div>
@@ -323,7 +316,7 @@ export function CollapsibleCard({
           isOpen ? "max-h-[2000px] opacity-100" : "max-h-0 opacity-0"
         )}
       >
-        <div className="px-4 pb-4 sm:px-6 sm:pb-6 border-t border-[var(--border-primary)] pt-4 sm:pt-6">
+        <div className="px-4 pb-4 sm:px-6 sm:pb-6 border-t border-border pt-4 sm:pt-6">
           {children}
         </div>
       </div>
@@ -332,10 +325,10 @@ export function CollapsibleCard({
 }
 
 // ============================================
-// Stat Card - Mobile Optimized
+// Simple Stat Card (legacy compatibility)
 // ============================================
 
-interface StatCardProps {
+interface SimpleStatCardProps {
   title: string;
   value: string | number;
   change?: {
@@ -348,7 +341,7 @@ interface StatCardProps {
   onClick?: () => void;
 }
 
-export function StatCard({
+export function SimpleStatCard({
   title,
   value,
   change,
@@ -356,13 +349,13 @@ export function StatCard({
   iconColor = "primary",
   className,
   onClick,
-}: StatCardProps) {
+}: SimpleStatCardProps) {
   const iconColors = {
-    primary: "bg-[var(--accent-primary-light)] text-[var(--accent-primary)]",
-    success: "bg-[var(--success-light)] text-[var(--success)]",
-    warning: "bg-[var(--warning-light)] text-[var(--warning)]",
-    error: "bg-[var(--error-light)] text-[var(--error)]",
-    info: "bg-[var(--info-light)] text-[var(--info)]",
+    primary: "bg-primary/10 text-primary",
+    success: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+    warning: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+    error: "bg-red-500/10 text-red-600 dark:text-red-400",
+    info: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
   };
 
   return (
@@ -373,16 +366,16 @@ export function StatCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm text-[var(--text-tertiary)] font-medium truncate">
+          <p className="text-sm text-muted-foreground font-medium truncate">
             {title}
           </p>
-          <p className="text-2xl sm:text-3xl font-bold text-[var(--text-primary)] mt-1 font-[var(--font-display)]">
+          <p className="text-2xl sm:text-3xl font-bold text-foreground mt-1 tracking-tight">
             {value}
           </p>
           {change && (
             <p className={cn(
               "text-sm font-medium mt-1",
-              change.trend === "up" ? "text-[var(--success)]" : "text-[var(--error)]"
+              change.trend === "up" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
             )}>
               {change.trend === "up" ? "↑" : "↓"} {Math.abs(change.value)}%
             </p>

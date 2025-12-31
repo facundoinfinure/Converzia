@@ -1,12 +1,11 @@
 import { ReactNode } from "react";
-import { ArrowUpRight, ArrowDownRight, Minus, Info, TrendingUp, TrendingDown } from "lucide-react";
+import { Info, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "./Card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./Tooltip";
 
 // ============================================
-// Stat Card Component - Premium Design
-// Title on top, large number, clean look
+// Stat Card Component - Premium shadcn Design
 // ============================================
 
 interface StatCardProps {
@@ -19,7 +18,6 @@ interface StatCardProps {
   iconColor?: string;
   loading?: boolean;
   className?: string;
-  /** Tooltip content to show on hover */
   tooltip?: string;
 }
 
@@ -37,12 +35,12 @@ export function StatCard({
 }: StatCardProps) {
   const trendConfig = {
     up: { 
-      color: "text-emerald-500", 
+      color: "text-emerald-600 dark:text-emerald-400", 
       bg: "bg-emerald-500/10",
       Icon: TrendingUp 
     },
     down: { 
-      color: "text-red-500", 
+      color: "text-red-600 dark:text-red-400", 
       bg: "bg-red-500/10",
       Icon: TrendingDown 
     },
@@ -93,13 +91,13 @@ export function StatCard({
                 ? `bg-gradient-to-br ${iconColor} text-white` 
                 : "bg-primary/10 text-primary"
             )}>
-              <span className="h-4 w-4">{icon}</span>
+              <span className="h-4 w-4 [&>svg]:h-4 [&>svg]:w-4">{icon}</span>
             </div>
           )}
         </div>
 
         {/* Value - Large and prominent */}
-        <p className="text-3xl font-semibold tracking-tight text-foreground mb-1">
+        <p className="text-3xl font-bold tracking-tight text-foreground mb-1">
           {value}
         </p>
 
@@ -163,8 +161,8 @@ export function MiniStatCard({
   className,
 }: MiniStatCardProps) {
   const trendColors = {
-    up: "text-emerald-500",
-    down: "text-red-500",
+    up: "text-emerald-600 dark:text-emerald-400",
+    down: "text-red-600 dark:text-red-400",
     neutral: "text-muted-foreground",
   };
 
@@ -250,15 +248,15 @@ export function ProgressStatCard({
     },
     success: {
       bar: "bg-emerald-500",
-      text: "text-emerald-500",
+      text: "text-emerald-600 dark:text-emerald-400",
     },
     warning: {
       bar: "bg-amber-500",
-      text: "text-amber-500",
+      text: "text-amber-600 dark:text-amber-400",
     },
     danger: {
       bar: "bg-red-500",
-      text: "text-red-500",
+      text: "text-red-600 dark:text-red-400",
     },
   };
 

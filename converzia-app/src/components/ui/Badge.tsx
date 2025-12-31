@@ -2,7 +2,7 @@ import { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 // ============================================
-// Badge Component - Clean, Modern Design
+// Badge Component - shadcn compatible
 // ============================================
 
 export type BadgeVariant =
@@ -12,6 +12,7 @@ export type BadgeVariant =
   | "success"
   | "warning"
   | "danger"
+  | "error"
   | "info"
   | "outline";
 
@@ -35,25 +36,27 @@ export function Badge({
   className,
 }: BadgeProps) {
   const variants = {
-    default: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
-    primary: "bg-[var(--accent-primary-light)] text-[var(--accent-primary)]",
-    secondary: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
-    success: "bg-[var(--success-light)] text-[var(--success-dark)]",
-    warning: "bg-[var(--warning-light)] text-[var(--warning-dark)]",
-    danger: "bg-[var(--error-light)] text-[var(--error-dark)]",
-    info: "bg-[var(--info-light)] text-[var(--info-dark)]",
-    outline: "bg-transparent text-[var(--text-secondary)] border border-[var(--border-primary)]",
+    default: "bg-muted text-muted-foreground",
+    primary: "bg-primary/10 text-primary dark:bg-primary/20",
+    secondary: "bg-secondary text-secondary-foreground",
+    success: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+    warning: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+    danger: "bg-red-500/10 text-red-700 dark:text-red-400",
+    error: "bg-red-500/10 text-red-700 dark:text-red-400",
+    info: "bg-blue-500/10 text-blue-700 dark:text-blue-400",
+    outline: "bg-transparent text-muted-foreground border border-border",
   };
 
   const dotColors = {
-    default: "bg-[var(--text-tertiary)]",
-    primary: "bg-[var(--accent-primary)]",
-    secondary: "bg-[var(--text-tertiary)]",
-    success: "bg-[var(--success)]",
-    warning: "bg-[var(--warning)]",
-    danger: "bg-[var(--error)]",
-    info: "bg-[var(--info)]",
-    outline: "bg-[var(--text-tertiary)]",
+    default: "bg-muted-foreground",
+    primary: "bg-primary",
+    secondary: "bg-muted-foreground",
+    success: "bg-emerald-500",
+    warning: "bg-amber-500",
+    danger: "bg-red-500",
+    error: "bg-red-500",
+    info: "bg-blue-500",
+    outline: "bg-muted-foreground",
   };
 
   const sizes = {
@@ -151,7 +154,7 @@ export function StatusBadge({ status, className, showDot = true }: StatusBadgePr
 }
 
 // ============================================
-// Lead Status Badge (specific for lead states)
+// Lead Status Badge
 // ============================================
 
 interface LeadStatusBadgeProps {
@@ -247,7 +250,7 @@ export function RoleBadge({ role, className }: RoleBadgeProps) {
 }
 
 // ============================================
-// Count Badge (for notification counts)
+// Count Badge
 // ============================================
 
 interface CountBadgeProps {
@@ -268,10 +271,3 @@ export function CountBadge({ count, max = 99, variant = "danger", className }: C
     </Badge>
   );
 }
-
-
-
-
-
-
-

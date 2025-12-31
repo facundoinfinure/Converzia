@@ -139,10 +139,10 @@ export default function RevenueDashboardPage() {
       header: "Tenant",
       cell: (row) => (
         <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white text-xs font-medium">
+          <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-emerald-600 flex items-center justify-center text-white text-xs font-medium">
             {row.tenant_name.substring(0, 2).toUpperCase()}
           </div>
-          <span className="font-medium text-[var(--text-primary)]">
+          <span className="font-medium text-foreground">
             {row.tenant_name}
           </span>
         </div>
@@ -152,7 +152,7 @@ export default function RevenueDashboardPage() {
       key: "leads_ready_value",
       header: "Valor Generado",
       cell: (row) => (
-        <span className="text-green-400 font-medium">
+        <span className="text-emerald-600 dark:text-emerald-400 font-medium">
           {formatCurrency(row.leads_ready_value, "USD")}
         </span>
       ),
@@ -161,7 +161,7 @@ export default function RevenueDashboardPage() {
       key: "attributed_spend",
       header: "Gasto Atribuido",
       cell: (row) => (
-        <span className="text-red-400">
+        <span className="text-red-600 dark:text-red-400">
           {formatCurrency(row.attributed_spend, "USD")}
         </span>
       ),
@@ -170,7 +170,7 @@ export default function RevenueDashboardPage() {
       key: "profit",
       header: "Profit",
       cell: (row) => (
-        <span className={row.profit >= 0 ? "text-green-400 font-medium" : "text-red-400 font-medium"}>
+        <span className={row.profit >= 0 ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-red-600 dark:text-red-400 font-medium"}>
           {formatCurrency(row.profit, "USD")}
         </span>
       ),
@@ -179,14 +179,14 @@ export default function RevenueDashboardPage() {
       key: "leads_ready_count",
       header: "Leads Ready",
       cell: (row) => (
-        <span className="text-[var(--text-primary)]">{row.leads_ready_count}</span>
+        <span className="text-foreground">{row.leads_ready_count}</span>
       ),
     },
     {
       key: "cpl_attributed",
       header: "CPL Atribuido",
       cell: (row) => (
-        <span className="text-[var(--text-secondary)]">
+        <span className="text-muted-foreground">
           {formatCurrency(row.cpl_attributed, "USD")}
         </span>
       ),
@@ -195,7 +195,7 @@ export default function RevenueDashboardPage() {
       key: "cost_per_lead",
       header: "Precio CPL",
       cell: (row) => (
-        <span className="text-[var(--text-primary)]">
+        <span className="text-foreground">
           {formatCurrency(row.cost_per_lead, "USD")}
         </span>
       ),
@@ -217,10 +217,10 @@ export default function RevenueDashboardPage() {
       header: "Oferta",
       cell: (row) => (
         <div>
-          <span className="font-medium text-[var(--text-primary)]">
+          <span className="font-medium text-foreground">
             {row.offer_name}
           </span>
-          <p className="text-xs text-[var(--text-tertiary)]">{row.tenant_name}</p>
+          <p className="text-xs text-muted-foreground">{row.tenant_name}</p>
         </div>
       ),
     },
@@ -228,7 +228,7 @@ export default function RevenueDashboardPage() {
       key: "leads_ready_value",
       header: "Valor Generado",
       cell: (row) => (
-        <span className="text-green-400 font-medium">
+        <span className="text-emerald-600 dark:text-emerald-400 font-medium">
           {formatCurrency(row.leads_ready_value, "USD")}
         </span>
       ),
@@ -237,7 +237,7 @@ export default function RevenueDashboardPage() {
       key: "attributed_spend",
       header: "Gasto Atribuido",
       cell: (row) => (
-        <span className="text-red-400">
+        <span className="text-red-600 dark:text-red-400">
           {formatCurrency(row.attributed_spend, "USD")}
         </span>
       ),
@@ -246,7 +246,7 @@ export default function RevenueDashboardPage() {
       key: "profit",
       header: "Profit",
       cell: (row) => (
-        <span className={row.profit >= 0 ? "text-green-400 font-medium" : "text-red-400 font-medium"}>
+        <span className={row.profit >= 0 ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-red-600 dark:text-red-400 font-medium"}>
           {formatCurrency(row.profit, "USD")}
         </span>
       ),

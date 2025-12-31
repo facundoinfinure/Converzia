@@ -23,16 +23,16 @@ export default {
   			primary: {
   				DEFAULT: 'hsl(var(--primary))',
   				foreground: 'hsl(var(--primary-foreground))',
-  				'50': '#eef2ff',
-  				'100': '#e0e7ff',
-  				'200': '#c7d2fe',
-  				'300': '#a5b4fc',
-  				'400': '#818cf8',
-  				'500': '#6366f1',
-  				'600': '#4f46e5',
-  				'700': '#4338ca',
-  				'800': '#3730a3',
-  				'900': '#312e81'
+  				'50': '#ecfdf5',
+  				'100': '#d1fae5',
+  				'200': '#a7f3d0',
+  				'300': '#6ee7b7',
+  				'400': '#34d399',
+  				'500': '#10b981',
+  				'600': '#059669',
+  				'700': '#047857',
+  				'800': '#065f46',
+  				'900': '#064e3b'
   			},
   			secondary: {
   				DEFAULT: 'hsl(var(--secondary))',
@@ -45,16 +45,16 @@ export default {
   			accent: {
   				DEFAULT: 'hsl(var(--accent))',
   				foreground: 'hsl(var(--accent-foreground))',
-  				'50': '#eef2ff',
-  				'100': '#e0e7ff',
-  				'200': '#c7d2fe',
-  				'300': '#a5b4fc',
-  				'400': '#818cf8',
-  				'500': '#6366f1',
-  				'600': '#4f46e5',
-  				'700': '#4338ca',
-  				'800': '#3730a3',
-  				'900': '#312e81'
+  				'50': '#ecfdf5',
+  				'100': '#d1fae5',
+  				'200': '#a7f3d0',
+  				'300': '#6ee7b7',
+  				'400': '#34d399',
+  				'500': '#10b981',
+  				'600': '#059669',
+  				'700': '#047857',
+  				'800': '#065f46',
+  				'900': '#064e3b'
   			},
   			destructive: {
   				DEFAULT: 'hsl(var(--destructive))',
@@ -91,17 +91,23 @@ export default {
   		},
   		fontFamily: {
   			sans: [
-  				'var(--font-body)',
+  				'Nunito Sans',
+  				'-apple-system',
+  				'BlinkMacSystemFont',
+  				'Segoe UI',
   				'system-ui',
   				'sans-serif'
   			],
   			display: [
-  				'var(--font-display)',
+  				'Nunito Sans',
+  				'-apple-system',
+  				'BlinkMacSystemFont',
   				'system-ui',
   				'sans-serif'
   			],
   			mono: [
-  				'var(--font-mono)',
+  				'JetBrains Mono',
+  				'Fira Code',
   				'monospace'
   			]
   		},

@@ -1,10 +1,81 @@
+import { ReactNode, forwardRef, HTMLAttributes, ImgHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
 // ============================================
-// Avatar Component
+// Avatar Components - Radix/shadcn compatible
 // ============================================
 
-export interface AvatarProps {
+// Root Avatar container
+interface AvatarRootProps extends HTMLAttributes<HTMLDivElement> {
+  size?: "xs" | "sm" | "md" | "lg" | "xl";
+}
+
+const AvatarRoot = forwardRef<HTMLDivElement, AvatarRootProps>(
+  ({ className, size = "md", ...props }, ref) => {
+    const sizes = {
+      xs: "h-6 w-6",
+      sm: "h-8 w-8",
+      md: "h-10 w-10",
+      lg: "h-12 w-12",
+      xl: "h-16 w-16",
+    };
+
+    return (
+      <div
+        ref={ref}
+        className={cn(
+          "relative flex shrink-0 overflow-hidden rounded-full",
+          sizes[size],
+          className
+        )}
+        {...props}
+      />
+    );
+  }
+);
+AvatarRoot.displayName = "Avatar";
+
+// Avatar Image
+interface AvatarImageProps extends ImgHTMLAttributes<HTMLImageElement> {}
+
+const AvatarImage = forwardRef<HTMLImageElement, AvatarImageProps>(
+  ({ className, alt = "", ...props }, ref) => (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      ref={ref}
+      alt={alt}
+      className={cn("aspect-square h-full w-full object-cover", className)}
+      {...props}
+    />
+  )
+);
+AvatarImage.displayName = "AvatarImage";
+
+// Avatar Fallback
+interface AvatarFallbackProps extends HTMLAttributes<HTMLDivElement> {}
+
+const AvatarFallback = forwardRef<HTMLDivElement, AvatarFallbackProps>(
+  ({ className, ...props }, ref) => (
+    <div
+      ref={ref}
+      className={cn(
+        "flex h-full w-full items-center justify-center rounded-full bg-muted text-muted-foreground font-medium",
+        className
+      )}
+      {...props}
+    />
+  )
+);
+AvatarFallback.displayName = "AvatarFallback";
+
+// Export as compound component and individually
+export { AvatarRoot as Avatar, AvatarImage, AvatarFallback };
+
+// ============================================
+// Full Avatar Component (legacy/convenience)
+// ============================================
+
+export interface FullAvatarProps {
   src?: string | null;
   alt?: string;
   name?: string;
@@ -13,14 +84,14 @@ export interface AvatarProps {
   status?: "online" | "offline" | "away" | "busy";
 }
 
-export function Avatar({
+export function FullAvatar({
   src,
   alt,
   name,
   size = "md",
   className,
   status,
-}: AvatarProps) {
+}: FullAvatarProps) {
   const sizes = {
     xs: "h-6 w-6 text-xs",
     sm: "h-8 w-8 text-sm",
@@ -44,7 +115,6 @@ export function Avatar({
     busy: "bg-red-400",
   };
 
-  // Get initials from name
   const getInitials = (name: string): string => {
     const parts = name.trim().split(/\s+/);
     if (parts.length >= 2) {
@@ -61,16 +131,13 @@ export function Avatar({
         <img
           src={src}
           alt={alt || name || "Avatar"}
-          className={cn(
-            "rounded-full object-cover",
-            sizes[size]
-          )}
+          className={cn("rounded-full object-cover", sizes[size])}
         />
       ) : (
         <div
           className={cn(
             "rounded-full flex items-center justify-center font-medium",
-            "bg-gradient-to-br from-primary-500 to-primary-600 text-white",
+            "bg-gradient-to-br from-primary to-emerald-600 text-white",
             sizes[size]
           )}
         >
@@ -102,7 +169,7 @@ interface AvatarGroupProps {
     alt?: string;
   }>;
   max?: number;
-  size?: AvatarProps["size"];
+  size?: FullAvatarProps["size"];
   className?: string;
 }
 
@@ -142,7 +209,7 @@ export function AvatarGroup({
           )}
           style={{ zIndex: visibleAvatars.length - index }}
         >
-          <Avatar
+          <FullAvatar
             src={avatar.src}
             name={avatar.name}
             alt={avatar.alt}
@@ -155,7 +222,7 @@ export function AvatarGroup({
         <div
           className={cn(
             "relative ring-2 ring-background rounded-full flex items-center justify-center",
-            "bg-card-border text-slate-300 font-medium",
+            "bg-muted text-muted-foreground font-medium",
             overlapSizes[size],
             countSizes[size]
           )}
@@ -179,7 +246,7 @@ interface UserAvatarProps {
   role?: string;
   size?: "sm" | "md" | "lg";
   className?: string;
-  status?: AvatarProps["status"];
+  status?: FullAvatarProps["status"];
 }
 
 export function UserAvatar({
@@ -205,13 +272,13 @@ export function UserAvatar({
 
   return (
     <div className={cn("flex items-center gap-3", className)}>
-      <Avatar src={src} name={name} size={avatarSizes[size]} status={status} />
+      <FullAvatar src={src} name={name} size={avatarSizes[size]} status={status} />
       <div className="min-w-0">
-        <p className={cn("font-medium text-[var(--text-primary)] truncate", textSizes[size].name)}>
+        <p className={cn("font-medium text-foreground truncate", textSizes[size].name)}>
           {name}
         </p>
         {(email || role) && (
-          <p className={cn("text-[var(--text-secondary)] truncate", textSizes[size].detail)}>
+          <p className={cn("text-muted-foreground truncate", textSizes[size].detail)}>
             {email || role}
           </p>
         )}
@@ -219,14 +286,3 @@ export function UserAvatar({
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
