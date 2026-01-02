@@ -5,22 +5,28 @@ import { useRouter } from "next/navigation";
 import {
   CreditCard,
   Download,
+  Building2,
 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { BillingStats } from "@/components/admin/BillingStats";
-import { DataTable, Column } from "@/components/ui/Table";
+import { Column } from "@/components/ui/Table";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Badge } from "@/components/ui/Badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ResponsiveList } from "@/components/ui/ResponsiveList";
+import { MobileCard, MobileCardAvatar } from "@/components/ui/MobileCard";
+import { QuickFilters } from "@/components/ui/FilterDrawer";
 import { useBillingAdmin } from "@/lib/hooks/use-billing-admin";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 export default function BillingPage() {
   const router = useRouter();
   const { stats, orders, isLoading, error, refetch } = useBillingAdmin();
+  const isMobile = useIsMobile();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
 
@@ -181,51 +187,101 @@ export default function BillingPage() {
         <CardContent noPadding>
           {/* Filters */}
           <div className="p-4 border-b border-[var(--border-primary)]">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <SearchInput
-                value={search}
-                onChange={setSearch}
-                placeholder="Buscar por orden, tenant o paquete..."
-                className="flex-1 max-w-md"
-              />
-
-              <div className="flex items-center gap-2">
-                {[
-                  { value: "", label: "Todos" },
-                  { value: "completed", label: "Completados" },
-                  { value: "pending", label: "Pendientes" },
-                  { value: "failed", label: "Fallidos" },
-                ].map((status) => (
-                  <button
-                    key={status.value}
-                    onClick={() => setStatusFilter(status.value)}
-                    className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                      statusFilter === status.value
-                        ? "bg-[var(--accent-primary)] text-white"
-                        : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]"
-                    }`}
-                  >
-                    {status.label}
-                  </button>
-                ))}
+            {isMobile ? (
+              <div className="space-y-3">
+                <SearchInput
+                  value={search}
+                  onChange={setSearch}
+                  placeholder="Buscar orden..."
+                  className="w-full"
+                />
+                <QuickFilters
+                  filters={[
+                    { key: "", label: "Todos" },
+                    { key: "completed", label: "Completados" },
+                    { key: "pending", label: "Pendientes" },
+                    { key: "failed", label: "Fallidos" },
+                  ]}
+                  activeFilter={statusFilter}
+                  onFilterChange={setStatusFilter}
+                />
               </div>
-            </div>
+            ) : (
+              <div className="flex flex-col sm:flex-row gap-4">
+                <SearchInput
+                  value={search}
+                  onChange={setSearch}
+                  placeholder="Buscar por orden, tenant o paquete..."
+                  className="flex-1 max-w-md"
+                />
+                <div className="flex items-center gap-2">
+                  {[
+                    { value: "", label: "Todos" },
+                    { value: "completed", label: "Completados" },
+                    { value: "pending", label: "Pendientes" },
+                    { value: "failed", label: "Fallidos" },
+                  ].map((status) => (
+                    <button
+                      key={status.value}
+                      onClick={() => setStatusFilter(status.value)}
+                      className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                        statusFilter === status.value
+                          ? "bg-[var(--accent-primary)] text-white"
+                          : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]"
+                      }`}
+                    >
+                      {status.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
-          <DataTable
-            data={filteredOrders}
-            columns={orderColumns}
-            keyExtractor={(o) => o.id}
-            isLoading={isLoading}
-            emptyState={
-              <EmptyState
-                icon={<CreditCard />}
-                title="Sin órdenes"
-                description="No hay órdenes todavía."
-                size="sm"
-              />
-            }
-          />
+          <div className={isMobile ? "p-4" : ""}>
+            <ResponsiveList
+              data={filteredOrders}
+              columns={orderColumns}
+              keyExtractor={(o) => o.id}
+              isLoading={isLoading}
+              renderMobileItem={(order) => {
+                const statusConfig: Record<string, { variant: "success" | "warning" | "danger" | "default"; label: string }> = {
+                  completed: { variant: "success", label: "Completado" },
+                  pending: { variant: "warning", label: "Pendiente" },
+                  failed: { variant: "danger", label: "Fallido" },
+                  refunded: { variant: "default", label: "Reembolsado" },
+                };
+                const config = statusConfig[order.status] || { variant: "default" as const, label: order.status };
+                
+                return (
+                  <MobileCard
+                    avatar={<MobileCardAvatar variant="primary" icon={CreditCard} />}
+                    title={order.order_number}
+                    subtitle={order.tenant?.name || "N/A"}
+                    badges={<Badge variant={config.variant} dot>{config.label}</Badge>}
+                    stats={[
+                      { icon: CreditCard, value: order.credits_purchased, label: "Créditos" },
+                    ]}
+                    rightContent={
+                      <span className="font-semibold text-foreground">
+                        {formatCurrency(Number(order.total), order.currency)}
+                      </span>
+                    }
+                    metadata={order.paid_at ? formatDate(order.paid_at) : formatDate(order.created_at)}
+                    showChevron={false}
+                  />
+                );
+              }}
+              emptyState={
+                <EmptyState
+                  icon={<CreditCard />}
+                  title="Sin órdenes"
+                  description="No hay órdenes todavía."
+                  size="sm"
+                />
+              }
+            />
+          </div>
         </CardContent>
       </Card>
     </PageContainer>

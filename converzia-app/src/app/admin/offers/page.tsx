@@ -3,21 +3,26 @@
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Plus, Package, Users, Layers, Megaphone, MapPin, Building2, Clock, AlertTriangle, CheckCircle, XCircle } from "lucide-react";
+import { Plus, Package, Users, Layers, Megaphone, MapPin, Building2, Clock, AlertTriangle, CheckCircle, XCircle, Edit, Trash2, Pause, Play, Archive, Eye } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
+import { FloatingActionButton } from "@/components/layout/BottomNavigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { DataTable, Column } from "@/components/ui/Table";
+import { Column } from "@/components/ui/Table";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Badge, StatusBadge } from "@/components/ui/Badge";
-import { ActionDropdown } from "@/components/ui/Dropdown";
 import { CustomSelect } from "@/components/ui/Select";
 import { ConfirmModal, Modal } from "@/components/ui/Modal";
 import { NoOffersEmptyState, EmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
 import { TextArea } from "@/components/ui/TextArea";
 import { useToast } from "@/components/ui/Toast";
+import { ResponsiveList, ResponsiveListContainer } from "@/components/ui/ResponsiveList";
+import { MobileCard, MobileCardAvatar } from "@/components/ui/MobileCard";
+import { ResponsiveActionMenu } from "@/components/ui/ActionDrawer";
+import { QuickFilters, FilterDrawer, FilterSection, FilterChips } from "@/components/ui/FilterDrawer";
 import { useOffers, useOfferMutations, useTenantOptions } from "@/lib/hooks/use-offers";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { createClient } from "@/lib/supabase/client";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { formatCurrency, formatRelativeTime } from "@/lib/utils";
@@ -55,6 +60,7 @@ export default function OffersPage() {
   const searchParams = useSearchParams();
   const toast = useToast();
   const supabase = createClient();
+  const isMobile = useIsMobile();
 
   const [activeTab, setActiveTab] = useState<TabType>("all");
   const [search, setSearch] = useState("");
@@ -472,39 +478,103 @@ export default function OffersPage() {
           </div>
         </div>
 
-        {/* Table */}
-        <DataTable
-          data={activeTab === "all" ? offers : filteredOffers}
-          columns={columns}
-          keyExtractor={(o) => o.id}
-          isLoading={isLoading}
-          loadingRows={5}
-          onRowClick={(offer) => router.push(`/admin/offers/${offer.id}`)}
-          emptyState={
-            activeTab === "pending" ? (
-              <EmptyState
-                icon={<CheckCircle />}
-                title="Sin ofertas pendientes"
-                description="No hay ofertas esperando aprobación."
-                size="sm"
-              />
-            ) : activeTab === "backlog" ? (
-              <EmptyState
-                icon={<Megaphone />}
-                title="Todo al día"
-                description="Todas las ofertas tienen campañas mapeadas."
-                size="sm"
-              />
-            ) : (
-              <NoOffersEmptyState
-                action={{
-                  label: "Crear primera oferta",
-                  onClick: () => router.push("/admin/offers/new"),
-                }}
-              />
-            )
-          }
-        />
+        {/* Responsive List */}
+        <div className={isMobile ? "p-4" : ""}>
+          <ResponsiveList
+            data={activeTab === "all" ? offers : filteredOffers}
+            columns={columns}
+            keyExtractor={(o) => o.id}
+            isLoading={isLoading}
+            loadingCount={5}
+            onItemClick={(offer) => router.push(`/admin/offers/${offer.id}`)}
+            renderMobileItem={(offer) => {
+              const TypeIcon = typeConfig[offer.offer_type]?.icon || Package;
+              const approval = approvalStatusConfig[offer.approval_status || 'APPROVED'];
+              const status = statusConfig[offer.status];
+              
+              return (
+                <MobileCard
+                  avatar={
+                    offer.image_url ? (
+                      <MobileCardAvatar src={offer.image_url} alt={offer.name} />
+                    ) : (
+                      <MobileCardAvatar variant="success" icon={TypeIcon} />
+                    )
+                  }
+                  title={offer.name}
+                  subtitle={`📍 ${offer.city || offer.zone || "Sin ubicación"}`}
+                  badges={
+                    <div className="flex gap-1.5">
+                      {offer.approval_status && offer.approval_status !== 'APPROVED' && (
+                        <Badge variant={approval?.variant || "default"} size="sm" dot>
+                          {approval?.label || offer.approval_status}
+                        </Badge>
+                      )}
+                      {(offer.approval_status === 'APPROVED' || !offer.approval_status) && (
+                        <Badge variant={status?.variant || "default"} size="sm" dot>
+                          {status?.label || offer.status}
+                        </Badge>
+                      )}
+                    </div>
+                  }
+                  stats={[
+                    { icon: Users, value: offer._count?.leads || 0, label: "Leads" },
+                    { icon: Megaphone, value: offer._count?.ads || 0, label: "Ads" },
+                  ]}
+                  metadata={offer.price_from ? formatCurrency(offer.price_from, offer.currency) : undefined}
+                  rightContent={
+                    <ResponsiveActionMenu
+                      title={offer.name}
+                      items={[
+                        { label: "Ver detalles", icon: Eye, onClick: () => router.push(`/admin/offers/${offer.id}`) },
+                        { label: "Editar", icon: Edit, onClick: () => router.push(`/admin/offers/${offer.id}/edit`) },
+                        { divider: true, label: "" },
+                        ...(offer.approval_status === "PENDING_APPROVAL"
+                          ? [{ label: "Revisar", icon: CheckCircle, onClick: () => setReviewingOffer(offer) }]
+                          : []),
+                        ...(offer.status === "ACTIVE"
+                          ? [{ label: "Pausar", icon: Pause, onClick: () => handleStatusChange(offer.id, "PAUSED") }]
+                          : []),
+                        ...(offer.status === "PAUSED" || offer.status === "DRAFT"
+                          ? [{ label: "Activar", icon: Play, onClick: () => handleStatusChange(offer.id, "ACTIVE") }]
+                          : []),
+                        { label: "Archivar", icon: Archive, onClick: () => handleStatusChange(offer.id, "ARCHIVED") },
+                        { divider: true, label: "" },
+                        { label: "Eliminar", icon: Trash2, onClick: () => setDeleteId(offer.id), danger: true },
+                      ]}
+                    />
+                  }
+                  showChevron={false}
+                  onPress={() => router.push(`/admin/offers/${offer.id}`)}
+                />
+              );
+            }}
+            emptyState={
+              activeTab === "pending" ? (
+                <EmptyState
+                  icon={<CheckCircle />}
+                  title="Sin ofertas pendientes"
+                  description="No hay ofertas esperando aprobación."
+                  size="sm"
+                />
+              ) : activeTab === "backlog" ? (
+                <EmptyState
+                  icon={<Megaphone />}
+                  title="Todo al día"
+                  description="Todas las ofertas tienen campañas mapeadas."
+                  size="sm"
+                />
+              ) : (
+                <NoOffersEmptyState
+                  action={{
+                    label: "Crear primera oferta",
+                    onClick: () => router.push("/admin/offers/new"),
+                  }}
+                />
+              )
+            }
+          />
+        </div>
 
         {/* Pagination */}
         {total > 20 && activeTab === "all" && (
@@ -519,6 +589,13 @@ export default function OffersPage() {
           </div>
         )}
       </Card>
+
+      {/* FAB for mobile */}
+      <FloatingActionButton
+        icon={<Plus className="h-6 w-6" />}
+        onClick={() => router.push("/admin/offers/new")}
+        label="Nueva"
+      />
 
       {/* Delete Modal */}
       <ConfirmModal

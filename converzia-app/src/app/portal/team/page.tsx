@@ -8,21 +8,28 @@ import {
   Shield,
   Clock,
   MoreHorizontal,
+  Edit,
+  Trash2,
+  UserCog,
 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
+import { FloatingActionButton } from "@/components/layout/BottomNavigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { DataTable, Column } from "@/components/ui/Table";
+import { Column } from "@/components/ui/Table";
 import { Badge, RoleBadge } from "@/components/ui/Badge";
 import { UserAvatar } from "@/components/ui/Avatar";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
-import { ActionDropdown } from "@/components/ui/Dropdown";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ConfirmModal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
+import { ResponsiveList } from "@/components/ui/ResponsiveList";
+import { MobileCard, MobileCardAvatar } from "@/components/ui/MobileCard";
+import { ResponsiveActionMenu } from "@/components/ui/ActionDrawer";
 import { useAuth } from "@/lib/auth/context";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { usePortalTeam } from "@/lib/hooks/use-portal";
 import { createClient } from "@/lib/supabase/client";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
@@ -38,6 +45,7 @@ const roleOptions = [
 export default function PortalTeamPage() {
   const { hasPermission, activeTenantId, user } = useAuth();
   const toast = useToast();
+  const isMobile = useIsMobile();
   const { members, isLoading, refetch } = usePortalTeam();
 
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -270,29 +278,85 @@ export default function PortalTeamPage() {
         <CardHeader>
           <CardTitle>Miembros activos ({activeMembers.length})</CardTitle>
         </CardHeader>
-        <DataTable
-          data={activeMembers}
-          columns={columns}
-          keyExtractor={(m) => m.id}
-          isLoading={isLoading}
-          emptyState={
-            <EmptyState
-              icon={<Users />}
-              title="Sin miembros"
-              description="Tu equipo aparecerá aquí cuando invites miembros."
-              size="sm"
-              action={
-                canInvite
-                  ? {
-                      label: "Invitar miembro",
-                      onClick: () => setShowInviteModal(true),
-                    }
-                  : undefined
-              }
-            />
-          }
-        />
+        <div className={isMobile ? "p-4" : ""}>
+          <ResponsiveList
+            data={activeMembers}
+            columns={columns}
+            keyExtractor={(m) => m.id}
+            isLoading={isLoading}
+            renderMobileItem={(m) => {
+              const statusConfigMap: Record<string, { variant: "success" | "warning" | "danger" | "secondary"; label: string }> = {
+                ACTIVE: { variant: "success", label: "Activo" },
+                PENDING_APPROVAL: { variant: "warning", label: "Pendiente" },
+                SUSPENDED: { variant: "danger", label: "Suspendido" },
+                REVOKED: { variant: "secondary", label: "Removido" },
+              };
+              const c = statusConfigMap[m.status] || { variant: "secondary" as const, label: m.status };
+              
+              return (
+                <MobileCard
+                  avatar={
+                    <MobileCardAvatar 
+                      src={m.user?.avatar_url} 
+                      fallback={m.user?.full_name || m.user?.email || "U"}
+                      variant="primary"
+                    />
+                  }
+                  title={m.user?.full_name || m.user?.email || "Usuario"}
+                  subtitle={m.user?.email}
+                  badges={
+                    <div className="flex gap-1.5">
+                      <RoleBadge role={m.role} />
+                      <Badge variant={c.variant} size="sm" dot>{c.label}</Badge>
+                    </div>
+                  }
+                  metadata={`Miembro desde ${formatDate(m.created_at)}`}
+                  rightContent={
+                    m.user_id !== user?.id && canManageUsers && (
+                      <ResponsiveActionMenu
+                        title="Opciones de miembro"
+                        items={[
+                          { label: "Cambiar a Admin", icon: UserCog, onClick: () => handleRoleChange(m.id, "ADMIN") },
+                          { label: "Cambiar a Billing", icon: UserCog, onClick: () => handleRoleChange(m.id, "BILLING") },
+                          { label: "Cambiar a Viewer", icon: UserCog, onClick: () => handleRoleChange(m.id, "VIEWER") },
+                          { divider: true, label: "" },
+                          { label: "Remover del equipo", icon: Trash2, onClick: () => setRemoveId(m.id), danger: true },
+                        ]}
+                      />
+                    )
+                  }
+                  showChevron={false}
+                />
+              );
+            }}
+            emptyState={
+              <EmptyState
+                icon={<Users />}
+                title="Sin miembros"
+                description="Tu equipo aparecerá aquí cuando invites miembros."
+                size="sm"
+                action={
+                  canInvite
+                    ? {
+                        label: "Invitar miembro",
+                        onClick: () => setShowInviteModal(true),
+                      }
+                    : undefined
+                }
+              />
+            }
+          />
+        </div>
       </Card>
+
+      {/* FAB for mobile - Invite */}
+      {canInvite && (
+        <FloatingActionButton
+          icon={<Plus className="h-6 w-6" />}
+          onClick={() => setShowInviteModal(true)}
+          label="Invitar"
+        />
+      )}
 
       {/* Invite Modal */}
       <Modal
@@ -348,6 +412,9 @@ export default function PortalTeamPage() {
     </PageContainer>
   );
 }
+
+
+
 
 
 

@@ -3,23 +3,28 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Building2, Users, Package, CreditCard, Check, X, Clock, Globe, Phone } from "lucide-react";
+import { Plus, Building2, Users, Package, CreditCard, Check, X, Clock, Globe, Phone, Edit, Trash2, Pause, Play } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
+import { FloatingActionButton } from "@/components/layout/BottomNavigation";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { DataTable, Column } from "@/components/ui/Table";
+import { Column } from "@/components/ui/Table";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { AdvancedFilters, FilterConfig } from "@/components/ui/AdvancedFilters";
 import { BulkActions } from "@/components/ui/BulkActions";
 import { TenantStatusBadge } from "@/components/ui/Badge";
-import { ActionDropdown } from "@/components/ui/Dropdown";
 import { ConfirmModal, Modal } from "@/components/ui/Modal";
 import { NoTenantsEmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
 import { TextArea } from "@/components/ui/TextArea";
 import { useToast } from "@/components/ui/Toast";
+import { ResponsiveList, ResponsiveListContainer } from "@/components/ui/ResponsiveList";
+import { MobileCard, MobileCardAvatar } from "@/components/ui/MobileCard";
+import { ResponsiveActionMenu } from "@/components/ui/ActionDrawer";
+import { QuickFilters, FilterDrawer, FilterSection, FilterChips } from "@/components/ui/FilterDrawer";
 import { useTenants, useTenantMutations } from "@/lib/hooks/use-tenants";
 import { useAuth } from "@/lib/auth/context";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { usePendingApprovalsContext } from "@/contexts/PendingApprovalsContext";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import type { TenantWithStats } from "@/types";
@@ -35,6 +40,7 @@ export default function TenantsPage() {
   const router = useRouter();
   const toast = useToast();
   const { user } = useAuth();
+  const isMobile = useIsMobile();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [page, setPage] = useState(1);
@@ -337,86 +343,174 @@ export default function TenantsPage() {
         </div>
       )}
 
-      <Card>
-        {/* Filters */}
-        <div className="p-4 border-b border-card-border">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <SearchInput
-              value={search}
-              onChange={setSearch}
-              placeholder="Buscar por nombre, slug o email..."
-              className="flex-1 max-w-md"
-            />
-
-            <div className="flex items-center gap-2">
-              {[
-                { value: "", label: "Todos" },
-                { value: "PENDING", label: "Pendientes", count: pendingCount },
-                { value: "ACTIVE", label: "Activos" },
-                { value: "SUSPENDED", label: "Suspendidos" },
-              ].map((status) => (
-                <button
-                  key={status.value}
-                  onClick={() => setStatusFilter(status.value)}
-                  className={`px-3 py-1.5 text-sm rounded-lg transition-colors flex items-center gap-1.5 ${
-                    statusFilter === status.value
-                      ? status.value === "PENDING"
-                        ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                        : "bg-primary-500/20 text-primary-400 border border-primary-500/30"
-                      : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-card-border"
-                  }`}
-                >
-                  {status.value === "PENDING" && <Clock className="h-3.5 w-3.5" />}
-                  {status.label}
-                  {status.count !== undefined && status.count > 0 && (
-                    <span className="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-amber-500/30">
-                      {status.count}
-                    </span>
-                  )}
-                </button>
-              ))}
-              <AdvancedFilters
-                filters={filterConfig}
-                values={filterValues}
-                onChange={setFilterValues}
-                onReset={() => setFilterValues({})}
-              />
+      <ResponsiveListContainer
+        header={
+          <>
+            {/* Filters */}
+            <div className="p-4 border-b border-card-border">
+              {isMobile ? (
+                // Mobile: Search + Filter button + Quick filters
+                <div className="space-y-3">
+                  <div className="flex gap-2">
+                    <SearchInput
+                      value={search}
+                      onChange={setSearch}
+                      placeholder="Buscar tenant..."
+                      className="flex-1"
+                    />
+                    <FilterDrawer
+                      activeCount={Object.keys(filterValues).filter(k => filterValues[k]).length}
+                      onClear={() => setFilterValues({})}
+                    >
+                      <FilterSection title="Vertical">
+                        <FilterChips
+                          options={[
+                            { value: "PROPERTY", label: "Inmobiliaria" },
+                            { value: "AUTO", label: "Automotriz" },
+                            { value: "LOAN", label: "Créditos" },
+                            { value: "INSURANCE", label: "Seguros" },
+                          ]}
+                          value={filterValues.vertical || ""}
+                          onChange={(v) => setFilterValues({ ...filterValues, vertical: v })}
+                        />
+                      </FilterSection>
+                    </FilterDrawer>
+                  </div>
+                  <QuickFilters
+                    filters={[
+                      { key: "", label: "Todos" },
+                      { key: "PENDING", label: "Pendientes", count: pendingCount, highlight: pendingCount > 0 },
+                      { key: "ACTIVE", label: "Activos" },
+                      { key: "SUSPENDED", label: "Suspendidos" },
+                    ]}
+                    activeFilter={statusFilter}
+                    onFilterChange={setStatusFilter}
+                  />
+                </div>
+              ) : (
+                // Desktop: Original layout
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <SearchInput
+                    value={search}
+                    onChange={setSearch}
+                    placeholder="Buscar por nombre, slug o email..."
+                    className="flex-1 max-w-md"
+                  />
+                  <div className="flex items-center gap-2">
+                    {[
+                      { value: "", label: "Todos" },
+                      { value: "PENDING", label: "Pendientes", count: pendingCount },
+                      { value: "ACTIVE", label: "Activos" },
+                      { value: "SUSPENDED", label: "Suspendidos" },
+                    ].map((status) => (
+                      <button
+                        key={status.value}
+                        onClick={() => setStatusFilter(status.value)}
+                        className={`px-3 py-1.5 text-sm rounded-lg transition-colors flex items-center gap-1.5 ${
+                          statusFilter === status.value
+                            ? status.value === "PENDING"
+                              ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                              : "bg-primary-500/20 text-primary-400 border border-primary-500/30"
+                            : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-card-border"
+                        }`}
+                      >
+                        {status.value === "PENDING" && <Clock className="h-3.5 w-3.5" />}
+                        {status.label}
+                        {status.count !== undefined && status.count > 0 && (
+                          <span className="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-amber-500/30">
+                            {status.count}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                    <AdvancedFilters
+                      filters={filterConfig}
+                      values={filterValues}
+                      onChange={setFilterValues}
+                      onReset={() => setFilterValues({})}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
-        </div>
 
-        {/* Pending Alert */}
-        {statusFilter === "" && pendingCount > 0 && (
-          <div className="mx-4 mt-4 p-4 rounded-lg bg-amber-500/10 border border-amber-500/20">
-            <div className="flex items-center gap-3">
-              <Clock className="h-5 w-5 text-amber-400" />
-              <div className="flex-1">
-                <p className="text-sm text-amber-200">
-                  Tenés <strong>{pendingCount}</strong> solicitud{pendingCount > 1 ? "es" : ""} pendiente{pendingCount > 1 ? "s" : ""} de aprobación
-                </p>
+            {/* Pending Alert - Only on desktop */}
+            {!isMobile && statusFilter === "" && pendingCount > 0 && (
+              <div className="mx-4 mt-4 p-4 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                <div className="flex items-center gap-3">
+                  <Clock className="h-5 w-5 text-amber-400" />
+                  <div className="flex-1">
+                    <p className="text-sm text-amber-200">
+                      Tenés <strong>{pendingCount}</strong> solicitud{pendingCount > 1 ? "es" : ""} pendiente{pendingCount > 1 ? "s" : ""} de aprobación
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setStatusFilter("PENDING")}
+                  >
+                    Ver pendientes
+                  </Button>
+                </div>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setStatusFilter("PENDING")}
-              >
-                Ver pendientes
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Table */}
-        <DataTable
+            )}
+          </>
+        }
+      >
+        {/* Responsive List */}
+        <ResponsiveList
           data={tenants}
           columns={columns}
           keyExtractor={(t) => t.id}
           isLoading={isLoading}
-          loadingRows={5}
-          onRowClick={(tenant) => router.push(`/admin/tenants/${tenant.id}`)}
-          selectable
+          loadingCount={5}
+          onItemClick={(tenant) => router.push(`/admin/tenants/${tenant.id}`)}
+          selectable={!isMobile}
           selectedRows={selectedTenants}
           onSelectionChange={setSelectedTenants}
+          renderMobileItem={(tenant) => (
+            <MobileCard
+              avatar={
+                <MobileCardAvatar variant="primary" fallback={tenant.name}>
+                  {tenant.name.slice(0, 2).toUpperCase()}
+                </MobileCardAvatar>
+              }
+              title={tenant.name}
+              subtitle={`${tenant.slug}${(tenant as any).vertical ? ` • ${VERTICAL_LABELS[(tenant as any).vertical] || (tenant as any).vertical}` : ""}`}
+              badges={<TenantStatusBadge status={tenant.status} />}
+              stats={[
+                { icon: Users, value: tenant._count?.leads || 0, label: "Leads" },
+                { icon: Package, value: tenant._count?.offers || 0, label: "Ofertas" },
+                { icon: CreditCard, value: tenant.credit_balance || 0, label: "Créditos" },
+              ]}
+              rightContent={
+                <ResponsiveActionMenu
+                  title={tenant.name}
+                  items={[
+                    { label: "Ver detalles", icon: Building2, onClick: () => router.push(`/admin/tenants/${tenant.id}`) },
+                    { label: "Editar", icon: Edit, onClick: () => router.push(`/admin/tenants/${tenant.id}/edit`) },
+                    { divider: true, label: "" },
+                    ...(tenant.status === "PENDING" 
+                      ? [
+                          { label: "Aprobar", icon: Check, onClick: () => setApproveId(tenant.id) },
+                          { label: "Rechazar", icon: X, onClick: () => setRejectId(tenant.id), danger: true },
+                        ] 
+                      : []),
+                    ...(tenant.status === "ACTIVE" 
+                      ? [{ label: "Suspender", icon: Pause, onClick: () => handleStatusChange(tenant.id, "SUSPENDED") }] 
+                      : []),
+                    ...(tenant.status === "SUSPENDED" 
+                      ? [{ label: "Reactivar", icon: Play, onClick: () => handleStatusChange(tenant.id, "ACTIVE") }] 
+                      : []),
+                    { divider: true, label: "" },
+                    { label: "Eliminar", icon: Trash2, onClick: () => setDeleteId(tenant.id), danger: true },
+                  ]}
+                />
+              }
+              showChevron={false}
+              onPress={() => router.push(`/admin/tenants/${tenant.id}`)}
+            />
+          )}
           emptyState={
             statusFilter === "PENDING" ? (
               <div className="py-12 text-center">
@@ -434,50 +528,52 @@ export default function TenantsPage() {
           }
         />
 
-        {/* Bulk Actions */}
-        <BulkActions
-          selectedCount={selectedTenants.length}
-          selectedIds={selectedTenants}
-          actions={[
-            {
-              label: "Aprobar",
-              icon: <Check className="h-4 w-4" />,
-              onClick: async (ids) => {
-                if (!user) return;
-                try {
-                  await Promise.all(ids.map((id) => approveTenant(id, user.id)));
-                  toast.success(`${ids.length} tenant(s) aprobado(s)`);
-                  setSelectedTenants([]);
-                  refetch();
-                  refetchPendingApprovals();
-                } catch (error) {
-                  toast.error("Error al aprobar tenants");
-                }
+        {/* Bulk Actions - Desktop only */}
+        {!isMobile && (
+          <BulkActions
+            selectedCount={selectedTenants.length}
+            selectedIds={selectedTenants}
+            actions={[
+              {
+                label: "Aprobar",
+                icon: <Check className="h-4 w-4" />,
+                onClick: async (ids) => {
+                  if (!user) return;
+                  try {
+                    await Promise.all(ids.map((id) => approveTenant(id, user.id)));
+                    toast.success(`${ids.length} tenant(s) aprobado(s)`);
+                    setSelectedTenants([]);
+                    refetch();
+                    refetchPendingApprovals();
+                  } catch (error) {
+                    toast.error("Error al aprobar tenants");
+                  }
+                },
+                variant: "primary",
+                confirmMessage: `¿Aprobar ${selectedTenants.length} tenant(s)?`,
               },
-              variant: "primary",
-              confirmMessage: `¿Aprobar ${selectedTenants.length} tenant(s)?`,
-            },
-            {
-              label: "Rechazar",
-              icon: <X className="h-4 w-4" />,
-              onClick: async (ids) => {
-                if (!user) return;
-                try {
-                  await Promise.all(ids.map((id) => rejectTenant(id, "Rechazo masivo", user.id)));
-                  toast.success(`${ids.length} tenant(s) rechazado(s)`);
-                  setSelectedTenants([]);
-                  refetch();
-                  refetchPendingApprovals();
-                } catch (error) {
-                  toast.error("Error al rechazar tenants");
-                }
+              {
+                label: "Rechazar",
+                icon: <X className="h-4 w-4" />,
+                onClick: async (ids) => {
+                  if (!user) return;
+                  try {
+                    await Promise.all(ids.map((id) => rejectTenant(id, "Rechazo masivo", user.id)));
+                    toast.success(`${ids.length} tenant(s) rechazado(s)`);
+                    setSelectedTenants([]);
+                    refetch();
+                    refetchPendingApprovals();
+                  } catch (error) {
+                    toast.error("Error al rechazar tenants");
+                  }
+                },
+                variant: "danger",
+                confirmMessage: `¿Rechazar ${selectedTenants.length} tenant(s)?`,
               },
-              variant: "danger",
-              confirmMessage: `¿Rechazar ${selectedTenants.length} tenant(s)?`,
-            },
-          ]}
-          onClear={() => setSelectedTenants([])}
-        />
+            ]}
+            onClear={() => setSelectedTenants([])}
+          />
+        )}
 
         {/* Pagination */}
         {total > 20 && (
@@ -491,7 +587,14 @@ export default function TenantsPage() {
             />
           </div>
         )}
-      </Card>
+      </ResponsiveListContainer>
+
+      {/* FAB for mobile */}
+      <FloatingActionButton
+        icon={<Plus className="h-6 w-6" />}
+        onClick={() => router.push("/admin/tenants/new")}
+        label="Nuevo"
+      />
 
       {/* Approve Confirmation Modal */}
       <ConfirmModal

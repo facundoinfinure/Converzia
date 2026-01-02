@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   Sparkles,
   ArrowRight,
+  Star,
 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -24,10 +25,13 @@ import { Badge } from "@/components/ui/Badge";
 import { StatCard, StatsGrid } from "@/components/ui/StatCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { DataTable, Column } from "@/components/ui/Table";
+import { Column } from "@/components/ui/Table";
 import { CustomSelect } from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
+import { ResponsiveList } from "@/components/ui/ResponsiveList";
+import { MobileCard, MobileCardAvatar } from "@/components/ui/MobileCard";
 import { useAuth } from "@/lib/auth/context";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { createClient } from "@/lib/supabase/client";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { formatRelativeTime, cn } from "@/lib/utils";
@@ -125,6 +129,7 @@ const DROP_REASONS: Record<string, string> = {
 export default function PortalLeadsPage() {
   const toast = useToast();
   const { activeTenantId } = useAuth();
+  const isMobile = useIsMobile();
   
   const [stats, setStats] = useState<TenantLeadStats | null>(null);
   const [leads, setLeads] = useState<TenantLeadView[]>([]);
@@ -619,20 +624,67 @@ export default function PortalLeadsPage() {
             </div>
           )}
           
-          <DataTable
-            data={leads}
-            columns={getColumns()}
-            keyExtractor={(l) => l.id}
-            isLoading={isRefreshing}
-            emptyState={
-              <EmptyState
-                icon={<Users />}
-                title={`Sin leads ${LEAD_CATEGORIES.find(c => c.key === selectedCategory)?.label.toLowerCase()}`}
-                description="No hay leads en esta categoría actualmente."
-                size="sm"
-              />
-            }
-          />
+          <div className={isMobile ? "p-4" : ""}>
+            <ResponsiveList
+              data={leads}
+              columns={getColumns()}
+              keyExtractor={(l) => l.id}
+              isLoading={isRefreshing}
+              renderMobileItem={(l) => {
+                const isDropped = l.category === "dropped";
+                const categoryInfo = LEAD_CATEGORIES.find(c => c.key === l.category);
+                
+                const statusLabels: Record<string, { label: string; variant: "success" | "warning" | "info" | "primary" }> = {
+                  ENGAGED: { label: "Interesado", variant: "primary" },
+                  QUALIFYING: { label: "En calificación", variant: "primary" },
+                  CONTACTED: { label: "Contactado", variant: "info" },
+                  TO_BE_CONTACTED: { label: "Por contactar", variant: "warning" },
+                  SCORED: { label: "Calificado", variant: "info" },
+                  LEAD_READY: { label: "Listo", variant: "success" },
+                  SENT_TO_DEVELOPER: { label: "Entregado", variant: "success" },
+                };
+                const statusConfig = statusLabels[l.status] || { label: l.status, variant: "info" as const };
+                
+                return (
+                  <MobileCard
+                    avatar={
+                      isDropped ? (
+                        <MobileCardAvatar variant="default" icon={Users} />
+                      ) : (
+                        <MobileCardAvatar 
+                          variant={l.category === "ready" ? "success" : l.category === "interested" ? "info" : "warning"} 
+                          fallback={l.firstName || "L"}
+                        />
+                      )
+                    }
+                    title={isDropped ? "Lead anónimo" : (l.firstName || "Lead")}
+                    subtitle={l.offerName || undefined}
+                    badges={
+                      isDropped ? (
+                        <span className="text-xs text-muted-foreground">{l.dropReason || "Sin especificar"}</span>
+                      ) : (
+                        <Badge variant={statusConfig.variant} size="sm" dot>{statusConfig.label}</Badge>
+                      )
+                    }
+                    stats={l.score !== null && !isDropped ? [
+                      { icon: Star, value: l.score, label: "Score" },
+                    ] : undefined}
+                    metadata={formatRelativeTime(l.updatedAt)}
+                    showChevron={false}
+                    variant={isDropped ? "muted" : "default"}
+                  />
+                );
+              }}
+              emptyState={
+                <EmptyState
+                  icon={<Users />}
+                  title={`Sin leads ${LEAD_CATEGORIES.find(c => c.key === selectedCategory)?.label.toLowerCase()}`}
+                  description="No hay leads en esta categoría actualmente."
+                  size="sm"
+                />
+              }
+            />
+          </div>
         </Card>
       ) : (
         <Card className="border-dashed">

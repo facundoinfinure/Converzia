@@ -22,18 +22,22 @@ import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Tabs, TabsList, TabTrigger, TabContent } from "@/components/ui/Tabs";
-import { DataTable, Column } from "@/components/ui/Table";
+import { Column } from "@/components/ui/Table";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { CustomSelect } from "@/components/ui/Select";
 import { Badge, RoleBadge } from "@/components/ui/Badge";
 import { Avatar, UserAvatar } from "@/components/ui/Avatar";
-import { ActionDropdown } from "@/components/ui/Dropdown";
 import { Modal, ConfirmModal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
 import { useToast } from "@/components/ui/Toast";
+import { ResponsiveList } from "@/components/ui/ResponsiveList";
+import { MobileCard, MobileCardAvatar } from "@/components/ui/MobileCard";
+import { ResponsiveActionMenu } from "@/components/ui/ActionDrawer";
+import { QuickFilters, FilterDrawer, FilterSection, FilterChips } from "@/components/ui/FilterDrawer";
 import { useUsers, useUserMutations } from "@/lib/hooks/use-users";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { usePendingApprovalsContext } from "@/contexts/PendingApprovalsContext";
 import { formatRelativeTime, formatDate } from "@/lib/utils";
 
@@ -63,6 +67,7 @@ const VERTICAL_ICONS: Record<string, React.ReactNode> = {
 export default function UsersPage() {
   const router = useRouter();
   const toast = useToast();
+  const isMobile = useIsMobile();
 
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -363,20 +368,59 @@ export default function UsersPage() {
             <CardHeader>
               <CardTitle>Solicitudes pendientes de aprobación</CardTitle>
             </CardHeader>
-            <DataTable
-              data={approvals}
-              columns={approvalColumns}
-              keyExtractor={(a) => a.id}
-              isLoading={loadingApprovals}
-              emptyState={
-                <EmptyState
-                  icon={<Check />}
-                  title="Sin solicitudes pendientes"
-                  description="No hay solicitudes de acceso esperando aprobación."
-                  size="sm"
-                />
-              }
-            />
+            <div className={isMobile ? "p-4" : ""}>
+              <ResponsiveList
+                data={approvals}
+                columns={approvalColumns}
+                keyExtractor={(a) => a.id}
+                isLoading={loadingApprovals}
+                renderMobileItem={(a) => (
+                  <MobileCard
+                    avatar={
+                      <MobileCardAvatar 
+                        fallback={a.user?.full_name || a.user?.email || "U"}
+                        variant="warning"
+                      />
+                    }
+                    title={a.user?.full_name || a.user?.email || "Usuario"}
+                    subtitle={a.tenant?.name}
+                    badges={<RoleBadge role={a.role} />}
+                    metadata={formatRelativeTime(a.created_at)}
+                    footer={
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="success"
+                          onClick={() => setApproveId(a.id)}
+                          leftIcon={<Check className="h-3 w-3" />}
+                          className="flex-1"
+                        >
+                          Aprobar
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          onClick={() => setRejectId(a.id)}
+                          leftIcon={<X className="h-3 w-3" />}
+                          className="flex-1"
+                        >
+                          Rechazar
+                        </Button>
+                      </div>
+                    }
+                    showChevron={false}
+                  />
+                )}
+                emptyState={
+                  <EmptyState
+                    icon={<Check />}
+                    title="Sin solicitudes pendientes"
+                    description="No hay solicitudes de acceso esperando aprobación."
+                    size="sm"
+                  />
+                }
+              />
+            </div>
           </Card>
         </TabContent>
 
@@ -423,20 +467,77 @@ export default function UsersPage() {
                 </div>
               </div>
             </div>
-            <DataTable
-              data={users}
-              columns={userColumns}
-              keyExtractor={(u) => u.id}
-              isLoading={isLoading}
-              emptyState={
-                <EmptyState
-                  icon={<Users />}
-                  title="Sin usuarios"
-                  description="No hay usuarios registrados en la plataforma."
-                  size="sm"
-                />
-              }
-            />
+            <div className={isMobile ? "p-4" : ""}>
+              <ResponsiveList
+                data={users}
+                columns={userColumns}
+                keyExtractor={(u) => u.id}
+                isLoading={isLoading}
+                renderMobileItem={(u) => {
+                  const verticals = getUserVerticals(u);
+                  
+                  return (
+                    <MobileCard
+                      avatar={
+                        <MobileCardAvatar 
+                          src={u.avatar_url}
+                          fallback={u.full_name || u.email}
+                          variant={u.is_converzia_admin ? "primary" : "default"}
+                        />
+                      }
+                      title={u.full_name || "Sin nombre"}
+                      subtitle={u.email}
+                      badges={
+                        <div className="flex flex-wrap gap-1">
+                          {u.is_converzia_admin && (
+                            <Badge variant="primary" size="sm">
+                              <Shield className="h-3 w-3 mr-1" />
+                              Admin
+                            </Badge>
+                          )}
+                          {verticals.slice(0, 2).map((v) => (
+                            <Badge key={v} variant="secondary" size="sm">
+                              {VERTICAL_ICONS[v]}
+                              <span className="ml-1">{VERTICAL_LABELS[v] || v}</span>
+                            </Badge>
+                          ))}
+                          {u.memberships.length > 0 && !u.is_converzia_admin && verticals.length === 0 && (
+                            <Badge variant="secondary" size="sm">
+                              <Building2 className="h-3 w-3 mr-1" />
+                              {u.memberships.length} tenant{u.memberships.length > 1 ? "s" : ""}
+                            </Badge>
+                          )}
+                        </div>
+                      }
+                      metadata={`Registrado ${formatDate(u.created_at)}`}
+                      rightContent={
+                        <ResponsiveActionMenu
+                          title="Opciones de usuario"
+                          items={[
+                            { label: "Ver perfil", icon: Eye, onClick: () => setViewUser(u) },
+                            u.is_converzia_admin
+                              ? { label: "Remover admin", icon: Shield, onClick: () => handleToggleAdmin(u.id, true), danger: true }
+                              : { label: "Hacer admin", icon: Shield, onClick: () => handleToggleAdmin(u.id, false) },
+                            { divider: true, label: "" },
+                            { label: "Eliminar usuario", icon: Trash2, onClick: () => setDeleteUserId(u.id), danger: true },
+                          ]}
+                        />
+                      }
+                      showChevron={false}
+                      onPress={() => setViewUser(u)}
+                    />
+                  );
+                }}
+                emptyState={
+                  <EmptyState
+                    icon={<Users />}
+                    title="Sin usuarios"
+                    description="No hay usuarios registrados en la plataforma."
+                    size="sm"
+                  />
+                }
+              />
+            </div>
             {total > 20 && (
               <div className="p-4 border-t border-card-border">
                 <Pagination
