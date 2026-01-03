@@ -7,7 +7,8 @@ import { withCronAuth } from "@/lib/security/cron-auth";
 
 // ============================================
 // Cron Job: Daily Tasks (Combined)
-// Runs every 5 minutes - processes deliveries, retries, reactivations, and credit alerts
+// Runs once daily at 2 AM UTC - processes deliveries, retries, reactivations, and credit alerts
+// NOTE: On Hobby plan, crons can only run once per day
 // ============================================
 
 export const runtime = "nodejs";
@@ -169,11 +170,9 @@ export async function GET(request: NextRequest) {
     results.movedToCooling = ((staleLeads as any) || []).length;
 
     // ==========================================
-    // 5. Credit Alerts (only at 12:00 UTC)
+    // 5. Credit Alerts (runs daily at 2 AM UTC)
     // ==========================================
     const creditAlerts = { sent: 0, errors: 0 };
-    const currentHour = now.getUTCHours();
-    if (currentHour === 12) {
       // Check tenants with low credits using the credit balance view
       const { data: lowCreditTenants } = await queryWithTimeout(
         supabase

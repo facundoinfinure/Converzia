@@ -7,7 +7,8 @@ import { logger } from "@/lib/monitoring";
 
 // ============================================
 // Tokko Sync Cron Job
-// Runs every 6 hours to sync offers from Tokko
+// Runs once daily at 3 AM UTC to sync offers from Tokko
+// NOTE: On Hobby plan, crons can only run once per day
 // ============================================
 
 export const runtime = "nodejs";
