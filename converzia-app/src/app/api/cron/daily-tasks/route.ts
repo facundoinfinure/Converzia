@@ -227,7 +227,6 @@ export async function GET(request: NextRequest) {
           }
         }
       }
-    }
 
     console.log("Daily tasks completed:", { ...results, creditAlerts });
     return NextResponse.json({ ...results, creditAlerts });
