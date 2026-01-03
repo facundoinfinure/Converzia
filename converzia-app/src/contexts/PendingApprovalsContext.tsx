@@ -53,7 +53,7 @@ export function PendingApprovalsProvider({ children }: { children: ReactNode }) 
           `, { count: "exact" })
           .eq("status", "PENDING_APPROVAL")
           .order("created_at", { ascending: false }),
-        10000,
+        15000,
         "fetch pending approvals"
       );
 

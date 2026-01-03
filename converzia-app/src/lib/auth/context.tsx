@@ -95,7 +95,7 @@ export function AuthProvider({ children, initialUser = null }: AuthProviderProps
           .select("*")
           .eq("id", userId)
           .single(),
-        10000,
+        15000,
         "fetch user profile"
       );
 
@@ -143,7 +143,7 @@ export function AuthProvider({ children, initialUser = null }: AuthProviderProps
           `)
           .eq("user_id", userId)
           .eq("status", "ACTIVE"),
-        10000,
+        15000,
         "fetch user memberships"
       );
 

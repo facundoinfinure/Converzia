@@ -31,7 +31,7 @@ export async function checkSupabaseHealth(): Promise<HealthCheckResult> {
     // 1. Check authentication
     console.log("🔍 Checking authentication...");
     const authTimeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error("Timeout: Auth check tardó más de 5 segundos")), 5000);
+      setTimeout(() => reject(new Error("Timeout: Auth check tardó más de 10 segundos")), 10000);
     });
 
     const authResult = await Promise.race([
@@ -52,7 +52,7 @@ export async function checkSupabaseHealth(): Promise<HealthCheckResult> {
     console.log("🔍 Checking database connection...");
     const { error: dbError } = await queryWithTimeout(
       supabase.from("tenants").select("id").limit(1),
-      5000,
+      10000,
       "database health check",
       false // Don't retry health check
     );

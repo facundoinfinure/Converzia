@@ -13,7 +13,7 @@ type SupabaseResponse<T> = {
  */
 export async function queryWithTimeout<T>(
   queryPromise: Promise<SupabaseResponse<T>>,
-  timeoutMs: number = 10000,
+  timeoutMs: number = 15000,
   queryName: string = "query",
   enableRetry: boolean = true
 ): Promise<SupabaseResponse<T>> {

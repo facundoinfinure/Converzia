@@ -1,3 +1,5 @@
+"use client";
+
 import { AdminSidebar, AdminSidebarProvider } from "@/components/layout/AdminSidebar";
 import { AdminHeader } from "@/components/layout/AdminHeader";
 import { PendingApprovalsProvider } from "@/contexts/PendingApprovalsContext";
