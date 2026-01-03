@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Providers } from "./providers";
+import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 
 // Force all pages to be dynamically rendered
 export const dynamic = "force-dynamic";
@@ -59,7 +60,9 @@ export default function RootLayout({
         />
       </head>
       <body className="antialiased min-h-screen min-h-[100dvh] bg-[var(--bg-secondary)] text-[var(--text-primary)] font-[var(--font-body)]">
-        <Providers>{children}</Providers>
+        <ErrorBoundary>
+          <Providers>{children}</Providers>
+        </ErrorBoundary>
       </body>
     </html>
   );

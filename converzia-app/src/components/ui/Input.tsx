@@ -112,9 +112,10 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
                 "font-medium",
                 // Smooth transitions
                 "transition-all duration-200 ease-out",
-                // Focus states
+                // Focus states with animation
                 "focus:outline-none focus:ring-0 focus:border-[var(--accent-primary)]",
                 "focus:shadow-[0_0_0_3px_var(--accent-primary-light)]",
+                "focus-ring",
                 // Disabled states
                 "disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-[var(--bg-tertiary)]",
                 // Size
@@ -125,12 +126,14 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
                 // Addon modifications
                 leftAddon && "rounded-l-none",
                 rightAddon && "rounded-r-none",
-                // Error states
+                // Error states with animation
                 error
-                  ? "border-[var(--error)] focus:border-[var(--error)] focus:shadow-[0_0_0_3px_var(--error-light)]"
+                  ? "border-[var(--error)] focus:border-[var(--error)] focus:shadow-[0_0_0_3px_var(--error-light)] animate-shake"
                   : "border-[var(--border-primary)] hover:border-[var(--border-secondary)]",
                 className
               )}
+              aria-invalid={error ? "true" : "false"}
+              aria-describedby={error ? `${inputId}-error` : hint ? `${inputId}-hint` : undefined}
               {...props}
             />
 
@@ -156,9 +159,13 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
 
         {(error || hint) && (
           <p
+            id={error ? `${inputId}-error` : `${inputId}-hint`}
+            role={error ? "alert" : undefined}
             className={cn(
-              "mt-2 text-sm",
-              error ? "text-[var(--error)] font-medium" : "text-[var(--text-tertiary)]"
+              "mt-2 text-sm transition-all duration-200",
+              error 
+                ? "text-[var(--error)] font-medium animate-fade-in" 
+                : "text-[var(--text-tertiary)]"
             )}
           >
             {error || hint}

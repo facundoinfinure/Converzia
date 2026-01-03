@@ -73,12 +73,68 @@ export function Modal({
     full: "max-w-[calc(100vw-2rem)] max-h-[calc(100vh-2rem)]",
   };
 
+  // Focus trap and keyboard handling
+  React.useEffect(() => {
+    if (!isOpen) return;
+
+    const modal = document.querySelector('[role="dialog"]') as HTMLElement;
+    const focusableElements = modal?.querySelectorAll(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    ) as NodeListOf<HTMLElement>;
+    
+    const firstElement = focusableElements?.[0];
+    const lastElement = focusableElements?.[focusableElements.length - 1];
+
+    // Focus first element on open
+    firstElement?.focus();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && closeOnEscape) {
+        onClose();
+        return;
+      }
+
+      // Tab trap
+      if (e.key === "Tab" && focusableElements.length > 0) {
+        if (e.shiftKey) {
+          if (document.activeElement === firstElement) {
+            e.preventDefault();
+            lastElement?.focus();
+          }
+        } else {
+          if (document.activeElement === lastElement) {
+            e.preventDefault();
+            firstElement?.focus();
+          }
+        }
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    document.body.style.overflow = "hidden"; // Prevent body scroll
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "";
+    };
+  }, [isOpen, closeOnEscape, onClose]);
+
+  if (!isOpen) return null;
+
   return (
-    <div className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center p-4 md:p-4">
+    <div 
+      className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center p-4 md:p-4"
+      role="presentation"
+    >
       {/* Overlay */}
       <div
         className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity animate-in fade-in duration-200"
         onClick={closeOnOverlayClick ? onClose : undefined}
+        onKeyDown={(e) => {
+          if (e.key === "Escape" && closeOnOverlayClick) {
+            onClose();
+          }
+        }}
         aria-hidden="true"
       />
 
@@ -87,7 +143,7 @@ export function Modal({
         className={cn(
           "relative w-full bg-[var(--bg-primary)] border border-[var(--border-primary)]",
           "shadow-[var(--shadow-xl)] rounded-xl",
-          "animate-in fade-in zoom-in-95 duration-200",
+          "animate-in fade-in zoom-in-95 duration-200 slide-up",
           "h-auto max-h-[calc(100vh-2rem)]",
           "flex flex-col",
           sizes[size],
@@ -122,8 +178,9 @@ export function Modal({
             {showCloseButton && (
               <button
                 onClick={onClose}
-                className="flex-shrink-0 p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors ml-4"
-                aria-label="Cerrar"
+                className="flex-shrink-0 p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-all duration-200 hover:scale-110 active:scale-95 ml-4 focus-ring"
+                aria-label="Cerrar modal"
+                type="button"
               >
                 <X className="h-5 w-5" />
               </button>
