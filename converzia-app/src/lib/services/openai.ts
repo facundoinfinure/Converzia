@@ -79,7 +79,7 @@ async function getTenantName(tenantId: string): Promise<string> {
   return name;
 }
 
-async function buildQualificationSystemPrompt(params: {
+export async function buildQualificationSystemPrompt(params: {
   offer: Offer | null;
   currentFields: QualificationFields;
   missingFields: string[];
