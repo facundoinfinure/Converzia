@@ -169,34 +169,61 @@ export async function GET(request: NextRequest) {
     results.movedToCooling = ((staleLeads as any) || []).length;
 
     // ==========================================
-    // 5. Credit Alerts (only at 12:00)
+    // 5. Credit Alerts (only at 12:00 UTC)
     // ==========================================
     const creditAlerts = { sent: 0, errors: 0 };
     const currentHour = now.getUTCHours();
     if (currentHour === 12) {
-      // Check tenants with low credits
-      const { data: tenants } = await queryWithTimeout(
+      // Check tenants with low credits using the credit balance view
+      const { data: lowCreditTenants } = await queryWithTimeout(
         supabase
-          .from("tenants")
-          .select("id, name, credit_balance, min_credits")
-          .eq("status", "ACTIVE")
-          .lt("credit_balance", supabase.raw("COALESCE(min_credits, 100)")),
+          .from("tenant_credit_balance")
+          .select(`
+            tenant_id,
+            current_balance,
+            tenants:tenant_id (
+              id,
+              name,
+              contact_email,
+              min_credits
+            )
+          `)
+          .lt("current_balance", 10),
         10000,
         "fetch tenants with low credits for daily tasks"
       );
 
-      const lowCreditTenants = (tenants as any) || [];
-      if (lowCreditTenants.length > 0) {
-        console.log(`Sending credit alerts to ${lowCreditTenants.length} tenants`);
+      const tenants = (lowCreditTenants as any) || [];
+      if (tenants.length > 0) {
+        console.log(`Sending credit alerts to ${tenants.length} tenants`);
         
-        for (const tenant of lowCreditTenants) {
+        for (const item of tenants) {
+          const tenant = item.tenants as any;
+          if (!tenant) continue;
+          
           try {
-            // TODO: Send email/notification to tenant about low credits
-            // For now, just log it
-            console.log(`Tenant ${tenant.name} (${tenant.id}) has low credits: ${tenant.credit_balance}`);
+            // Log event
+            await queryWithTimeout(
+              supabase.from("lead_events").insert({
+                tenant_id: item.tenant_id,
+                event_type: "MANUAL_ACTION",
+                details: {
+                  current_balance: item.current_balance,
+                  tenant_name: tenant.name,
+                  action: "CREDIT_ALERT",
+                  alert_type: item.current_balance === 0 ? "ZERO_CREDITS" : "LOW_CREDITS",
+                },
+                actor_type: "SYSTEM",
+              }),
+              10000,
+              "insert credit alert event"
+            );
+            
+            // TODO: Send email notification
+            console.log(`Tenant ${tenant.name} (${item.tenant_id}) has low credits: ${item.current_balance}`);
             creditAlerts.sent++;
           } catch (err) {
-            console.error(`Error sending credit alert to tenant ${tenant.id}:`, err);
+            console.error(`Error sending credit alert to tenant ${item.tenant_id}:`, err);
             creditAlerts.errors++;
           }
         }
