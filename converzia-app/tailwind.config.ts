@@ -21,8 +21,6 @@ export default {
   				foreground: 'hsl(var(--popover-foreground))'
   			},
   			primary: {
-  				DEFAULT: 'hsl(var(--primary))',
-  				foreground: 'hsl(var(--primary-foreground))',
   				'50': '#ecfdf5',
   				'100': '#d1fae5',
   				'200': '#a7f3d0',
@@ -32,7 +30,9 @@ export default {
   				'600': '#059669',
   				'700': '#047857',
   				'800': '#065f46',
-  				'900': '#064e3b'
+  				'900': '#064e3b',
+  				DEFAULT: 'hsl(var(--primary))',
+  				foreground: 'hsl(var(--primary-foreground))'
   			},
   			secondary: {
   				DEFAULT: 'hsl(var(--secondary))',
@@ -43,8 +43,6 @@ export default {
   				foreground: 'hsl(var(--muted-foreground))'
   			},
   			accent: {
-  				DEFAULT: 'hsl(var(--accent))',
-  				foreground: 'hsl(var(--accent-foreground))',
   				'50': '#ecfdf5',
   				'100': '#d1fae5',
   				'200': '#a7f3d0',
@@ -54,7 +52,9 @@ export default {
   				'600': '#059669',
   				'700': '#047857',
   				'800': '#065f46',
-  				'900': '#064e3b'
+  				'900': '#064e3b',
+  				DEFAULT: 'hsl(var(--accent))',
+  				foreground: 'hsl(var(--accent-foreground))'
   			},
   			destructive: {
   				DEFAULT: 'hsl(var(--destructive))',
@@ -115,22 +115,22 @@ export default {
   			'2xs': '0.625rem'
   		},
   		spacing: {
-  			'safe-bottom': 'env(safe-area-inset-bottom, 0px)',
-  			'safe-top': 'env(safe-area-inset-top, 0px)',
   			'18': '4.5rem',
-  			'22': '5.5rem'
+  			'22': '5.5rem',
+  			'safe-bottom': 'env(safe-area-inset-bottom, 0px)',
+  			'safe-top': 'env(safe-area-inset-top, 0px)'
   		},
   		minHeight: {
-  			'touch': '44px',
+  			touch: '44px',
   			'touch-lg': '48px'
   		},
   		minWidth: {
-  			'touch': '44px'
+  			touch: '44px'
   		},
   		boxShadow: {
-  			'glow': '0 0 20px rgba(99, 102, 241, 0.3)',
+  			glow: '0 0 20px rgba(99, 102, 241, 0.3)',
   			'glow-lg': '0 0 40px rgba(99, 102, 241, 0.4)',
-  			'card': '0 1px 3px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.04)'
+  			card: '0 1px 3px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.04)'
   		},
   		animation: {
   			'fade-in': 'fadeIn 0.2s ease-out',
@@ -239,10 +239,10 @@ export default {
   			}
   		},
   		transitionTimingFunction: {
-  			'bounce': 'cubic-bezier(0.34, 1.56, 0.64, 1)'
+  			bounce: 'cubic-bezier(0.34, 1.56, 0.64, 1)'
   		},
   		screens: {
-  			'xs': '475px',
+  			xs: '475px',
   			'3xl': '1920px'
   		}
   	}

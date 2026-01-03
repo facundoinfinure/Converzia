@@ -78,6 +78,46 @@ export class RealtimeService {
   }
 
   /**
+   * Subscribe to tenant status changes (for approval notifications)
+   */
+  subscribeToTenantStatus(
+    userId: string,
+    callback: (payload: any) => void
+  ): () => void {
+    const channelName = `tenant-status:${userId}`;
+
+    if (this.channels.has(channelName)) {
+      this.channels.get(channelName)?.unsubscribe();
+    }
+
+    const channel = this.supabase
+      .channel(channelName)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "tenant_members",
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
+          // Only trigger for status changes to ACTIVE
+          if (payload.new?.status === "ACTIVE" && payload.old?.status !== "ACTIVE") {
+            callback(payload);
+          }
+        }
+      )
+      .subscribe();
+
+    this.channels.set(channelName, channel);
+
+    return () => {
+      channel.unsubscribe();
+      this.channels.delete(channelName);
+    };
+  }
+
+  /**
    * Subscribe to deliveries changes
    */
   subscribeToDeliveries(

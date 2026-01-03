@@ -109,9 +109,17 @@ export function IntegrationConfigModal({
 
   const [isTesting, setIsTesting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [testResult, setTestResult] = useState<{
     success: boolean;
     message: string;
+  } | null>(null);
+  const [syncResult, setSyncResult] = useState<{
+    success: boolean;
+    offers_synced: number;
+    variants_synced: number;
+    errors: string[];
+    message?: string;
   } | null>(null);
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
 
@@ -321,6 +329,50 @@ export function IntegrationConfigModal({
     }
   };
 
+  const handleSync = async () => {
+    if (!existingIntegrationId) {
+      toast.error("Guardá la integración primero antes de sincronizar");
+      return;
+    }
+
+    setIsSyncing(true);
+    setSyncResult(null);
+
+    try {
+      const response = await fetch("/api/integrations/tokko/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenant_id: tenantId,
+          force_full_sync: false,
+        }),
+      });
+
+      const result = await response.json();
+      setSyncResult(result);
+
+      if (result.success) {
+        toast.success(
+          `Sincronización exitosa: ${result.offers_synced} ofertas, ${result.variants_synced} variantes`
+        );
+      } else {
+        toast.error(
+          `Error en sincronización: ${result.errors.join(", ")}`
+        );
+      }
+    } catch (error) {
+      setSyncResult({
+        success: false,
+        offers_synced: 0,
+        variants_synced: 0,
+        errors: ["Error al sincronizar"],
+      });
+      toast.error("Error al sincronizar ofertas");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
 
@@ -474,6 +526,10 @@ export function IntegrationConfigModal({
           onChange={setTokkoConfig}
           showSecrets={showSecrets}
           toggleSecret={toggleSecret}
+          existingIntegrationId={existingIntegrationId}
+          isSyncing={isSyncing}
+          syncResult={syncResult}
+          onSync={handleSync}
         />
       )}
     </Modal>
@@ -716,6 +772,16 @@ interface TokkoFormProps {
   onChange: (config: TokkoFormConfig) => void;
   showSecrets: Record<string, boolean>;
   toggleSecret: (key: string) => void;
+  existingIntegrationId?: string | null;
+  isSyncing?: boolean;
+  syncResult?: {
+    success: boolean;
+    offers_synced: number;
+    variants_synced: number;
+    errors: string[];
+    message?: string;
+  } | null;
+  onSync?: () => void;
 }
 
 function TokkoForm({
@@ -723,6 +789,10 @@ function TokkoForm({
   onChange,
   showSecrets,
   toggleSecret,
+  existingIntegrationId,
+  isSyncing = false,
+  syncResult,
+  onSync,
 }: TokkoFormProps) {
   return (
     <div className="space-y-4">
@@ -758,6 +828,60 @@ function TokkoForm({
         placeholder="https://www.tokkobroker.com/api/v1"
         hint="Normalmente no hace falta cambiar esto"
       />
+
+      {/* Sync Section */}
+      {existingIntegrationId && onSync && (
+        <div className="pt-4 border-t border-slate-700">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h3 className="text-sm font-medium text-white mb-1">
+                Sincronizar Ofertas
+              </h3>
+              <p className="text-xs text-slate-400">
+                Sincroniza ofertas y variantes desde Tokko
+              </p>
+            </div>
+            <Button
+              variant="secondary"
+              onClick={onSync}
+              isLoading={isSyncing}
+              leftIcon={<RefreshCw className="h-4 w-4" />}
+            >
+              {isSyncing ? "Sincronizando..." : "Sincronizar"}
+            </Button>
+          </div>
+
+          {syncResult && (
+            <Alert
+              variant={syncResult.success ? "success" : "error"}
+              title={
+                syncResult.success
+                  ? "Sincronización completada"
+                  : "Error en sincronización"
+              }
+            >
+              <div className="text-sm space-y-1">
+                <p>
+                  Ofertas sincronizadas: <strong>{syncResult.offers_synced}</strong>
+                </p>
+                <p>
+                  Variantes sincronizadas: <strong>{syncResult.variants_synced}</strong>
+                </p>
+                {syncResult.errors.length > 0 && (
+                  <div className="mt-2">
+                    <p className="font-medium text-red-400">Errores:</p>
+                    <ul className="list-disc list-inside text-xs text-red-300">
+                      {syncResult.errors.map((error, idx) => (
+                        <li key={idx}>{error}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </Alert>
+          )}
+        </div>
+      )}
 
       <a
         href="https://developers.tokkobroker.com/"

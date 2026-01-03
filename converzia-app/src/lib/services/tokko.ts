@@ -336,6 +336,384 @@ export async function getTokkoConfig(tenantId: string): Promise<TokkoConfig | nu
   return integration.config as TokkoConfig;
 }
 
+// ============================================
+// Sync Functions
+// ============================================
+
+export interface TokkoPublication {
+  id: number;
+  name: string;
+  description?: string;
+  address?: string;
+  city?: string;
+  zone?: string;
+  price_from?: number;
+  price_to?: number;
+  currency?: string;
+  image_url?: string;
+  updated_at?: string;
+}
+
+export interface TokkoTypology {
+  id: number;
+  name: string;
+  bedrooms?: number;
+  bathrooms?: number;
+  area_m2?: number;
+  price_from?: number;
+  price_to?: number;
+  currency?: string;
+  total_units?: number;
+  available_units?: number;
+}
+
+export interface SyncResult {
+  success: boolean;
+  offers_synced: number;
+  variants_synced: number;
+  errors: string[];
+  message?: string;
+}
+
+/**
+ * Sync publications (offers) from Tokko API
+ */
+export async function syncTokkoPublications(
+  tenantId: string,
+  config: TokkoConfig,
+  forceFullSync: boolean = false
+): Promise<SyncResult> {
+  const supabase = await createClient();
+  const apiUrl = config.api_url || TOKKO_API_BASE;
+  const errors: string[] = [];
+  let offersSynced = 0;
+  let variantsSynced = 0;
+
+  try {
+    // Get integration ID for logging
+    const { data: integration } = await supabase
+      .from("tenant_integrations")
+      .select("id, last_sync_at")
+      .eq("tenant_id", tenantId)
+      .eq("integration_type", "TOKKO")
+      .eq("is_active", true)
+      .single();
+
+    if (!integration) {
+      return {
+        success: false,
+        offers_synced: 0,
+        variants_synced: 0,
+        errors: ["Integración Tokko no encontrada o inactiva"],
+      };
+    }
+
+    // Fetch publications from Tokko
+    const publicationsResponse = await fetchWithTimeout(
+      `${apiUrl}/publication/?key=${config.api_key}&format=json`,
+      { method: "GET" },
+      30000 // 30 seconds for publications fetch
+    );
+
+    if (!publicationsResponse.ok) {
+      const errorText = await publicationsResponse.text();
+      return {
+        success: false,
+        offers_synced: 0,
+        variants_synced: 0,
+        errors: [`Error al obtener publicaciones: HTTP ${publicationsResponse.status} - ${errorText}`],
+      };
+    }
+
+    const publicationsData = await publicationsResponse.json();
+    const publications: TokkoPublication[] = Array.isArray(publicationsData)
+      ? publicationsData
+      : publicationsData.publications || publicationsData.data || [];
+
+    if (!Array.isArray(publications) || publications.length === 0) {
+      return {
+        success: true,
+        offers_synced: 0,
+        variants_synced: 0,
+        errors: [],
+        message: "No se encontraron publicaciones en Tokko",
+      };
+    }
+
+    // Get existing offers mapped by external_id (we'll store Tokko ID in settings)
+    const { data: existingOffers } = await supabase
+      .from("offers")
+      .select("id, settings")
+      .eq("tenant_id", tenantId);
+
+    const existingOffersMap = new Map<string, string>();
+    (existingOffers || []).forEach((offer: any) => {
+      const tokkoId = offer.settings?.tokko_publication_id;
+      if (tokkoId) {
+        existingOffersMap.set(String(tokkoId), offer.id);
+      }
+    });
+
+    // Sync each publication
+    for (const publication of publications) {
+      try {
+        const tokkoId = String(publication.id);
+        const existingOfferId = existingOffersMap.get(tokkoId);
+
+        // Generate slug from name
+        const slug = generateSlug(publication.name);
+
+        // Check if slug already exists (for new offers)
+        let finalSlug = slug;
+        if (!existingOfferId) {
+          let slugCounter = 1;
+          while (true) {
+            const { data: existing } = await supabase
+              .from("offers")
+              .select("id")
+              .eq("tenant_id", tenantId)
+              .eq("slug", finalSlug)
+              .maybeSingle();
+
+            if (!existing) break;
+            finalSlug = `${slug}-${slugCounter}`;
+            slugCounter++;
+          }
+        }
+
+        const offerData: any = {
+          tenant_id: tenantId,
+          name: publication.name,
+          slug: finalSlug,
+          offer_type: "PROPERTY",
+          status: "ACTIVE",
+          description: publication.description || null,
+          city: publication.city || null,
+          zone: publication.zone || null,
+          address: publication.address || null,
+          price_from: publication.price_from ? Number(publication.price_from) : null,
+          price_to: publication.price_to ? Number(publication.price_to) : null,
+          currency: publication.currency || "USD",
+          image_url: publication.image_url || null,
+          settings: {
+            tokko_publication_id: tokkoId,
+            tokko_synced_at: new Date().toISOString(),
+          },
+          updated_at: new Date().toISOString(),
+        };
+
+        if (existingOfferId) {
+          // Update existing offer
+          const { error: updateError } = await supabase
+            .from("offers")
+            .update(offerData)
+            .eq("id", existingOfferId);
+
+          if (updateError) {
+            errors.push(`Error al actualizar oferta ${publication.name}: ${updateError.message}`);
+            continue;
+          }
+
+          // Sync typologies for this publication
+          const typologiesResult = await syncTokkoTypologies(
+            existingOfferId,
+            publication.id,
+            config
+          );
+          variantsSynced += typologiesResult.variants_synced;
+          if (typologiesResult.errors.length > 0) {
+            errors.push(...typologiesResult.errors);
+          }
+
+          offersSynced++;
+        } else {
+          // Create new offer
+          const { data: newOffer, error: insertError } = await supabase
+            .from("offers")
+            .insert(offerData)
+            .select()
+            .single();
+
+          if (insertError || !newOffer) {
+            errors.push(`Error al crear oferta ${publication.name}: ${insertError?.message || "Unknown error"}`);
+            continue;
+          }
+
+          // Sync typologies for this publication
+          const typologiesResult = await syncTokkoTypologies(
+            (newOffer as any).id,
+            publication.id,
+            config
+          );
+          variantsSynced += typologiesResult.variants_synced;
+          if (typologiesResult.errors.length > 0) {
+            errors.push(...typologiesResult.errors);
+          }
+
+          offersSynced++;
+        }
+      } catch (error) {
+        errors.push(`Error procesando publicación ${publication.name}: ${error instanceof Error ? error.message : "Unknown error"}`);
+      }
+    }
+
+    // Update last_sync_at
+    await supabase
+      .from("tenant_integrations")
+      .update({ last_sync_at: new Date().toISOString() })
+      .eq("id", integration.id);
+
+    return {
+      success: errors.length === 0,
+      offers_synced: offersSynced,
+      variants_synced: variantsSynced,
+      errors,
+      message: `Sincronización completada: ${offersSynced} ofertas, ${variantsSynced} variantes`,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      offers_synced: offersSynced,
+      variants_synced: variantsSynced,
+      errors: [error instanceof Error ? error.message : "Error desconocido"],
+    };
+  }
+}
+
+/**
+ * Sync typologies (variants) for a specific publication
+ */
+async function syncTokkoTypologies(
+  offerId: string,
+  publicationId: number,
+  config: TokkoConfig
+): Promise<{ variants_synced: number; errors: string[] }> {
+  const supabase = await createClient();
+  const apiUrl = config.api_url || TOKKO_API_BASE;
+  const errors: string[] = [];
+  let variantsSynced = 0;
+
+  try {
+    // Fetch typologies from Tokko
+    const typologiesResponse = await fetchWithTimeout(
+      `${apiUrl}/publication/${publicationId}/typology/?key=${config.api_key}&format=json`,
+      { method: "GET" },
+      30000 // 30 seconds
+    );
+
+    if (!typologiesResponse.ok) {
+      errors.push(`Error al obtener tipologías: HTTP ${typologiesResponse.status}`);
+      return { variants_synced: 0, errors };
+    }
+
+    const typologiesData = await typologiesResponse.json();
+    const typologies: TokkoTypology[] = Array.isArray(typologiesData)
+      ? typologiesData
+      : typologiesData.typologies || typologiesData.data || [];
+
+    if (!Array.isArray(typologies) || typologies.length === 0) {
+      return { variants_synced: 0, errors: [] };
+    }
+
+    // Get existing variants
+    const { data: existingVariants } = await supabase
+      .from("offer_variants")
+      .select("id, code, settings")
+      .eq("offer_id", offerId);
+
+    const existingVariantsMap = new Map<string, string>();
+    (existingVariants || []).forEach((variant: any) => {
+      const tokkoId = variant.settings?.tokko_typology_id;
+      if (tokkoId) {
+        existingVariantsMap.set(String(tokkoId), variant.id);
+      }
+    });
+
+    // Sync each typology
+    for (let i = 0; i < typologies.length; i++) {
+      const typology = typologies[i];
+      try {
+        const tokkoId = String(typology.id);
+        const existingVariantId = existingVariantsMap.get(tokkoId);
+
+        // Generate code if not provided
+        const code = typology.id ? `T${typology.id}` : `V${i + 1}`;
+
+        const variantData: any = {
+          offer_id: offerId,
+          name: typology.name,
+          code,
+          bedrooms: typology.bedrooms || null,
+          bathrooms: typology.bathrooms || null,
+          area_m2: typology.area_m2 ? Number(typology.area_m2) : null,
+          price_from: typology.price_from ? Number(typology.price_from) : null,
+          price_to: typology.price_to ? Number(typology.price_to) : null,
+          currency: typology.currency || "USD",
+          total_units: typology.total_units || null,
+          available_units: typology.available_units || null,
+          display_order: i,
+          settings: {
+            tokko_typology_id: tokkoId,
+            tokko_synced_at: new Date().toISOString(),
+          },
+          updated_at: new Date().toISOString(),
+        };
+
+        if (existingVariantId) {
+          // Update existing variant
+          const { error: updateError } = await supabase
+            .from("offer_variants")
+            .update(variantData)
+            .eq("id", existingVariantId);
+
+          if (updateError) {
+            errors.push(`Error al actualizar variante ${typology.name}: ${updateError.message}`);
+            continue;
+          }
+        } else {
+          // Create new variant
+          const { error: insertError } = await supabase
+            .from("offer_variants")
+            .insert(variantData);
+
+          if (insertError) {
+            errors.push(`Error al crear variante ${typology.name}: ${insertError.message}`);
+            continue;
+          }
+        }
+
+        variantsSynced++;
+      } catch (error) {
+        errors.push(`Error procesando tipología ${typology.name}: ${error instanceof Error ? error.message : "Unknown error"}`);
+      }
+    }
+
+    return { variants_synced: variantsSynced, errors };
+  } catch (error) {
+    return {
+      variants_synced: variantsSynced,
+      errors: [error instanceof Error ? error.message : "Error desconocido"],
+    };
+  }
+}
+
+/**
+ * Generate slug from name
+ */
+function generateSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 50);
+}
+
+
+
+
+
 
 
 

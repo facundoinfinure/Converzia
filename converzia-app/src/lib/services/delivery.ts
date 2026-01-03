@@ -5,6 +5,7 @@ import { createTokkoLead, TokkoConfig } from "./tokko";
 import { appendToGoogleSheets, GoogleSheetsConfig } from "./google-sheets";
 import type { GoogleOAuthTokens } from "@/types";
 import { logger, Metrics, Alerts, startTimer } from "@/lib/monitoring";
+import { retryWithBackoff, logWebhookRetry, logWebhookSuccess } from "@/lib/security/webhook-retry";
 
 // ============================================
 // Delivery Pipeline Service
@@ -474,9 +475,27 @@ async function deliverToGoogleSheets(
     throw new Error("Google Sheets not properly configured - no authentication method available");
   }
 
-  const result = await appendToGoogleSheets(delivery, config, oauthTokens, integration.id);
+  // Retry with exponential backoff
+  let attempt = 0;
+  const result = await retryWithBackoff(
+    async () => {
+      attempt++;
+      try {
+        return await appendToGoogleSheets(delivery, config, oauthTokens, integration.id);
+      } catch (error) {
+        logWebhookRetry("GOOGLE_SHEETS", attempt, 3, error);
+        throw error;
+      }
+    },
+    { maxRetries: 3, initialDelayMs: 1000 }
+  );
+  if (attempt > 1) logWebhookSuccess("GOOGLE_SHEETS", attempt);
 
   if (!result.success) {
+    // Alert if all retries failed
+    if (attempt >= 3) {
+      Alerts.webhookFailed("GOOGLE_SHEETS", delivery.id, result.error || "Unknown error", attempt);
+    }
     throw new Error(result.error || "Failed to append to Google Sheets");
   }
 
@@ -511,7 +530,21 @@ async function deliverToTokko(
     throw new Error("Tokko not properly configured - missing API key");
   }
 
-  const result = await createTokkoLead(delivery, config);
+      // Retry with exponential backoff
+      let attempt = 0;
+      const result = await retryWithBackoff(
+        async () => {
+          attempt++;
+          try {
+            return await createTokkoLead(delivery, config);
+          } catch (error) {
+            logWebhookRetry("TOKKO", attempt, 3, error);
+            throw error;
+          }
+        },
+        { maxRetries: 3, initialDelayMs: 1000 }
+      );
+      if (attempt > 1) logWebhookSuccess("TOKKO", attempt);
 
   if (!result.success) {
     throw new Error(result.error || "Failed to create lead in Tokko");

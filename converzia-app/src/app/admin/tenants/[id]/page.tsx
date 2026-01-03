@@ -133,7 +133,7 @@ export default function TenantDetailPage({ params }: Props) {
     }
   }, [searchParams, router, id, toast]);
   const { tenant, pricing, isLoading, error, refetch } = useTenant(id);
-  const { updateTenantStatus, grantTrialCredits, isLoading: isMutating } = useTenantMutations();
+  const { updateTenantStatus, grantTrialCredits, approveTenant, isLoading: isMutating } = useTenantMutations();
   const [showStatusModal, setShowStatusModal] = useState<"activate" | "suspend" | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
@@ -144,6 +144,7 @@ export default function TenantDetailPage({ params }: Props) {
   const [showTrialCreditsModal, setShowTrialCreditsModal] = useState(false);
   const [trialCreditsAmount, setTrialCreditsAmount] = useState(5);
   const [isGrantingCredits, setIsGrantingCredits] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
 
   // Integration state
   const [integrations, setIntegrations] = useState<TenantIntegration[]>([]);
@@ -230,7 +231,17 @@ export default function TenantDetailPage({ params }: Props) {
     try {
       const { data, error } = await supabase
         .from("tenant_members")
-        .select("id, user_id, role, status, created_at, user_profiles(id, full_name, email, avatar_url)")
+        .select(`
+          id, 
+          user_id, 
+          role, 
+          status, 
+          created_at, 
+          approved_at,
+          approved_by,
+          user_profiles(id, full_name, email, avatar_url),
+          approver:user_profiles!tenant_members_approved_by_fkey(id, full_name)
+        `)
         .eq("tenant_id", id)
         .order("created_at", { ascending: false });
 
@@ -240,6 +251,7 @@ export default function TenantDetailPage({ params }: Props) {
       const formattedData = (data || []).map((m: any) => ({
         ...m,
         user_profiles: Array.isArray(m.user_profiles) ? m.user_profiles[0] : m.user_profiles,
+        approver: Array.isArray(m.approver) ? m.approver[0] : m.approver,
       }));
       
       setMembers(formattedData);
@@ -298,18 +310,27 @@ export default function TenantDetailPage({ params }: Props) {
         });
       });
 
-      // Get recent members
+      // Get recent members with approval info
       const { data: recentMembers } = await supabase
         .from("tenant_members")
-        .select("id, created_at, user_profiles(full_name)")
+        .select(`
+          id, 
+          created_at, 
+          approved_at, 
+          approved_by, 
+          user_profiles(full_name),
+          approver:user_profiles!tenant_members_approved_by_fkey(full_name)
+        `)
         .eq("tenant_id", id)
         .order("created_at", { ascending: false })
-        .limit(5);
+        .limit(10);
 
       (recentMembers || []).forEach((member: any) => {
         const userName = Array.isArray(member.user_profiles) 
           ? member.user_profiles[0]?.full_name 
           : member.user_profiles?.full_name;
+        
+        // Member joined
         events.push({
           id: `member_${member.id}`,
           type: "member_joined",
@@ -317,6 +338,20 @@ export default function TenantDetailPage({ params }: Props) {
           timestamp: member.created_at,
           icon: <UserPlus className="h-4 w-4 text-blue-400" />,
         });
+
+        // Approval event
+        if (member.approved_at) {
+          const approverName = Array.isArray(member.approver) 
+            ? member.approver[0]?.full_name 
+            : member.approver?.full_name;
+          events.push({
+            id: `approval_${member.id}`,
+            type: "tenant_approved",
+            description: `${userName || "Usuario"} aprobado${approverName ? ` por ${approverName}` : ""}`,
+            timestamp: member.approved_at,
+            icon: <CheckCircle className="h-4 w-4 text-emerald-400" />,
+          });
+        }
       });
 
       // Sort by timestamp descending
@@ -375,6 +410,25 @@ export default function TenantDetailPage({ params }: Props) {
       refetch();
     } catch (error) {
       toast.error("Error al actualizar el tenant");
+    }
+  };
+
+  const handleApprove = async () => {
+    if (!tenant) return;
+    setIsApproving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("No se pudo obtener información del usuario");
+        return;
+      }
+      await approveTenant(tenant.id, user.id);
+      toast.success("Tenant aprobado correctamente");
+      refetch();
+    } catch (error) {
+      toast.error("Error al aprobar el tenant");
+    } finally {
+      setIsApproving(false);
     }
   };
 
@@ -584,6 +638,16 @@ export default function TenantDetailPage({ params }: Props) {
         actions={
           <div className="flex items-center gap-3">
             <TenantStatusBadge status={tenant.status} />
+            {tenant.status === "PENDING" && (
+              <Button
+                variant="primary"
+                leftIcon={<CheckCircle className="h-4 w-4" />}
+                onClick={handleApprove}
+                isLoading={isApproving}
+              >
+                Aprobar Tenant
+              </Button>
+            )}
             <Button
               variant="secondary"
               leftIcon={<Edit className="h-4 w-4" />}
@@ -593,16 +657,18 @@ export default function TenantDetailPage({ params }: Props) {
             </Button>
             <ActionDropdown
               items={[
-                tenant.status !== "ACTIVE"
+                tenant.status === "SUSPENDED"
                   ? {
                       label: "Activar tenant",
                       onClick: () => setShowStatusModal("activate"),
                     }
-                  : {
+                  : tenant.status === "ACTIVE"
+                  ? {
                       label: "Suspender tenant",
                       onClick: () => setShowStatusModal("suspend"),
                       danger: true,
-                    },
+                    }
+                  : null,
                 { divider: true, label: "" },
                 ...(!tenant.trial_credits_granted
                   ? [
@@ -617,7 +683,7 @@ export default function TenantDetailPage({ params }: Props) {
                   label: "Ver como tenant",
                   onClick: handleViewAsTenant,
                 },
-              ]}
+              ].filter(Boolean)}
             />
           </div>
         }

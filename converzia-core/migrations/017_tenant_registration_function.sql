@@ -108,3 +108,6 @@ COMMENT ON FUNCTION register_tenant IS 'Allows authenticated users to register a
 
 
 
+
+
+

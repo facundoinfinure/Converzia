@@ -81,6 +81,12 @@ const ALERT_CONFIGS: Record<string, AlertConfig> = {
     channels: ["slack"],
     cooldownMs: 5 * 60 * 1000,
   },
+  webhook_failed: {
+    name: "Webhook Failed Repeatedly",
+    severity: "warning",
+    channels: ["slack"],
+    cooldownMs: 10 * 60 * 1000, // 10 minutes
+  },
   openai_rate_limited: {
     name: "OpenAI Rate Limited",
     severity: "warning",
@@ -305,6 +311,14 @@ export const Alerts = {
       error,
     }),
 
+  webhookFailed: (webhookType: string, deliveryId: string, error: string, retryCount: number) =>
+    triggerAlert("webhook_failed", `Webhook ${webhookType} failed after ${retryCount} retries for delivery ${deliveryId}`, {
+      webhookType,
+      deliveryId,
+      error,
+      retryCount,
+    }),
+
   openaiRateLimited: (model: string) =>
     triggerAlert("openai_rate_limited", `OpenAI rate limit hit for model ${model}`, {
       model,
@@ -325,6 +339,9 @@ export const Alerts = {
 };
 
 export default Alerts;
+
+
+
 
 
 

@@ -16,10 +16,21 @@ export default function PendingApprovalPage() {
   const supabase = createClient();
   const [pageLoading, setPageLoading] = useState(true);
 
-  // Check if user has been approved
+  // Intelligent polling for approval status
   useEffect(() => {
+    if (isLoading || !user) return;
+
+    let pollInterval: NodeJS.Timeout | null = null;
+    let pollCount = 0;
+    const maxPolls = 120; // Stop after 10 minutes (5 second intervals)
+
     const checkApproval = async () => {
-      if (!user) return;
+      if (pollCount >= maxPolls) {
+        if (pollInterval) clearInterval(pollInterval);
+        return;
+      }
+
+      pollCount++;
 
       try {
         const { data: memberships, error } = await queryWithTimeout(
@@ -33,7 +44,7 @@ export default function PendingApprovalPage() {
 
         if (error) {
           console.error("Error checking approval status:", error);
-          return; // Don't redirect on error, just show the pending page
+          return;
         }
 
         if (memberships && (memberships as any[]).length > 0) {
@@ -41,18 +52,42 @@ export default function PendingApprovalPage() {
             (m: any) => m.status === "ACTIVE" && m.tenant?.status === "ACTIVE"
           );
           if (hasActive) {
+            if (pollInterval) clearInterval(pollInterval);
             router.push("/portal");
           }
         }
       } catch (err) {
         console.error("Error in checkApproval:", err);
-        // Don't redirect on error, just show the pending page
       }
     };
 
-    if (!isLoading && user) {
-      checkApproval();
-    }
+    // Initial check
+    checkApproval();
+
+    // Poll every 5 seconds (exponential backoff: 5s, 10s, 15s, then 30s)
+    let pollDelay = 5000;
+    const startPolling = () => {
+      pollInterval = setTimeout(() => {
+        checkApproval();
+        // Increase delay after first few polls (5s -> 10s -> 15s -> 30s)
+        if (pollCount < 3) {
+          pollDelay = pollDelay + 5000;
+        } else if (pollCount < 6) {
+          pollDelay = 15000;
+        } else {
+          pollDelay = 30000; // 30 seconds after 6 polls
+        }
+        if (pollCount < maxPolls) {
+          startPolling();
+        }
+      }, pollDelay);
+    };
+
+    startPolling();
+
+    return () => {
+      if (pollInterval) clearTimeout(pollInterval);
+    };
   }, [user, isLoading, router, supabase]);
 
   // Redirect to login if not authenticated

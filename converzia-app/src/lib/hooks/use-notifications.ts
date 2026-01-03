@@ -15,7 +15,7 @@ export interface Notification {
 }
 
 export function useNotifications() {
-  const { activeTenantId } = useAuth();
+  const { activeTenantId, user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
 
@@ -98,6 +98,23 @@ export function useNotifications() {
 
     return unsubscribeApprovals;
   }, [addNotification]);
+
+  // Subscribe to tenant approval status changes (for users waiting approval)
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const unsubscribeStatus = realtimeService.subscribeToTenantStatus(user.id, (payload) => {
+      const tenantName = payload.new?.tenant?.name || "tu tenant";
+      addNotification({
+        type: "approval",
+        title: "¡Tu solicitud fue aprobada!",
+        message: `Tu acceso a ${tenantName} ha sido aprobado. Ya podés acceder al portal.`,
+        actionUrl: "/portal",
+      });
+    });
+
+    return unsubscribeStatus;
+  }, [user?.id, addNotification]);
 
   return {
     notifications,

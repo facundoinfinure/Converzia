@@ -518,6 +518,58 @@ export function useTenantMutations() {
         // Don't throw - tenant is already approved
       }
 
+      // Send approval notification (email + in-app)
+      try {
+        // Get tenant info and user emails
+        const { data: tenantData } = await queryWithTimeout(
+          supabase
+            .from("tenants")
+            .select("name, contact_email")
+            .eq("id", tenantId)
+            .single(),
+          10000,
+          "get tenant for approval notification"
+        );
+
+        const { data: members } = await queryWithTimeout(
+          supabase
+            .from("tenant_members")
+            .select("user_id, user_profiles(email, full_name)")
+            .eq("tenant_id", tenantId)
+            .eq("status", "ACTIVE"),
+          10000,
+          "get members for approval notification"
+        );
+
+        // Send email notifications
+        if (tenantData) {
+          const emailsToNotify = [
+            tenantData.contact_email,
+            ...(members || []).map((m: any) => {
+              const profile = Array.isArray(m.user_profiles) ? m.user_profiles[0] : m.user_profiles;
+              return profile?.email;
+            }).filter(Boolean),
+          ];
+
+          // Use API endpoint to send emails (server-side)
+          await fetch("/api/tenants/notify-approval", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              tenant_id: tenantId,
+              tenant_name: (tenantData as any).name,
+              emails: emailsToNotify,
+            }),
+          }).catch((err) => {
+            console.warn("Error sending approval notifications:", err);
+            // Don't throw - tenant is already approved
+          });
+        }
+      } catch (notifError) {
+        console.warn("Error in approval notification flow:", notifError);
+        // Don't throw - tenant is already approved
+      }
+
       return { success: true };
     } finally {
       setIsLoading(false);
