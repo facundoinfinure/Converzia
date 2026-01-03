@@ -76,4 +76,25 @@ const CardFooter = React.forwardRef<
 ))
 CardFooter.displayName = "CardFooter"
 
-export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent }
+const CardSection = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement> & {
+    title?: string;
+    description?: string;
+  }
+>(({ className, title, description, children, ...props }, ref) => (
+  <div ref={ref} className={cn("space-y-4", className)} {...props}>
+    {title && (
+      <div className="space-y-1">
+        <h3 className="text-lg font-semibold text-[var(--text-primary)]">{title}</h3>
+        {description && (
+          <p className="text-sm text-[var(--text-secondary)]">{description}</p>
+        )}
+      </div>
+    )}
+    {children}
+  </div>
+))
+CardSection.displayName = "CardSection"
+
+export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent, CardSection }

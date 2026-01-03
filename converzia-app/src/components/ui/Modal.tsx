@@ -63,18 +63,8 @@ export function Modal({
     };
   }, [isOpen]);
 
-  if (!isOpen) return null;
-
-  const sizes = {
-    sm: "max-w-sm",
-    md: "max-w-lg",
-    lg: "max-w-2xl",
-    xl: "max-w-4xl",
-    full: "max-w-[calc(100vw-2rem)] max-h-[calc(100vh-2rem)]",
-  };
-
   // Focus trap and keyboard handling
-  React.useEffect(() => {
+  useEffect(() => {
     if (!isOpen) return;
 
     const modal = document.querySelector('[role="dialog"]') as HTMLElement;
@@ -120,6 +110,14 @@ export function Modal({
   }, [isOpen, closeOnEscape, onClose]);
 
   if (!isOpen) return null;
+
+  const sizes = {
+    sm: "max-w-sm",
+    md: "max-w-lg",
+    lg: "max-w-2xl",
+    xl: "max-w-4xl",
+    full: "max-w-[calc(100vw-2rem)] max-h-[calc(100vh-2rem)]",
+  };
 
   return (
     <div 
