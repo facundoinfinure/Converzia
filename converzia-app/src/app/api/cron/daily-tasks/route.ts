@@ -7,7 +7,7 @@ import { withCronAuth } from "@/lib/security/cron-auth";
 
 // ============================================
 // Cron Job: Daily Tasks (Combined)
-// Runs daily - processes deliveries, retries, and reactivations
+// Runs every 5 minutes - processes deliveries, retries, reactivations, and credit alerts
 // ============================================
 
 export const runtime = "nodejs";
@@ -168,8 +168,43 @@ export async function GET(request: NextRequest) {
 
     results.movedToCooling = ((staleLeads as any) || []).length;
 
-    console.log("Daily tasks completed:", results);
-    return NextResponse.json(results);
+    // ==========================================
+    // 5. Credit Alerts (only at 12:00)
+    // ==========================================
+    const creditAlerts = { sent: 0, errors: 0 };
+    const currentHour = now.getUTCHours();
+    if (currentHour === 12) {
+      // Check tenants with low credits
+      const { data: tenants } = await queryWithTimeout(
+        supabase
+          .from("tenants")
+          .select("id, name, credit_balance, min_credits")
+          .eq("status", "ACTIVE")
+          .lt("credit_balance", supabase.raw("COALESCE(min_credits, 100)")),
+        10000,
+        "fetch tenants with low credits for daily tasks"
+      );
+
+      const lowCreditTenants = (tenants as any) || [];
+      if (lowCreditTenants.length > 0) {
+        console.log(`Sending credit alerts to ${lowCreditTenants.length} tenants`);
+        
+        for (const tenant of lowCreditTenants) {
+          try {
+            // TODO: Send email/notification to tenant about low credits
+            // For now, just log it
+            console.log(`Tenant ${tenant.name} (${tenant.id}) has low credits: ${tenant.credit_balance}`);
+            creditAlerts.sent++;
+          } catch (err) {
+            console.error(`Error sending credit alert to tenant ${tenant.id}:`, err);
+            creditAlerts.errors++;
+          }
+        }
+      }
+    }
+
+    console.log("Daily tasks completed:", { ...results, creditAlerts });
+    return NextResponse.json({ ...results, creditAlerts });
   } catch (error) {
     console.error("Cron daily-tasks error:", error);
     return NextResponse.json(
