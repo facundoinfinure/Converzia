@@ -147,11 +147,11 @@ export default function PortalBillingPage() {
       header: "Tipo",
       cell: (tx) => {
         const config: Record<string, { icon: React.ElementType; color: string; label: string }> = {
-          CREDIT_PURCHASE: { icon: TrendingUp, color: "text-emerald-400", label: "Compra" },
-          CREDIT_CONSUMPTION: { icon: TrendingDown, color: "text-red-400", label: "Lead entregado" },
-          CREDIT_REFUND: { icon: RefreshCw, color: "text-blue-400", label: "Reembolso" },
-          CREDIT_ADJUSTMENT: { icon: CreditCard, color: "text-amber-400", label: "Ajuste" },
-          CREDIT_BONUS: { icon: Sparkles, color: "text-purple-400", label: "Bonus" },
+          CREDIT_PURCHASE: { icon: TrendingUp, color: "text-[var(--text-secondary)]", label: "Compra" },
+          CREDIT_CONSUMPTION: { icon: TrendingDown, color: "text-[var(--text-secondary)]", label: "Lead entregado" },
+          CREDIT_REFUND: { icon: RefreshCw, color: "text-[var(--text-secondary)]", label: "Reembolso" },
+          CREDIT_ADJUSTMENT: { icon: CreditCard, color: "text-[var(--text-secondary)]", label: "Ajuste" },
+          CREDIT_BONUS: { icon: Sparkles, color: "text-[var(--text-secondary)]", label: "Bonus" },
         };
         const c = config[tx.entry_type] || { icon: CreditCard, color: "text-[var(--text-tertiary)]", label: tx.entry_type };
         const Icon = c.icon;
@@ -187,7 +187,7 @@ export default function PortalBillingPage() {
       key: "amount",
       header: "Créditos",
       cell: (tx) => (
-        <span className={tx.amount >= 0 ? "text-emerald-400 font-semibold" : "text-red-400 font-semibold"}>
+        <span className={tx.amount >= 0 ? "text-[var(--text-primary)] font-semibold" : "text-[var(--text-secondary)] font-semibold"}>
           {tx.amount >= 0 ? "+" : ""}{tx.amount}
         </span>
       ),
@@ -226,7 +226,7 @@ export default function PortalBillingPage() {
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         {/* Current Balance - Featured */}
-        <Card className="md:col-span-2 bg-gradient-to-r from-primary-500/20 to-accent-500/20 border-primary-500/30">
+        <Card className="md:col-span-2">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
@@ -236,14 +236,14 @@ export default function PortalBillingPage() {
                   <span className="text-[var(--text-secondary)]">créditos</span>
                 </div>
                 {balance < 10 && balance >= 0 && (
-                  <p className="text-amber-400 text-sm mt-2 flex items-center gap-1">
+                  <p className="text-[var(--text-secondary)] text-sm mt-2 flex items-center gap-1">
                     <Clock className="h-4 w-4" />
                     Créditos bajos - recargá para seguir recibiendo leads
                   </p>
                 )}
               </div>
-              <div className="h-16 w-16 rounded-2xl bg-primary-500/20 flex items-center justify-center">
-                <CreditCard className="h-8 w-8 text-primary-400" />
+              <div className="h-16 w-16 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center">
+                <CreditCard className="h-8 w-8 text-[var(--text-secondary)]" />
               </div>
             </div>
           </CardContent>
@@ -253,8 +253,8 @@ export default function PortalBillingPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
-                <TrendingUp className="h-5 w-5 text-emerald-400" />
+              <div className="h-10 w-10 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center">
+                <TrendingUp className="h-5 w-5 text-[var(--text-secondary)]" />
               </div>
               <div>
                 <p className="text-xs text-[var(--text-tertiary)]">Total comprado</p>
@@ -267,8 +267,8 @@ export default function PortalBillingPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-red-500/20 flex items-center justify-center">
-                <TrendingDown className="h-5 w-5 text-red-400" />
+              <div className="h-10 w-10 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center">
+                <TrendingDown className="h-5 w-5 text-[var(--text-secondary)]" />
               </div>
               <div>
                 <p className="text-xs text-[var(--text-tertiary)]">Total consumido</p>
@@ -300,11 +300,14 @@ export default function PortalBillingPage() {
                     <span className="text-3xl font-bold text-[var(--text-primary)]">{pkg.credits}</span>
                     <span className="text-[var(--text-secondary)]">créditos</span>
                   </div>
-                  <p className="text-2xl font-semibold text-primary-400 mb-4">
+                  <p className="text-2xl font-semibold text-[var(--text-primary)] mb-1">
                     {formatCurrency(pkg.price)}
                   </p>
+                  <p className="text-sm text-[var(--text-tertiary)] mb-3">
+                    {formatCurrency(pkg.price / pkg.credits)} por crédito
+                  </p>
                   {pkg.discount_pct && (
-                    <p className="text-emerald-400 text-sm mb-4">
+                    <p className="text-[var(--text-secondary)] text-sm mb-4">
                       {pkg.discount_pct}% de ahorro
                     </p>
                   )}

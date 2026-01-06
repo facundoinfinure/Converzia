@@ -14,7 +14,6 @@ import {
   RefreshCw,
   Info,
   AlertTriangle,
-  Sparkles,
   ArrowRight,
   Star,
 } from "lucide-react";
@@ -42,6 +41,7 @@ import { TENANT_FUNNEL_STAGES, type TenantFunnelStage } from "@/lib/constants/te
 // ============================================
 
 interface TenantLeadStats {
+  received: number;      // PENDING_MAPPING + TO_BE_CONTACTED
   in_chat: number;        // CONTACTED, ENGAGED, QUALIFYING
   qualified: number;     // SCORED, LEAD_READY
   delivered: number;     // SENT_TO_DEVELOPER
@@ -65,7 +65,8 @@ interface TenantLeadView {
 
 // Lead categories for tenant view - using standardized funnel stages
 // Map standardized stages to icons for the leads page
-const LEAD_CATEGORY_ICONS: Record<string, typeof Sparkles> = {
+const LEAD_CATEGORY_ICONS: Record<string, typeof Users> = {
+  received: Users,
   in_chat: MessageSquare,
   qualified: TrendingUp,
   delivered: CheckCircle,
@@ -73,9 +74,10 @@ const LEAD_CATEGORY_ICONS: Record<string, typeof Sparkles> = {
 };
 
 // Lead categories for tenant view - using standardized names
+// Include "received" for funnel visualization but filter it from category selection
 const LEAD_CATEGORIES = TENANT_FUNNEL_STAGES
-  .filter(stage => stage.key !== "received") // Exclude "received" as it's too broad
-  .map((stage): TenantFunnelStage & { icon: typeof Sparkles } => ({
+  .filter(stage => stage.key !== "received") // Exclude "received" from category selection (too broad)
+  .map((stage): TenantFunnelStage & { icon: typeof Users } => ({
     ...stage,
     icon: LEAD_CATEGORY_ICONS[stage.key] || Users,
   }));
@@ -143,9 +145,32 @@ export default function PortalLeadsPage() {
         return { key: cat.key, count: count || 0 };
       });
       
+      // Fetch received stats (PENDING_MAPPING + TO_BE_CONTACTED)
+      const [pendingMappingResult, pendingContactResult] = await Promise.all([
+        queryWithTimeout(
+          supabase
+            .from("lead_offers")
+            .select("id", { count: "exact", head: true })
+            .eq("tenant_id", activeTenantId)
+            .eq("status", "PENDING_MAPPING"),
+          10000,
+          "count pending_mapping"
+        ),
+        queryWithTimeout(
+          supabase
+            .from("lead_offers")
+            .select("id", { count: "exact", head: true })
+            .eq("tenant_id", activeTenantId)
+            .eq("status", "TO_BE_CONTACTED"),
+          10000,
+          "count to_be_contacted"
+        ),
+      ]);
+      
       const results = await Promise.all(categoryPromises);
       
       const statsData: TenantLeadStats = {
+        received: (pendingMappingResult.count || 0) + (pendingContactResult.count || 0),
         in_chat: results.find(r => r.key === "in_chat")?.count || 0,
         qualified: results.find(r => r.key === "qualified")?.count || 0,
         delivered: results.find(r => r.key === "delivered")?.count || 0,
@@ -280,7 +305,7 @@ export default function PortalLeadsPage() {
   
   // Calculate totals
   const totalLeads = stats 
-    ? stats.in_chat + stats.qualified + stats.delivered + stats.not_qualified 
+    ? stats.received + stats.in_chat + stats.qualified + stats.delivered + stats.not_qualified 
     : 0;
   
   // Columns for lead table
@@ -347,26 +372,8 @@ export default function PortalLeadsPage() {
         header: "Lead",
         cell: (l) => (
           <div className="flex items-center gap-3">
-            <div className={cn(
-              "h-9 w-9 rounded-full flex items-center justify-center",
-              l.category === "delivered" 
-                ? "bg-emerald-500/20" 
-                : l.category === "in_chat"
-                  ? "bg-blue-500/20"
-                  : l.category === "qualified"
-                    ? "bg-purple-500/20"
-                    : "bg-amber-500/20"
-            )}>
-              <span className={cn(
-                "text-sm font-medium",
-                l.category === "delivered" 
-                  ? "text-emerald-400" 
-                  : l.category === "in_chat"
-                    ? "text-blue-400"
-                    : l.category === "qualified"
-                      ? "text-purple-400"
-                      : "text-amber-400"
-              )}>
+            <div className="h-9 w-9 rounded-full flex items-center justify-center bg-[var(--bg-tertiary)]">
+              <span className="text-sm font-medium text-[var(--text-secondary)]">
                 {(l.firstName?.[0] || "L").toUpperCase()}
               </span>
             </div>
@@ -408,11 +415,7 @@ export default function PortalLeadsPage() {
             <div className="flex items-center gap-2">
               <div className="w-12 h-1.5 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
                 <div 
-                  className={cn(
-                    "h-full rounded-full",
-                    l.score >= 70 ? "bg-emerald-500" :
-                    l.score >= 40 ? "bg-amber-500" : "bg-slate-500"
-                  )}
+                  className="h-full rounded-full bg-[var(--text-secondary)]"
                   style={{ width: `${l.score}%` }}
                 />
               </div>
@@ -481,22 +484,17 @@ export default function PortalLeadsPage() {
               key={category.key}
               onClick={() => setSelectedCategory(isSelected ? null : category.key)}
               className={cn(
-                "relative p-4 rounded-2xl border-2 transition-all duration-200 text-left",
-                "hover:scale-[1.02] active:scale-[0.98]",
+                "relative p-4 rounded-lg border transition-all duration-200 text-left",
                 isSelected 
-                  ? "border-primary-500 bg-primary-500/10 shadow-lg shadow-primary-500/10" 
-                  : cn("border-transparent", category.bgColor),
-                category.borderColor
+                  ? "border-[var(--border-primary)] bg-[var(--bg-secondary)]" 
+                  : "border-[var(--border-primary)] bg-[var(--bg-primary)] hover:bg-[var(--bg-secondary)]",
               )}
             >
               <div className="flex items-center justify-between mb-3">
-                <div className={cn(
-                  "h-10 w-10 rounded-xl flex items-center justify-center",
-                  `bg-gradient-to-br ${category.color}`
-                )}>
-                  <Icon className="h-5 w-5 text-white" />
+                <div className="h-10 w-10 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center">
+                  <Icon className="h-5 w-5 text-[var(--text-secondary)]" />
                 </div>
-                <span className={cn("text-2xl font-bold", category.textColor)}>
+                <span className="text-2xl font-bold text-[var(--text-primary)]">
                   {count}
                 </span>
               </div>
@@ -515,36 +513,43 @@ export default function PortalLeadsPage() {
       <Card className="mb-6">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-primary-400" />
+            <TrendingUp className="h-5 w-5 text-[var(--text-secondary)]" />
             Tu Funnel de Leads
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-between">
-            {LEAD_CATEGORIES.slice(0, 3).map((category, index) => {
-              const count = stats?.[category.key as keyof TenantLeadStats] || 0;
-              const percentage = totalLeads > 0 ? Math.round((count / totalLeads) * 100) : 0;
+            {(() => {
+              // Include "received" stage at the beginning, then the main stages
+              const receivedStage = TENANT_FUNNEL_STAGES.find(s => s.key === "received");
+              const funnelStages = receivedStage 
+                ? [receivedStage, ...LEAD_CATEGORIES.slice(0, 3)]
+                : LEAD_CATEGORIES.slice(0, 3);
               
-              return (
-                <div key={category.key} className="flex items-center flex-1">
-                  <div className="flex-1 text-center">
-                    <div className={cn(
-                      "mx-auto h-16 w-16 md:h-20 md:w-20 rounded-2xl flex items-center justify-center mb-2",
-                      `bg-gradient-to-br ${category.color}`
-                    )}>
-                      <span className="text-xl md:text-2xl font-bold text-white">{count}</span>
+              return funnelStages.map((category, index) => {
+                const count = stats?.[category.key as keyof TenantLeadStats] || 0;
+                const percentage = totalLeads > 0 ? Math.round((count / totalLeads) * 100) : 0;
+                const Icon = LEAD_CATEGORY_ICONS[category.key] || Users;
+                
+                return (
+                  <div key={category.key} className="flex items-center flex-1">
+                    <div className="flex-1 text-center">
+                      <div className="mx-auto h-16 w-16 md:h-20 md:w-20 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center mb-2">
+                        <Icon className="h-6 w-6 md:h-8 md:w-8 text-[var(--text-secondary)] mb-1" />
+                        <span className="text-xl md:text-2xl font-bold text-[var(--text-primary)] ml-2">{count}</span>
+                      </div>
+                      <p className="text-sm font-medium text-[var(--text-primary)]">{category.label}</p>
+                      <p className="text-xs text-[var(--text-tertiary)]">{percentage}%</p>
                     </div>
-                    <p className="text-sm font-medium text-[var(--text-primary)]">{category.label}</p>
-                    <p className="text-xs text-[var(--text-tertiary)]">{percentage}%</p>
+                    {index < funnelStages.length - 1 && (
+                      <div className="px-2 md:px-4">
+                        <ArrowRight className="h-6 w-6 text-[var(--text-tertiary)]" />
+                      </div>
+                    )}
                   </div>
-                  {index < 2 && (
-                    <div className="px-2 md:px-4">
-                      <ArrowRight className="h-6 w-6 text-[var(--text-tertiary)]" />
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                );
+              });
+            })()}
           </div>
           
           {/* Conversion rate */}
@@ -552,7 +557,7 @@ export default function PortalLeadsPage() {
             <div className="mt-6 pt-4 border-t border-[var(--border-primary)] text-center">
               <p className="text-sm text-[var(--text-tertiary)]">
                 Tasa de conversión: 
-                <span className="font-semibold text-emerald-400 ml-1">
+                <span className="font-semibold text-[var(--text-primary)] ml-1">
                   {Math.round((stats.delivered / totalLeads) * 100)}%
                 </span>
               </p>
@@ -679,11 +684,11 @@ export default function PortalLeadsPage() {
       )}
 
       {/* Info card about how it works */}
-      <Card className="mt-6 bg-gradient-to-br from-primary-600/10 to-purple-600/10 border-primary-500/20">
+      <Card className="mt-6">
         <CardContent className="p-6">
           <div className="flex items-start gap-4">
-            <div className="h-12 w-12 rounded-xl bg-primary-500/20 flex items-center justify-center flex-shrink-0">
-              <Sparkles className="h-6 w-6 text-primary-400" />
+            <div className="h-12 w-12 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center flex-shrink-0">
+              <Info className="h-6 w-6 text-[var(--text-secondary)]" />
             </div>
             <div>
               <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-2">
@@ -691,16 +696,19 @@ export default function PortalLeadsPage() {
               </h3>
               <div className="space-y-2 text-sm text-[var(--text-secondary)]">
                 <p>
-                  <strong className="text-[var(--text-primary)]">1. Leads en proceso:</strong> Nuestro sistema contacta automáticamente a los leads que llegan desde tus campañas.
+                  <strong className="text-[var(--text-primary)]">1. Leads recibidos:</strong> Los leads que llegan desde tus campañas entran al sistema y son mapeados a tus proyectos.
                 </p>
                 <p>
-                  <strong className="text-[var(--text-primary)]">2. Leads interesados:</strong> Cuando un lead responde y muestra interés, entra en el proceso de calificación conversacional.
+                  <strong className="text-[var(--text-primary)]">2. Leads en chat:</strong> Nuestro sistema contacta automáticamente a los leads y cuando responden, entran en el proceso de calificación conversacional.
                 </p>
                 <p>
-                  <strong className="text-[var(--text-primary)]">3. Leads listos:</strong> Una vez calificados (presupuesto, zona, timing, etc.), los leads se entregan automáticamente a tus sistemas.
+                  <strong className="text-[var(--text-primary)]">3. Leads calificados:</strong> Una vez calificados (presupuesto, zona, timing, etc.), los leads están listos para entrega.
                 </p>
                 <p>
-                  <strong className="text-[var(--text-primary)]">4. No calificados:</strong> Los leads que no cumplen los criterios se descartan, protegiendo su privacidad.
+                  <strong className="text-[var(--text-primary)]">4. Leads entregados:</strong> Los leads calificados se entregan automáticamente a tus sistemas.
+                </p>
+                <p>
+                  <strong className="text-[var(--text-primary)]">5. No calificados:</strong> Los leads que no cumplen los criterios se descartan, protegiendo su privacidad.
                 </p>
               </div>
             </div>

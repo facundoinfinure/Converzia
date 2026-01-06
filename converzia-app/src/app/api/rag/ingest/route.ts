@@ -75,6 +75,35 @@ export async function POST(request: NextRequest) {
     let result;
 
     if (source_id) {
+      // Verify source exists and is approved
+      const { data: sourceData, error: sourceError } = await queryWithTimeout(
+        supabase
+          .from("rag_sources")
+          .select("id, approval_status")
+          .eq("id", source_id)
+          .single(),
+        10000,
+        "check RAG source approval"
+      );
+
+      if (sourceError || !sourceData) {
+        return NextResponse.json(
+          { success: false, error: "RAG source not found" },
+          { status: 404 }
+        );
+      }
+
+      const approvalStatus = (sourceData as any).approval_status;
+      if (approvalStatus !== 'APPROVED') {
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: `El documento debe estar aprobado para procesarse. Estado actual: ${approvalStatus}` 
+          },
+          { status: 403 }
+        );
+      }
+
       // Ingest into existing source
       if (source_type === "URL" && url) {
         result = await ingestFromUrl(source_id, url);
@@ -238,7 +267,7 @@ async function handlePdfUpload(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Create RAG source record
+    // Create RAG source record (with DRAFT status - needs approval)
     const { data: source, error: sourceError } = await queryWithTimeout(
       supabase
         .from("rag_sources")
@@ -247,7 +276,8 @@ async function handlePdfUpload(request: NextRequest): Promise<NextResponse> {
           offer_id: offerId || null,
           source_type: "PDF",
           name: title || file.name.replace(".pdf", ""),
-          is_active: true,
+          is_active: false, // Inactive until approved
+          approval_status: 'DRAFT', // Start as DRAFT, needs approval before processing
         })
         .select()
         .single(),
@@ -302,26 +332,14 @@ async function handlePdfUpload(request: NextRequest): Promise<NextResponse> {
       "update RAG source storage path"
     );
 
-    // Ingest the PDF content
-    const result = await ingestFromPdf(
-      sourceId,
-      buffer,
-      title || file.name.replace(".pdf", "")
-    );
-
-    if (result.success) {
-      return NextResponse.json({
-        success: true,
-        sourceId: sourceId,
-        chunkCount: result.chunkCount,
-      });
-    } else {
-      return NextResponse.json({
-        success: false,
-        sourceId: sourceId,
-        error: result.error,
-      });
-    }
+    // Don't ingest immediately - source needs approval first
+    // Return success with source ID, but note that ingestion will happen after approval
+    return NextResponse.json({
+      success: true,
+      sourceId: sourceId,
+      message: "Documento creado. Debe ser aprobado antes de procesarse.",
+      requiresApproval: true,
+    });
   } catch (error) {
     console.error("PDF upload error:", error);
     return NextResponse.json(

@@ -19,6 +19,13 @@ import {
   Play,
   FileText,
   Upload,
+  Edit,
+  Settings,
+  Link as LinkIcon,
+  Plus,
+  Trash2,
+  Send,
+  Info,
 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -32,6 +39,12 @@ import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { useAuth } from "@/lib/auth/context";
 import { formatRelativeTime, formatCurrency } from "@/lib/utils";
 import { TENANT_FUNNEL_STAGES, standardizeFunnelStats, type StandardizedFunnelData } from "@/lib/constants/tenant-funnel";
+import { IntegrationConfigModal } from "@/components/admin/IntegrationConfigModal";
+import type { TenantIntegration } from "@/types";
+import { Modal } from "@/components/ui/Modal";
+import { Input } from "@/components/ui/Input";
+import { TextArea } from "@/components/ui/TextArea";
+import { Select } from "@/components/ui/Select";
 
 interface FunnelStats {
   offer_id: string;
@@ -86,6 +99,24 @@ interface Offer {
   rejection_reason: string | null;
 }
 
+interface RagSource {
+  id: string;
+  tenant_id: string;
+  offer_id: string | null;
+  source_type: "PDF" | "URL" | "MANUAL";
+  name: string;
+  description: string | null;
+  source_url: string | null;
+  storage_path: string | null;
+  approval_status: string;
+  submitted_at: string | null;
+  approved_at: string | null;
+  rejection_reason: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export default function PortalOfferDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -99,6 +130,23 @@ export default function PortalOfferDetailPage() {
   const [deliveredLeads, setDeliveredLeads] = useState<Lead[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isPausing, setIsPausing] = useState(false);
+  const [integrations, setIntegrations] = useState<TenantIntegration[]>([]);
+  const [showIntegrationModal, setShowIntegrationModal] = useState(false);
+  const [integrationModalType, setIntegrationModalType] = useState<"GOOGLE_SHEETS" | "TOKKO">("GOOGLE_SHEETS");
+  const [editingIntegration, setEditingIntegration] = useState<TenantIntegration | null>(null);
+  const [ragSources, setRagSources] = useState<RagSource[]>([]);
+  const [showDocumentModal, setShowDocumentModal] = useState(false);
+  const [editingDocument, setEditingDocument] = useState<RagSource | null>(null);
+  const [documentForm, setDocumentForm] = useState({
+    source_type: "PDF" as "PDF" | "URL" | "MANUAL",
+    name: "",
+    description: "",
+    url: "",
+    content: "",
+  });
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [isUploadingDocument, setIsUploadingDocument] = useState(false);
+  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
 
   const canManageOffers = hasPermission?.('offers:manage') ?? false;
 
@@ -161,6 +209,34 @@ export default function PortalOfferDetailPage() {
       );
 
       setDeliveredLeads((Array.isArray(leadsData) ? leadsData : []) as Lead[]);
+
+      // Load integrations
+      const { data: integrationsData } = await queryWithTimeout(
+        supabase
+          .from("tenant_integrations")
+          .select("*")
+          .eq("tenant_id", activeTenantId)
+          .in("integration_type", ["GOOGLE_SHEETS", "TOKKO"])
+          .order("created_at", { ascending: false }),
+        10000,
+        "load integrations"
+      );
+
+      setIntegrations((Array.isArray(integrationsData) ? integrationsData : []) as TenantIntegration[]);
+
+      // Load RAG sources for this offer
+      const { data: ragSourcesData } = await queryWithTimeout(
+        supabase
+          .from("rag_sources")
+          .select("*")
+          .eq("tenant_id", activeTenantId)
+          .eq("offer_id", offerId)
+          .order("created_at", { ascending: false }),
+        10000,
+        "load RAG sources"
+      );
+
+      setRagSources((Array.isArray(ragSourcesData) ? ragSourcesData : []) as RagSource[]);
     } catch (error) {
       console.error("Error loading offer:", error);
       toast.error("Error al cargar el proyecto");
@@ -190,6 +266,240 @@ export default function PortalOfferDetailPage() {
       toast.error("Error al cambiar estado");
     } finally {
       setIsPausing(false);
+    }
+  }
+
+  async function handleSubmitDocument() {
+    if (!activeTenantId || !offerId || !canManageOffers) return;
+
+    setIsUploadingDocument(true);
+    const supabase = createClient();
+
+    try {
+      if (documentForm.source_type === "PDF") {
+        if (!pdfFile) {
+          toast.error("Seleccioná un archivo PDF");
+          setIsUploadingDocument(false);
+          return;
+        }
+
+        // Initialize storage
+        const initResponse = await fetch("/api/storage/init", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tenant_id: activeTenantId,
+            offer_id: offerId,
+          }),
+        });
+
+        if (!initResponse.ok) {
+          const initError = await initResponse.json();
+          throw new Error(`Error al inicializar storage: ${initError.error}`);
+        }
+
+        // Create RAG source
+        const { data: source, error: sourceError } = await supabase
+          .from("rag_sources")
+          .insert({
+            tenant_id: activeTenantId,
+            offer_id: offerId,
+            source_type: "PDF",
+            name: documentForm.name || pdfFile.name.replace(".pdf", ""),
+            description: documentForm.description || null,
+            is_active: false,
+            approval_status: 'DRAFT',
+          })
+          .select()
+          .single();
+
+        if (sourceError) throw sourceError;
+
+        // Upload PDF
+        const storagePath = `${activeTenantId}/${offerId}/${source.id}/${pdfFile.name}`;
+        const { error: uploadError } = await supabase.storage
+          .from("rag-documents")
+          .upload(storagePath, pdfFile, {
+            contentType: "application/pdf",
+            upsert: true,
+          });
+
+        if (uploadError) {
+          await supabase.from("rag_sources").delete().eq("id", source.id);
+          throw new Error(`Error al subir archivo: ${uploadError.message}`);
+        }
+
+        // Update source with storage path
+        await supabase
+          .from("rag_sources")
+          .update({ storage_path: storagePath })
+          .eq("id", source.id);
+
+        toast.success("Documento cargado. Debe ser aprobado antes de procesarse.");
+      } else if (documentForm.source_type === "URL") {
+        if (!documentForm.url) {
+          toast.error("Ingresá una URL válida");
+          setIsUploadingDocument(false);
+          return;
+        }
+
+        const { error: sourceError } = await supabase
+          .from("rag_sources")
+          .insert({
+            tenant_id: activeTenantId,
+            offer_id: offerId,
+            source_type: "URL",
+            name: documentForm.name || "URL",
+            description: documentForm.description || null,
+            source_url: documentForm.url,
+            is_active: false,
+            approval_status: 'DRAFT',
+          });
+
+        if (sourceError) throw sourceError;
+        toast.success("URL agregada. Debe ser aprobada antes de procesarse.");
+      } else if (documentForm.source_type === "MANUAL") {
+        if (!documentForm.content) {
+          toast.error("Ingresá el contenido del documento");
+          setIsUploadingDocument(false);
+          return;
+        }
+
+        const { error: sourceError } = await supabase
+          .from("rag_sources")
+          .insert({
+            tenant_id: activeTenantId,
+            offer_id: offerId,
+            source_type: "MANUAL",
+            name: documentForm.name || "Documento manual",
+            description: documentForm.description || null,
+            is_active: false,
+            approval_status: 'DRAFT',
+          });
+
+        if (sourceError) throw sourceError;
+        toast.success("Documento creado. Debe ser aprobado antes de procesarse.");
+      }
+
+      // Reset form and reload
+      setDocumentForm({ source_type: "PDF", name: "", description: "", url: "", content: "" });
+      setPdfFile(null);
+      setShowDocumentModal(false);
+      setEditingDocument(null);
+      await loadOfferData();
+    } catch (error: any) {
+      console.error("Error submitting document:", error);
+      toast.error(error?.message || "Error al cargar el documento");
+    } finally {
+      setIsUploadingDocument(false);
+    }
+  }
+
+  async function handleEditDocument(doc: RagSource) {
+    setEditingDocument(doc);
+    setDocumentForm({
+      source_type: doc.source_type,
+      name: doc.name,
+      description: doc.description || "",
+      url: doc.source_url || "",
+      content: "",
+    });
+    setShowDocumentModal(true);
+  }
+
+  async function handleUpdateDocument() {
+    if (!editingDocument || !canManageOffers) return;
+
+    setIsUploadingDocument(true);
+    const supabase = createClient();
+
+    try {
+      const updateData: any = {
+        name: documentForm.name,
+        description: documentForm.description || null,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (documentForm.source_type === "URL") {
+        updateData.source_url = documentForm.url;
+      }
+
+      // If PDF file is provided, upload new version
+      if (documentForm.source_type === "PDF" && pdfFile) {
+        const storagePath = `${activeTenantId}/${offerId}/${editingDocument.id}/${pdfFile.name}`;
+        const { error: uploadError } = await supabase.storage
+          .from("rag-documents")
+          .upload(storagePath, pdfFile, {
+            contentType: "application/pdf",
+            upsert: true,
+          });
+
+        if (uploadError) throw uploadError;
+        updateData.storage_path = storagePath;
+      }
+
+      const { error } = await supabase
+        .from("rag_sources")
+        .update(updateData)
+        .eq("id", editingDocument.id);
+
+      if (error) throw error;
+
+      toast.success("Documento actualizado");
+      setShowDocumentModal(false);
+      setEditingDocument(null);
+      setDocumentForm({ source_type: "PDF", name: "", description: "", url: "", content: "" });
+      setPdfFile(null);
+      await loadOfferData();
+    } catch (error: any) {
+      console.error("Error updating document:", error);
+      toast.error(error?.message || "Error al actualizar el documento");
+    } finally {
+      setIsUploadingDocument(false);
+    }
+  }
+
+  async function handleDeleteDocument(docId: string) {
+    if (!canManageOffers) return;
+
+    setDeletingDocumentId(docId);
+    const supabase = createClient();
+
+    try {
+      const { error } = await supabase
+        .from("rag_sources")
+        .delete()
+        .eq("id", docId);
+
+      if (error) throw error;
+
+      toast.success("Documento eliminado");
+      await loadOfferData();
+    } catch (error: any) {
+      console.error("Error deleting document:", error);
+      toast.error("Error al eliminar el documento");
+    } finally {
+      setDeletingDocumentId(null);
+    }
+  }
+
+  async function handleSubmitForApproval(docId: string) {
+    if (!canManageOffers) return;
+
+    const supabase = createClient();
+
+    try {
+      const { error } = await (supabase.rpc as any)("submit_rag_source_for_approval", {
+        p_source_id: docId,
+      });
+
+      if (error) throw error;
+
+      toast.success("Documento enviado para aprobación");
+      await loadOfferData();
+    } catch (error: any) {
+      console.error("Error submitting for approval:", error);
+      toast.error(error?.message || "Error al enviar para aprobación");
     }
   }
 
@@ -327,16 +637,27 @@ export default function PortalOfferDetailPage() {
         title={offer.name}
         description={offer.city ? `${offer.city}${offer.zone ? `, ${offer.zone}` : ''}` : undefined}
         actions={
-          canManageOffers && offer.approval_status === 'APPROVED' && (
-            <Button
-              variant="secondary"
-              onClick={handlePauseResume}
-              isLoading={isPausing}
-              leftIcon={offer.status === 'PAUSED' ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
-            >
-              {offer.status === 'PAUSED' ? 'Reanudar' : 'Pausar'}
-            </Button>
-          )
+          <div className="flex items-center gap-2">
+            {canManageOffers && (
+              <Button
+                variant="secondary"
+                onClick={() => router.push(`/portal/offers/${offerId}/edit`)}
+                leftIcon={<Edit className="h-4 w-4" />}
+              >
+                Editar
+              </Button>
+            )}
+            {canManageOffers && offer.approval_status === 'APPROVED' && (
+              <Button
+                variant="secondary"
+                onClick={handlePauseResume}
+                isLoading={isPausing}
+                leftIcon={offer.status === 'PAUSED' ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+              >
+                {offer.status === 'PAUSED' ? 'Reanudar' : 'Pausar'}
+              </Button>
+            )}
+          </div>
         }
       />
 
@@ -366,6 +687,7 @@ export default function PortalOfferDetailPage() {
               size="sm"
               className="mt-3 ml-8"
               onClick={() => router.push(`/portal/offers/${offerId}/edit`)}
+              leftIcon={<Edit className="h-3 w-3" />}
             >
               Editar y reenviar
             </Button>
@@ -484,6 +806,397 @@ export default function PortalOfferDetailPage() {
             keyExtractor={(lead) => lead.id}
           />
         </Card>
+      )}
+
+      {/* Integrations Section */}
+      {canManageOffers && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Settings className="h-5 w-5 text-[var(--text-secondary)]" />
+                Integraciones
+              </CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-[var(--text-tertiary)] mb-4">
+              Configurá cómo se entregan los leads calificados a tus sistemas.
+            </p>
+            
+            <div className="space-y-3">
+              {/* Google Sheets */}
+              {(() => {
+                const googleIntegration = integrations.find(i => i.integration_type === "GOOGLE_SHEETS");
+                return (
+                  <div className="flex items-center justify-between p-4 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)]">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center">
+                        <LinkIcon className="h-5 w-5 text-[var(--text-secondary)]" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-[var(--text-primary)]">Google Sheets</p>
+                        <p className="text-sm text-[var(--text-tertiary)]">
+                          {googleIntegration?.is_active 
+                            ? `Conectado${googleIntegration.name ? `: ${googleIntegration.name}` : ''}`
+                            : "No configurado"}
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        setIntegrationModalType("GOOGLE_SHEETS");
+                        setEditingIntegration(googleIntegration || null);
+                        setShowIntegrationModal(true);
+                      }}
+                    >
+                      {googleIntegration ? "Editar" : "Configurar"}
+                    </Button>
+                  </div>
+                );
+              })()}
+
+              {/* Tokko */}
+              {(() => {
+                const tokkoIntegration = integrations.find(i => i.integration_type === "TOKKO");
+                return (
+                  <div className="flex items-center justify-between p-4 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)]">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center">
+                        <LinkIcon className="h-5 w-5 text-[var(--text-secondary)]" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-[var(--text-primary)]">Tokko</p>
+                        <p className="text-sm text-[var(--text-tertiary)]">
+                          {tokkoIntegration?.is_active 
+                            ? `Conectado${tokkoIntegration.name ? `: ${tokkoIntegration.name}` : ''}`
+                            : "No configurado"}
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        setIntegrationModalType("TOKKO");
+                        setEditingIntegration(tokkoIntegration || null);
+                        setShowIntegrationModal(true);
+                      }}
+                    >
+                      {tokkoIntegration ? "Editar" : "Configurar"}
+                    </Button>
+                  </div>
+                );
+              })()}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Documentos relevantes de la Oferta */}
+      {canManageOffers && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5 text-[var(--text-secondary)]" />
+                Documentos relevantes de la Oferta
+              </CardTitle>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setEditingDocument(null);
+                  setDocumentForm({ source_type: "PDF", name: "", description: "", url: "", content: "" });
+                  setPdfFile(null);
+                  setShowDocumentModal(true);
+                }}
+                leftIcon={<Plus className="h-4 w-4" />}
+              >
+                Agregar documento
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-[var(--text-tertiary)] mb-4">
+              Agregá documentos, URLs o texto que contengan información relevante sobre este proyecto. 
+              Los documentos deben ser aprobados por Converzia antes de procesarse.
+            </p>
+            
+            {ragSources.length === 0 ? (
+              <div className="text-center py-8">
+                <FileText className="h-12 w-12 mx-auto mb-4 text-[var(--text-tertiary)]" />
+                <p className="text-[var(--text-secondary)] mb-2">No hay documentos cargados</p>
+                <p className="text-sm text-[var(--text-tertiary)]">
+                  Agregá documentos para que el sistema pueda responder mejor las preguntas sobre este proyecto.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {ragSources.map((doc) => {
+                  const approvalStatusConfig: Record<string, { label: string; variant: "success" | "warning" | "secondary" | "info" | "danger" }> = {
+                    DRAFT: { label: "Borrador", variant: "secondary" },
+                    PENDING_APPROVAL: { label: "Pendiente de aprobación", variant: "info" },
+                    APPROVED: { label: "Aprobado", variant: "success" },
+                    REJECTED: { label: "Rechazado", variant: "danger" },
+                  };
+                  const statusConfig = approvalStatusConfig[doc.approval_status] || { label: doc.approval_status, variant: "secondary" as const };
+                  const canEdit = doc.approval_status === 'DRAFT' || doc.approval_status === 'REJECTED';
+                  
+                  return (
+                    <div
+                      key={doc.id}
+                      className="flex items-center justify-between p-4 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)]"
+                    >
+                      <div className="flex items-center gap-3 flex-1">
+                        <div className="h-10 w-10 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center">
+                          {doc.source_type === "PDF" ? (
+                            <FileText className="h-5 w-5 text-[var(--text-secondary)]" />
+                          ) : doc.source_type === "URL" ? (
+                            <LinkIcon className="h-5 w-5 text-[var(--text-secondary)]" />
+                          ) : (
+                            <FileText className="h-5 w-5 text-[var(--text-secondary)]" />
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <p className="font-medium text-[var(--text-primary)]">{doc.name}</p>
+                            <Badge variant={statusConfig.variant} size="sm">
+                              {statusConfig.label}
+                            </Badge>
+                          </div>
+                          {doc.description && (
+                            <p className="text-sm text-[var(--text-tertiary)]">{doc.description}</p>
+                          )}
+                          {doc.source_url && (
+                            <a
+                              href={doc.source_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm text-[var(--text-secondary)] hover:underline flex items-center gap-1 mt-1"
+                            >
+                              <LinkIcon className="h-3 w-3" />
+                              {doc.source_url}
+                            </a>
+                          )}
+                          {doc.approval_status === 'REJECTED' && doc.rejection_reason && (
+                            <div className="mt-2 p-2 rounded bg-[var(--bg-tertiary)] border border-[var(--border-primary)]">
+                              <p className="text-xs text-[var(--text-secondary)]">
+                                <strong>Motivo de rechazo:</strong> {doc.rejection_reason}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {canEdit && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEditDocument(doc)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            {doc.approval_status === 'DRAFT' && (
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => handleSubmitForApproval(doc.id)}
+                              >
+                                <Send className="h-4 w-4 mr-1" />
+                                Enviar para aprobación
+                              </Button>
+                            )}
+                          </>
+                        )}
+                        {canEdit && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              if (confirm("¿Estás seguro de que querés eliminar este documento?")) {
+                                handleDeleteDocument(doc.id);
+                              }
+                            }}
+                            isLoading={deletingDocumentId === doc.id}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Document Modal */}
+      <Modal
+        isOpen={showDocumentModal}
+        onClose={() => {
+          setShowDocumentModal(false);
+          setEditingDocument(null);
+          setDocumentForm({ source_type: "PDF", name: "", description: "", url: "", content: "" });
+          setPdfFile(null);
+        }}
+        title={editingDocument ? "Editar documento" : "Agregar documento"}
+        size="lg"
+      >
+        <div className="space-y-4">
+          <Select
+            label="Tipo de documento"
+            options={[
+              { value: "PDF", label: "PDF" },
+              { value: "URL", label: "URL" },
+              { value: "MANUAL", label: "Texto manual" },
+            ]}
+            value={documentForm.source_type}
+            onChange={(e) => setDocumentForm({ ...documentForm, source_type: e.target.value as any })}
+            disabled={!!editingDocument}
+          />
+
+          <Input
+            label="Nombre"
+            placeholder="Ej: Información del proyecto"
+            value={documentForm.name}
+            onChange={(e) => setDocumentForm({ ...documentForm, name: e.target.value })}
+            required
+          />
+
+          <TextArea
+            label="Descripción (opcional)"
+            placeholder="Breve descripción del documento..."
+            rows={2}
+            value={documentForm.description}
+            onChange={(e) => setDocumentForm({ ...documentForm, description: e.target.value })}
+          />
+
+          {documentForm.source_type === "PDF" && (
+            <div>
+              <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">
+                Archivo PDF
+              </label>
+              <div className="border-2 border-dashed border-[var(--border-primary)] rounded-lg p-6 text-center">
+                {pdfFile ? (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-[var(--text-secondary)]">{pdfFile.name}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setPdfFile(null)}
+                    >
+                      <XCircle className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <label className="cursor-pointer block">
+                    <Upload className="h-8 w-8 mx-auto mb-2 text-[var(--text-tertiary)]" />
+                    <p className="text-sm text-[var(--text-secondary)] mb-1">
+                      Hacé click para seleccionar un PDF
+                    </p>
+                    <p className="text-xs text-[var(--text-tertiary)]">PDF hasta 10MB</p>
+                    <input
+                      type="file"
+                      accept="application/pdf"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          if (file.type !== "application/pdf") {
+                            toast.error("Solo se permiten archivos PDF");
+                            return;
+                          }
+                          if (file.size > 10 * 1024 * 1024) {
+                            toast.error("El archivo no puede superar los 10MB");
+                            return;
+                          }
+                          setPdfFile(file);
+                        }
+                      }}
+                    />
+                  </label>
+                )}
+              </div>
+            </div>
+          )}
+
+          {documentForm.source_type === "URL" && (
+            <Input
+              label="URL"
+              placeholder="https://..."
+              type="url"
+              value={documentForm.url}
+              onChange={(e) => setDocumentForm({ ...documentForm, url: e.target.value })}
+              required
+            />
+          )}
+
+          {documentForm.source_type === "MANUAL" && (
+            <TextArea
+              label="Contenido"
+              placeholder="Ingresá el contenido del documento..."
+              rows={6}
+              value={documentForm.content}
+              onChange={(e) => setDocumentForm({ ...documentForm, content: e.target.value })}
+              required
+            />
+          )}
+
+          <div className="flex items-start gap-2 p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)]">
+            <Info className="h-4 w-4 text-[var(--text-secondary)] mt-0.5 flex-shrink-0" />
+            <p className="text-xs text-[var(--text-secondary)]">
+              Los documentos deben ser aprobados por Converzia antes de procesarse e ingresar al sistema.
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-4">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setShowDocumentModal(false);
+                setEditingDocument(null);
+                setDocumentForm({ source_type: "PDF", name: "", description: "", url: "", content: "" });
+                setPdfFile(null);
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={editingDocument ? handleUpdateDocument : handleSubmitDocument}
+              isLoading={isUploadingDocument}
+            >
+              {editingDocument ? "Guardar cambios" : "Crear documento"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Integration Config Modal */}
+      {showIntegrationModal && activeTenantId && (
+        <IntegrationConfigModal
+          isOpen={showIntegrationModal}
+          onClose={() => {
+            setShowIntegrationModal(false);
+            setEditingIntegration(null);
+          }}
+          onSuccess={() => {
+            setShowIntegrationModal(false);
+            setEditingIntegration(null);
+            loadOfferData();
+            toast.success("Integración configurada correctamente");
+          }}
+          type={integrationModalType}
+          tenantId={activeTenantId}
+          existingConfig={editingIntegration?.config as any}
+          existingIntegrationId={editingIntegration?.id}
+        />
       )}
     </PageContainer>
   );
