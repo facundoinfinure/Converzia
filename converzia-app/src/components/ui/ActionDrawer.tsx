@@ -153,7 +153,7 @@ interface ResponsiveActionMenuProps {
   items: Array<{
     label: string;
     icon?: LucideIcon;
-    onClick: () => void;
+    onClick?: () => void;
     danger?: boolean;
     divider?: boolean;
     disabled?: boolean;
@@ -178,7 +178,7 @@ export function ResponsiveActionMenu({
       if (item.divider && currentSection.length > 0) {
         sections.push({ items: currentSection });
         currentSection = [];
-      } else if (!item.divider) {
+      } else if (!item.divider && item.onClick) {
         currentSection.push({
           label: item.label,
           icon: item.icon,
