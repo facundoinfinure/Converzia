@@ -147,7 +147,7 @@ export default function PortalIntegrationsPage() {
       toast.error(errorMessages[error] || "Error de autenticación");
       router.replace("/portal/integrations", { scroll: false });
     }
-  }, [searchParams, router, toast]);
+  }, [searchParams, router, toast, fetchIntegrations]);
 
   // Fetch integrations
   const fetchIntegrations = useCallback(async () => {
