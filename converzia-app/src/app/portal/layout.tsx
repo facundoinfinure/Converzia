@@ -1,3 +1,5 @@
+"use client";
+
 import { PortalSidebar } from "@/components/layout/PortalSidebar";
 import { PortalHeader } from "@/components/layout/PortalHeader";
 import { DashboardInitialLoader } from "@/components/dashboard/DashboardInitialLoader";

@@ -67,9 +67,12 @@ function ToastInitializer() {
 // Dashboard Initializer (triggers initial load)
 // ============================================
 
+import { useDashboardInitialLoad } from "@/lib/hooks/use-dashboard-initial-load";
+import { useDashboardPolling } from "@/lib/hooks/use-dashboard-polling";
+
 function DashboardInitializer() {
   // This hook will trigger the initial load when activeTenantId is available
-  const { useDashboardInitialLoad } = require("@/lib/hooks/use-dashboard-initial-load");
   useDashboardInitialLoad();
+  useDashboardPolling();
   return null;
 }
