@@ -115,7 +115,7 @@ export function AdminHeader() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className="sticky top-0 z-40 flex h-[73px] shrink-0 items-center gap-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="flex w-full items-center justify-between px-4">
           {/* Left side - Sidebar trigger + Search */}
           <div className="flex items-center gap-2">
