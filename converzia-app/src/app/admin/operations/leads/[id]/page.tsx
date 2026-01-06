@@ -190,17 +190,19 @@ export default function LeadDetailPage({ params }: Props) {
         "lead offer detail"
       );
       
-      if (leadOfferError) {
+      if (leadOfferError || !leadOfferData) {
         console.error("Error fetching lead offer:", leadOfferError);
         toast.error("Error al cargar el lead");
         return;
       }
       
+      // Type assertion for Supabase response
+      const data = leadOfferData as Record<string, unknown>;
       const processedData = {
-        ...leadOfferData,
-        lead: Array.isArray(leadOfferData.lead) ? leadOfferData.lead[0] : leadOfferData.lead,
-        tenant: Array.isArray(leadOfferData.tenant) ? leadOfferData.tenant[0] : leadOfferData.tenant,
-        offer: Array.isArray(leadOfferData.offer) ? leadOfferData.offer[0] : leadOfferData.offer,
+        ...data,
+        lead: Array.isArray(data.lead) ? data.lead[0] : data.lead,
+        tenant: Array.isArray(data.tenant) ? data.tenant[0] : data.tenant,
+        offer: Array.isArray(data.offer) ? data.offer[0] : data.offer,
       };
       
       setLeadOffer(processedData);
