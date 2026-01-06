@@ -150,6 +150,34 @@ export function IntegrationConfigModal({
       const response = await fetch(
         `/api/integrations/google/spreadsheets?tenant_id=${tenantId}`
       );
+      
+      // Handle non-JSON responses (like 500 errors)
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMessage = "Error al verificar conexión";
+        
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error || errorMessage;
+        } catch {
+          // If response is not JSON, use status-based message
+          if (response.status === 401) {
+            errorMessage = "No hay cuenta de Google conectada";
+          } else if (response.status === 500) {
+            errorMessage = "Error del servidor al verificar conexión";
+          }
+        }
+        
+        setGoogleConnection({
+          connected: false,
+          email: null,
+          spreadsheets: [],
+          loading: false,
+          error: errorMessage,
+        });
+        return;
+      }
+
       const data = await response.json();
 
       if (data.connected) {
@@ -174,16 +202,17 @@ export function IntegrationConfigModal({
           email: null,
           spreadsheets: [],
           loading: false,
-          error: data.error || null,
+          error: data.error || "No hay cuenta de Google conectada",
         });
       }
     } catch (error) {
+      console.error("Error loading Google connection:", error);
       setGoogleConnection({
         connected: false,
         email: null,
         spreadsheets: [],
         loading: false,
-        error: "Error al verificar conexión",
+        error: "Error al verificar conexión con Google",
       });
     }
   }, [tenantId, type]);
@@ -221,16 +250,41 @@ export function IntegrationConfigModal({
           existingIntegrationId ? `&integration_id=${existingIntegrationId}` : ""
         }${returnUrl ? `&return_url=${encodeURIComponent(returnUrl)}` : ""}`
       );
+
+      // Handle non-OK responses
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMessage = "Error al iniciar conexión con Google";
+        
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error || errorMessage;
+        } catch {
+          if (response.status === 500) {
+            errorMessage = "Google OAuth no está configurado en el servidor. Contactá al administrador.";
+          }
+        }
+        
+        toast.error(errorMessage);
+        setGoogleConnection((prev) => ({ ...prev, error: errorMessage }));
+        return;
+      }
+
       const data = await response.json();
 
       if (data.authUrl) {
         // Redirect to Google OAuth
         window.location.href = data.authUrl;
       } else {
-        toast.error(data.error || "Error al iniciar conexión con Google");
+        const errorMsg = data.error || "Error al iniciar conexión con Google";
+        toast.error(errorMsg);
+        setGoogleConnection((prev) => ({ ...prev, error: errorMsg }));
       }
     } catch (error) {
-      toast.error("Error al conectar con Google");
+      console.error("Error connecting to Google:", error);
+      const errorMsg = "Error al conectar con Google. Verificá tu conexión a internet.";
+      toast.error(errorMsg);
+      setGoogleConnection((prev) => ({ ...prev, error: errorMsg }));
     }
   };
 
@@ -600,7 +654,14 @@ function GoogleSheetsOAuthForm({
           )}
 
           {connection.error && (
-            <p className="mt-4 text-sm text-red-400">{connection.error}</p>
+            <Alert variant="error" className="mt-4">
+              <p className="text-sm">{connection.error}</p>
+              {connection.error.includes("no está configurado") && (
+                <p className="text-xs mt-2 text-slate-400">
+                  El administrador del sistema debe configurar las credenciales de Google OAuth.
+                </p>
+              )}
+            </Alert>
           )}
         </div>
       </div>

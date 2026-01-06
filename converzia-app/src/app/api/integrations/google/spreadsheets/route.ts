@@ -33,14 +33,32 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Validate environment variables first
+    if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+      return NextResponse.json(
+        { 
+          error: "Google OAuth no está configurado en el servidor", 
+          connected: false 
+        },
+        { status: 500 }
+      );
+    }
+
     // Get OAuth tokens from database
     const supabase = await createClient();
-    const { data: integration } = await supabase
+    const { data: integration, error: integrationError } = await supabase
       .from("tenant_integrations")
       .select("id, oauth_tokens, config")
       .eq("tenant_id", tenantId)
       .eq("integration_type", "GOOGLE_SHEETS")
       .single();
+
+    if (integrationError || !integration) {
+      return NextResponse.json(
+        { error: "No hay cuenta de Google conectada", connected: false },
+        { status: 401 }
+      );
+    }
 
     if (!integration?.oauth_tokens) {
       return NextResponse.json(
