@@ -140,6 +140,7 @@ export interface TenantIntegration {
   id: string;
   tenant_id: string;
   integration_type: "GOOGLE_SHEETS" | "TOKKO" | "WEBHOOK";
+  name: string;
   config: GoogleSheetsConfig | TokkoConfig | WebhookConfig;
   oauth_tokens?: GoogleOAuthTokens | null;
   is_active: boolean;
