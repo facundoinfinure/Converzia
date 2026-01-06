@@ -171,7 +171,7 @@ export default function PortalSettingsPage() {
         console.error("Error fetching integrations:", error);
         toast.error("Error al cargar integraciones");
       } else {
-        setIntegrations(data || []);
+        setIntegrations(Array.isArray(data) ? data : []);
       }
     } catch (error) {
       console.error("Error fetching integrations:", error);
@@ -182,8 +182,11 @@ export default function PortalSettingsPage() {
   }, [activeTenantId, supabase, toast]);
 
   useEffect(() => {
-    fetchIntegrations();
-  }, [fetchIntegrations]);
+    if (activeTenantId) {
+      fetchIntegrations();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTenantId]);
 
   const getIntegration = (type: IntegrationType): TenantIntegration | undefined => {
     return integrations.find((i) => i.integration_type === type);

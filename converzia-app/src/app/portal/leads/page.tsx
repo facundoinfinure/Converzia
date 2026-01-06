@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Users,
   UserCheck,
@@ -112,19 +112,7 @@ export default function PortalLeadsPage() {
 
   const supabase = createClient();
 
-  useEffect(() => {
-    if (activeTenantId) {
-      loadData();
-    }
-  }, [activeTenantId]);
-  
-  useEffect(() => {
-    if (activeTenantId && selectedCategory) {
-      loadLeads();
-    }
-  }, [selectedCategory, offerFilter]);
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
     if (!activeTenantId) return;
     
     setIsLoading(true);
@@ -211,9 +199,9 @@ export default function PortalLeadsPage() {
     } finally {
       setIsLoading(false);
     }
-  }
-  
-  async function loadLeads() {
+  }, [activeTenantId, supabase, toast]);
+
+  const loadLeads = useCallback(async () => {
     if (!activeTenantId || !selectedCategory) return;
     
     setIsRefreshing(true);
@@ -306,7 +294,19 @@ export default function PortalLeadsPage() {
     } finally {
       setIsRefreshing(false);
     }
-  }
+  }, [activeTenantId, selectedCategory, offerFilter, supabase]);
+
+  useEffect(() => {
+    if (activeTenantId) {
+      loadData();
+    }
+  }, [activeTenantId, loadData]);
+  
+  useEffect(() => {
+    if (activeTenantId && selectedCategory) {
+      loadLeads();
+    }
+  }, [activeTenantId, selectedCategory, offerFilter, loadLeads]);
   
   async function handleRefresh() {
     await loadData();

@@ -102,7 +102,7 @@ export default function PortalBillingPage() {
     }
 
     fetchBillingData();
-  }, [supabase, activeTenantId, filterOffer]);
+  }, [supabase, activeTenantId, filterOffer, toast]);
 
   const handlePurchase = async (pkg: CreditPackage) => {
     if (!hasPermission?.("billing:manage")) {
