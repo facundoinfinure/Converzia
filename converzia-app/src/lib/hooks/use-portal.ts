@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { useAuth } from "@/lib/auth/context";
+import { useDashboard } from "@/lib/contexts/dashboard-context";
 import type { LeadOffer, Offer, Delivery, CreditLedgerEntry, TenantMembership } from "@/types";
 
 // ============================================
@@ -43,143 +44,27 @@ interface DashboardStats {
 }
 
 export function usePortalDashboard() {
-  const { activeTenantId } = useAuth();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [recentLeads, setRecentLeads] = useState<LeadOffer[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Use dashboard context instead of local state
+  const {
+    stats,
+    recentLeads,
+    isInitialLoading,
+    isLoading,
+    errors,
+    refreshAll,
+  } = useDashboard();
 
-  const supabase = createClient();
+  // For backward compatibility, return isLoading as combined state
+  const isLoadingCombined = isInitialLoading || isLoading.stats || isLoading.leads;
+  const error = errors.stats || errors.leads || null;
 
-  const fetchData = useCallback(async () => {
-    if (!activeTenantId) {
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      // Use tenant_funnel_stats view for all aggregated stats (single query instead of 8)
-      const [funnelStatsResult, teamMembersResult] = await Promise.allSettled([
-        queryWithTimeout(
-          supabase
-            .from("tenant_funnel_stats")
-            .select("*")
-            .eq("tenant_id", activeTenantId)
-            .maybeSingle(),
-          10000, // Increased timeout for credit balance
-          "tenant funnel stats",
-          false
-        ),
-        queryWithTimeout(
-          supabase
-            .from("tenant_members")
-            .select("id", { count: "exact", head: true })
-            .eq("tenant_id", activeTenantId)
-            .eq("status", "ACTIVE"),
-          8000,
-          "team members",
-          false
-        ),
-      ]);
-
-      // Extract funnel stats
-      const funnelStats: TenantFunnelStats | null = funnelStatsResult.status === "fulfilled" 
-        ? (funnelStatsResult.value.data as TenantFunnelStats) 
-        : null;
-      const teamMembers = teamMembersResult.status === "fulfilled" ? (teamMembersResult.value.count || 0) : 0;
-
-      // Calculate contacted count (CONTACTED + ENGAGED) and qualifying count (QUALIFYING)
-      // Note: leads_in_chat includes CONTACTED, ENGAGED, QUALIFYING
-      // We need to get them separately for pipelineStats
-      const [contactedCountResult, qualifyingCountResult] = await Promise.allSettled([
-        queryWithTimeout(
-          supabase
-            .from("lead_offers")
-            .select("id", { count: "exact", head: true })
-            .eq("tenant_id", activeTenantId)
-            .in("status", ["CONTACTED", "ENGAGED"]),
-          8000,
-          "contacted count",
-          false
-        ),
-        queryWithTimeout(
-          supabase
-            .from("lead_offers")
-            .select("id", { count: "exact", head: true })
-            .eq("tenant_id", activeTenantId)
-            .eq("status", "QUALIFYING"),
-          8000,
-          "qualifying count",
-          false
-        ),
-      ]);
-
-      const contactedCount = contactedCountResult.status === "fulfilled" ? (contactedCountResult.value.count || 0) : 0;
-      const qualifyingCount = qualifyingCountResult.status === "fulfilled" ? (qualifyingCountResult.value.count || 0) : 0;
-
-      const totalLeads = funnelStats?.total_leads || 0;
-      const deliveredCount = funnelStats?.leads_delivered || 0;
-      const leadReadyCount = funnelStats?.leads_qualified || 0;
-      const conversionRate = funnelStats?.conversion_rate || (totalLeads > 0 ? Math.round((deliveredCount / totalLeads) * 100) : 0);
-
-      setStats({
-        totalLeads,
-        leadReadyCount,
-        deliveredCount,
-        conversionRate: Math.round(conversionRate),
-        creditBalance: funnelStats?.credit_balance || 0,
-        activeOffers: funnelStats?.active_offers_count || 0,
-        teamMembers,
-        pipelineStats: {
-          contacted: contactedCount,
-          qualifying: qualifyingCount,
-          leadReady: leadReadyCount,
-          delivered: deliveredCount,
-        },
-      });
-
-      // Fetch recent leads (non-blocking, can fail silently)
-      const { data: leadsData } = await queryWithTimeout(
-        supabase
-          .from("lead_offers")
-          .select(`
-            *,
-            lead:leads(phone, full_name, email),
-            offer:offers!lead_offers_offer_id_fkey(name)
-          `)
-          .eq("tenant_id", activeTenantId)
-          .order("created_at", { ascending: false })
-          .limit(10),
-        8000,
-        "recent leads",
-        false // Don't retry - this is non-critical
-      );
-
-      if (leadsData && Array.isArray(leadsData)) {
-        setRecentLeads(
-          leadsData.map((l: any) => ({
-            ...l,
-            lead: Array.isArray(l.lead) ? l.lead[0] : l.lead,
-            offer: Array.isArray(l.offer) ? l.offer[0] : l.offer,
-          }))
-        );
-      }
-    } catch (err) {
-      console.error("Error fetching dashboard:", err);
-      setError(err instanceof Error ? err.message : "Error al cargar datos");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [supabase, activeTenantId]);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  return { stats, recentLeads, isLoading, error, refetch: fetchData };
+  return {
+    stats,
+    recentLeads,
+    isLoading: isLoadingCombined,
+    error,
+    refetch: refreshAll,
+  };
 }
 
 // ============================================
@@ -361,54 +246,26 @@ export function usePortalOffers() {
 // ============================================
 
 export function usePortalBilling() {
-  const { activeTenantId } = useAuth();
-  const [balance, setBalance] = useState(0);
-  const [transactions, setTransactions] = useState<CreditLedgerEntry[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // Use dashboard context instead of local state
+  const {
+    billing,
+    isInitialLoading,
+    isLoading,
+    errors,
+    refreshBilling,
+  } = useDashboard();
 
-  const supabase = createClient();
+  // For backward compatibility
+  const isLoadingCombined = isInitialLoading || isLoading.billing;
+  const error = errors.billing;
 
-  useEffect(() => {
-    async function fetchBilling() {
-      if (!activeTenantId) {
-        setIsLoading(false);
-        return;
-      }
-
-      // Get balance
-      const { data: balanceData } = await queryWithTimeout(
-        supabase
-          .from("tenant_credit_balance")
-          .select("current_balance")
-          .eq("tenant_id", activeTenantId)
-          .maybeSingle(),
-        10000, // Increased timeout to prevent missing credits
-        "credit balance",
-        false // Don't retry balance queries
-      );
-
-      setBalance((balanceData as any)?.current_balance || 0);
-
-      // Get transactions
-      const { data: txData } = await queryWithTimeout(
-        supabase
-          .from("credit_ledger")
-          .select("*")
-          .eq("tenant_id", activeTenantId)
-          .order("created_at", { ascending: false })
-          .limit(50),
-        10000,
-        "credit ledger transactions"
-      );
-
-      setTransactions(Array.isArray(txData) ? txData : []);
-      setIsLoading(false);
-    }
-
-    fetchBilling();
-  }, [supabase, activeTenantId]);
-
-  return { balance, transactions, isLoading };
+  return {
+    balance: billing.balance,
+    transactions: billing.transactions,
+    isLoading: isLoadingCombined,
+    error,
+    refetch: refreshBilling,
+  };
 }
 
 // ============================================
