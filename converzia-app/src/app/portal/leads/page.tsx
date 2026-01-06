@@ -128,7 +128,17 @@ export default function PortalLeadsPage() {
         "tenant funnel stats"
       );
 
-      const funnelStats = funnelStatsData as any;
+      interface TenantFunnelStats {
+        leads_pending_mapping?: number;
+        leads_pending_contact?: number;
+        leads_in_chat?: number;
+        leads_qualified?: number;
+        leads_delivered?: number;
+        leads_disqualified?: number;
+        leads_stopped?: number;
+      }
+
+      const funnelStats = funnelStatsData as TenantFunnelStats | null;
       
       // Map funnel stats to our format using the same logic as standardizeFunnelStats
       // "received" = leads_pending_mapping + leads_pending_contact

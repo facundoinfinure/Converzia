@@ -10,6 +10,22 @@ import type { LeadOffer, Offer, Delivery, CreditLedgerEntry, TenantMembership } 
 // Hook: Portal Dashboard Stats
 // ============================================
 
+interface TenantFunnelStats {
+  tenant_id: string;
+  tenant_name: string;
+  total_leads: number;
+  leads_pending_mapping: number;
+  leads_pending_contact: number;
+  leads_in_chat: number;
+  leads_qualified: number;
+  leads_delivered: number;
+  leads_disqualified: number;
+  leads_stopped: number;
+  conversion_rate: number;
+  credit_balance: number;
+  active_offers_count: number;
+}
+
 interface DashboardStats {
   totalLeads: number;
   leadReadyCount: number;
@@ -70,7 +86,9 @@ export function usePortalDashboard() {
       ]);
 
       // Extract funnel stats
-      const funnelStats = funnelStatsResult.status === "fulfilled" ? funnelStatsResult.value.data : null;
+      const funnelStats: TenantFunnelStats | null = funnelStatsResult.status === "fulfilled" 
+        ? (funnelStatsResult.value.data as TenantFunnelStats) 
+        : null;
       const teamMembers = teamMembersResult.status === "fulfilled" ? (teamMembersResult.value.count || 0) : 0;
 
       // Calculate contacted count (CONTACTED + ENGAGED) and qualifying count (QUALIFYING)
