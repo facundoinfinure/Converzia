@@ -134,7 +134,7 @@ async function handlePdfFromStorage(
   sourceId: string,
   storagePath: string,
   title?: string
-): Promise<{ success: true; chunkCount: number } | { success: false; error: string }> {
+): Promise<{ success: boolean; chunkCount?: number; error?: string }> {
   try {
     const supabase = createAdminClient();
 

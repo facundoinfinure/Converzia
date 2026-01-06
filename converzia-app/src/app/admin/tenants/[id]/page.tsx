@@ -93,7 +93,7 @@ interface TenantMember {
 
 interface ActivityEvent {
   id: string;
-  type: "tenant_created" | "tenant_activated" | "offer_created" | "member_joined" | "lead_received";
+  type: "tenant_created" | "tenant_activated" | "tenant_approved" | "offer_created" | "member_joined" | "lead_received";
   description: string;
   timestamp: string;
   icon: React.ReactNode;
@@ -683,7 +683,7 @@ export default function TenantDetailPage({ params }: Props) {
                   label: "Ver como tenant",
                   onClick: handleViewAsTenant,
                 },
-              ].filter(Boolean)}
+              ].filter((item): item is NonNullable<typeof item> => item !== null)}
             />
           </div>
         }

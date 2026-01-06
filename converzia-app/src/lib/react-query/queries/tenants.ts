@@ -128,9 +128,11 @@ async function fetchTenant(id: string) {
     ),
   ]);
 
+  const balanceInfo = balanceData.data as { current_balance: number } | null;
+  
   return {
     ...tenant,
-    credit_balance: balanceData.data?.current_balance || 0,
+    credit_balance: balanceInfo?.current_balance || 0,
     _count: {
       leads: leadsCount.count || 0,
       offers: offersCount.count || 0,

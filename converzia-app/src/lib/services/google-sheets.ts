@@ -138,7 +138,7 @@ export async function appendToGoogleSheets(
       };
     }
 
-    const sheets = google.sheets({ version: "v4", auth });
+    const sheets = google.sheets({ version: "v4" as const, auth: auth as any });
 
     // Build row data
     const rowData = buildSheetRow(delivery, config.column_mapping);
@@ -321,14 +321,15 @@ async function logSheetsSync(
       "get Google Sheets integration"
     );
 
-    if (!integration) return;
+    const integrationTyped = integration as { id: string } | null;
+    if (!integrationTyped) return;
 
     const startedAt = new Date();
     const completedAt = new Date();
 
     await queryWithTimeout(
       supabase.from("integration_sync_logs").insert({
-        integration_id: integration.id,
+        integration_id: integrationTyped.id,
         delivery_id: delivery.id,
         sync_type: "LEAD_DELIVERY",
         status: errorMessage ? "FAILED" : "SUCCESS",
@@ -374,7 +375,7 @@ export async function testGoogleSheetsConnection(
       };
     }
 
-    const sheets = google.sheets({ version: "v4", auth });
+    const sheets = google.sheets({ version: "v4" as const, auth: auth as any });
 
     // Try to get spreadsheet metadata
     const response = await sheets.spreadsheets.get({
@@ -442,7 +443,7 @@ export async function createSheetHeaders(
       };
     }
 
-    const sheets = google.sheets({ version: "v4", auth });
+    const sheets = google.sheets({ version: "v4" as const, auth: auth as any });
 
     const headers = [
       "Fecha/Hora",

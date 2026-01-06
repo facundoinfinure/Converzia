@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
         p_date_start: dateStartStr,
         p_date_end: dateEndStr,
         p_tenant_id: tenantId || null,
-      });
+      } as any) as { data: any[] | null; error: any };
 
     if (summaryError) {
       console.error("Error fetching revenue summary:", summaryError);
@@ -190,12 +190,13 @@ export async function GET(request: NextRequest) {
     summary.pending_credits = Array.from(latestBalances.values()).reduce((sum, bal) => sum + bal, 0);
 
     // Fetch cost_per_lead for each tenant
-    const { data: pricingData } = await admin
+    const { data: pricingDataRaw } = await admin
       .from("tenant_pricing")
       .select("tenant_id, cost_per_lead");
 
-    const pricingMap = new Map(
-      (pricingData || []).map((p: any) => [p.tenant_id, Number(p.cost_per_lead) || 0])
+    const pricingDataArray = Array.isArray(pricingDataRaw) ? pricingDataRaw : [];
+    const pricingMap = new Map<string, number>(
+      pricingDataArray.map((p: any) => [p.tenant_id, Number(p.cost_per_lead) || 0])
     );
 
     byTenant.forEach(t => {
@@ -203,7 +204,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Fetch revenue by offer
-    const { data: offerData } = await admin
+    const { data: offerDataRaw } = await admin
       .from("lead_offers")
       .select(`
         offer_id,
@@ -216,14 +217,16 @@ export async function GET(request: NextRequest) {
       .gte("status_changed_at", dateStartStr)
       .lte("status_changed_at", dateEndStr + "T23:59:59");
 
+    const offerDataArray = Array.isArray(offerDataRaw) ? offerDataRaw : [];
+
     // Aggregate by offer
     const offerMap = new Map<string, OfferRevenue>();
-    (offerData || []).forEach((row: any) => {
+    offerDataArray.forEach((row: any) => {
       if (!row.offer_id) return;
       
       const existing = offerMap.get(row.offer_id);
-      const cpl = pricingMap.get(row.tenant_id) || 0;
-      const attrCost = Number(row.lead_sources?.attributed_cost) || 0;
+      const cpl: number = pricingMap.get(row.tenant_id) || 0;
+      const attrCost: number = Number(row.lead_sources?.attributed_cost) || 0;
       
       if (existing) {
         existing.leads_ready_count += 1;

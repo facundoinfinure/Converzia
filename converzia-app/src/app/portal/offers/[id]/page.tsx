@@ -99,7 +99,7 @@ export default function PortalOfferDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isPausing, setIsPausing] = useState(false);
 
-  const canManageOffers = hasPermission?.('manage_offers') ?? false;
+  const canManageOffers = hasPermission?.('offers:manage') ?? false;
 
   useEffect(() => {
     loadOfferData();
@@ -130,7 +130,7 @@ export default function PortalOfferDetailPage() {
         return;
       }
 
-      setOffer(offerData);
+      setOffer(offerData as Offer);
 
       // Load funnel stats
       const { data: funnelData } = await queryWithTimeout(
@@ -143,7 +143,7 @@ export default function PortalOfferDetailPage() {
         "load funnel"
       );
 
-      setFunnel(funnelData);
+      setFunnel(funnelData as FunnelStats | null);
 
       // Load delivered leads (with full contact info)
       const { data: leadsData } = await queryWithTimeout(
@@ -159,7 +159,7 @@ export default function PortalOfferDetailPage() {
         "load delivered leads"
       );
 
-      setDeliveredLeads(leadsData || []);
+      setDeliveredLeads((Array.isArray(leadsData) ? leadsData : []) as Lead[]);
     } catch (error) {
       console.error("Error loading offer:", error);
       toast.error("Error al cargar el proyecto");

@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 // Mobile: MobileCard list
 // ============================================
 
-interface ResponsiveListProps<T> {
+interface ResponsiveListProps<T extends object> {
   data: T[];
   keyExtractor: (item: T) => string;
   
@@ -39,7 +39,7 @@ interface ResponsiveListProps<T> {
   className?: string;
 }
 
-export function ResponsiveList<T>({
+export function ResponsiveList<T extends object>({
   data,
   keyExtractor,
   columns,
@@ -109,14 +109,9 @@ export function ResponsiveList<T>({
       data={data}
       columns={columns}
       keyExtractor={keyExtractor}
-      sortable={sortable}
-      sortState={sortState}
-      onSort={onSort}
-      selectable={selectable}
-      selectedRows={selectedRows}
-      onSelectionChange={onSelectionChange}
+      sortState={sortState ?? undefined}
+      onSortChange={onSort ? (state) => onSort(state) : undefined}
       stickyHeader={stickyHeader}
-      compact={compact}
       emptyState={emptyState}
       onRowClick={onItemClick}
       className={className}

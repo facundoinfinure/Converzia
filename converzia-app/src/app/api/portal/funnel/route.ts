@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     }
     
     // Get user's active tenant membership
-    const { data: membership } = await queryWithTimeout(
+    const { data: membershipData } = await queryWithTimeout(
       supabase
         .from("tenant_members")
         .select("tenant_id, role")
@@ -32,6 +32,8 @@ export async function GET(request: NextRequest) {
       5000,
       "get tenant membership"
     );
+    
+    const membership = membershipData as { tenant_id: string; role: string } | null;
     
     if (!membership) {
       return NextResponse.json({ error: "No tiene acceso a ningún tenant" }, { status: 403 });

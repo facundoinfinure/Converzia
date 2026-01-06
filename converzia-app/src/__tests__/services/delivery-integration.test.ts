@@ -9,11 +9,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 const mockRpcResults = new Map<string, any>();
 const mockTableData = new Map<string, any[]>();
 
-const createMockQuery = () => {
+const createMockQuery = (): any => {
   let tableName = "";
   let filters: Record<string, any> = {};
   
-  const query = {
+  const query: any = {
     from: (table: string) => {
       tableName = table;
       return query;

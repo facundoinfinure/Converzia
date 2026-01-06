@@ -31,8 +31,9 @@ async function getDaysToSync(
     .gte("sync_date", dateStart)
     .lte("sync_date", dateEnd);
 
-  const syncMap = new Map(
-    (syncStatus || []).map((s: any) => [s.sync_date, s])
+  const syncStatusArray = Array.isArray(syncStatus) ? syncStatus : [];
+  const syncMap = new Map<string, { sync_date: string; is_complete: boolean; synced_at: string }>(
+    syncStatusArray.map((s: any) => [s.sync_date, s])
   );
 
   // Generate all dates in range
@@ -234,9 +235,9 @@ export async function POST(request: NextRequest) {
       if (!currentRange) {
         currentRange = { start: day.date, end: day.date };
       } else {
-        const prevDate = new Date(currentRange.end);
+        const prevDate: Date = new Date(currentRange.end);
         prevDate.setDate(prevDate.getDate() + 1);
-        const expectedNext = prevDate.toISOString().split("T")[0];
+        const expectedNext: string = prevDate.toISOString().split("T")[0];
         
         if (day.date === expectedNext) {
           currentRange.end = day.date;
@@ -374,7 +375,7 @@ export async function POST(request: NextRequest) {
         p_tenant_id: tenant_id,
         p_date_start: startDate,
         p_date_end: endDate,
-      });
+      } as any);
     } catch {
       // Function may not exist yet, ignore
     }

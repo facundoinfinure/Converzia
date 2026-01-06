@@ -98,8 +98,14 @@ export default function EditTenantPage({ params }: Props) {
   // Load pricing data into form
   useEffect(() => {
     if (pricing) {
+      // Only allow PER_LEAD or PER_SALE, convert any other value to PER_LEAD
+      const validChargeModel: "PER_LEAD" | "PER_SALE" = 
+        (pricing.charge_model === "PER_LEAD" || pricing.charge_model === "PER_SALE")
+          ? pricing.charge_model 
+          : "PER_LEAD";
+      
       setPricingForm({
-        charge_model: (pricing.charge_model === "SUBSCRIPTION" ? "PER_LEAD" : pricing.charge_model) || "PER_LEAD",
+        charge_model: validChargeModel,
         cost_per_lead: pricing.cost_per_lead || 10,
         success_fee_percentage: (pricing as any).success_fee_percentage || 0,
         success_fee_flat: (pricing as any).success_fee_flat || 0,
@@ -357,7 +363,7 @@ export default function EditTenantPage({ params }: Props) {
                 onChange={(e) =>
                   setPricingForm((prev) => ({
                     ...prev,
-                    charge_model: e.target.value as "PER_LEAD" | "PER_SALE" | "SUBSCRIPTION",
+                    charge_model: e.target.value as "PER_LEAD" | "PER_SALE",
                   }))
                 }
               />

@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     }
     
     // Get user's active tenant membership
-    const { data: membership } = await queryWithTimeout(
+    const { data: membershipData } = await queryWithTimeout(
       supabase
         .from("tenant_members")
         .select("tenant_id, role")
@@ -34,6 +34,8 @@ export async function GET(request: NextRequest) {
       5000,
       "get tenant membership"
     );
+    
+    const membership = membershipData as { tenant_id: string; role: string } | null;
     
     if (!membership) {
       return NextResponse.json({ error: "No tiene acceso a ningún tenant" }, { status: 403 });
@@ -82,7 +84,7 @@ export async function GET(request: NextRequest) {
     }
     
     // Get current balance
-    const { data: balance } = await queryWithTimeout(
+    const { data: balanceData } = await queryWithTimeout(
       supabase
         .from("tenant_credit_balance")
         .select("current_balance")
@@ -92,8 +94,10 @@ export async function GET(request: NextRequest) {
       "get balance"
     );
     
+    const balance = balanceData as { current_balance: number } | null;
+    
     // Get summary stats
-    const { data: summary } = await queryWithTimeout(
+    const { data: summaryData } = await queryWithTimeout(
       supabase
         .from("credit_ledger")
         .select("transaction_type, amount")
@@ -102,17 +106,19 @@ export async function GET(request: NextRequest) {
       "get summary"
     );
     
-    const totalPurchased = (summary || [])
-      .filter((s: any) => s.transaction_type === 'CREDIT_PURCHASE')
-      .reduce((sum: number, s: any) => sum + Math.abs(s.amount), 0);
+    const summary = Array.isArray(summaryData) ? summaryData as Array<{ transaction_type: string; amount: number }> : [];
     
-    const totalConsumed = (summary || [])
-      .filter((s: any) => s.transaction_type === 'CREDIT_CONSUMPTION')
-      .reduce((sum: number, s: any) => sum + Math.abs(s.amount), 0);
+    const totalPurchased = summary
+      .filter((s) => s.transaction_type === 'CREDIT_PURCHASE')
+      .reduce((sum, s) => sum + Math.abs(s.amount), 0);
     
-    const totalRefunded = (summary || [])
-      .filter((s: any) => s.transaction_type === 'CREDIT_REFUND')
-      .reduce((sum: number, s: any) => sum + Math.abs(s.amount), 0);
+    const totalConsumed = summary
+      .filter((s) => s.transaction_type === 'CREDIT_CONSUMPTION')
+      .reduce((sum, s) => sum + Math.abs(s.amount), 0);
+    
+    const totalRefunded = summary
+      .filter((s) => s.transaction_type === 'CREDIT_REFUND')
+      .reduce((sum, s) => sum + Math.abs(s.amount), 0);
     
     return NextResponse.json({
       success: true,

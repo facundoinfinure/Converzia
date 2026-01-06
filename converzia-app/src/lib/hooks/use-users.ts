@@ -114,7 +114,7 @@ export function useUsers(options: UseUsersOptions = {}): UseUsersResult {
         } else {
           // Show users that have at least one membership in a tenant with this vertical
           filteredUsers = usersWithMemberships.filter((u) =>
-            u.memberships.some((m) => m.tenant?.vertical === vertical)
+            u.memberships.some((m: any) => m.tenant?.vertical === vertical)
           );
         }
       }

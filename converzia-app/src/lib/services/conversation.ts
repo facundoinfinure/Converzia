@@ -340,6 +340,8 @@ export async function processIncomingMessage(
 
   // Check if we have enough information to score
   const fieldCheck = checkMinimumFieldsForScoring(mergedFields);
+  
+  const historyArray = Array.isArray(history) ? history : [];
 
   if (fieldCheck.ready) {
     // Calculate score using real scoring engine
@@ -347,7 +349,7 @@ export async function processIncomingMessage(
       mergedFields,
       offer,
       (leadOffer as any).tenant_id,
-      { messageCount: (history?.length || 0) + 1, responseTime: 30 }
+      { messageCount: historyArray.length + 1, responseTime: 30 }
     );
 
     await queryWithTimeout(
@@ -574,18 +576,19 @@ async function triggerDelivery(leadOfferId: string, scoreSummary?: string): Prom
   );
 
   // Generate conversation summary
+  const messagesArray = Array.isArray(messages) ? messages : [];
   let conversationSummary = null;
-  if (messages && messages.length > 0) {
+  if (messagesArray.length > 0) {
     try {
       conversationSummary = await generateConversationSummary(
-        messages.map((m: any) => ({
+        messagesArray.map((m: any) => ({
           role: m.sender === "LEAD" ? "user" as const : "assistant" as const,
           content: m.content,
         }))
       );
     } catch (error) {
       console.error("Error generating conversation summary:", error);
-      conversationSummary = `Conversación con ${messages.length} mensajes.`;
+      conversationSummary = `Conversación con ${messagesArray.length} mensajes.`;
     }
   }
 

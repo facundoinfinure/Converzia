@@ -29,7 +29,7 @@ export async function processDelivery(deliveryId: string): Promise<DeliveryResul
   logger.delivery("processing", deliveryId);
 
   // Get delivery with related data
-  const { data: delivery, error } = await queryWithTimeout(
+  const { data: deliveryData, error } = await queryWithTimeout(
     supabase
       .from("deliveries")
       .select(`
@@ -43,6 +43,21 @@ export async function processDelivery(deliveryId: string): Promise<DeliveryResul
     10000,
     `fetch delivery ${deliveryId}`
   );
+
+  const delivery = deliveryData as {
+    id: string;
+    status: string;
+    tenant_id: string;
+    lead_offer_id: string;
+    integrations_succeeded: string[] | null;
+    integrations_failed: string[] | null;
+    credit_ledger_id: string | null;
+    error_message: string | null;
+    retry_count: number;
+    lead: any;
+    tenant: any;
+    offer: any;
+  } | null;
 
   if (error || !delivery) {
     logger.error("Delivery not found", { deliveryId, error: error?.message });
@@ -152,21 +167,22 @@ export async function processDelivery(deliveryId: string): Promise<DeliveryResul
   const errors: string[] = [];
 
   // Deliver to each integration
-  for (const integration of integrations || []) {
+  const integrationsArray = Array.isArray(integrations) ? integrations : [];
+  for (const integration of integrationsArray) {
     integrationsAttempted.push(integration.integration_type);
 
     try {
       switch (integration.integration_type) {
         case "GOOGLE_SHEETS":
-          await deliverToGoogleSheets(delivery as Delivery, integration);
+          await deliverToGoogleSheets(delivery as unknown as Delivery, integration);
           integrationsSucceeded.push("GOOGLE_SHEETS");
           break;
         case "TOKKO":
-          await deliverToTokko(delivery as Delivery, integration);
+          await deliverToTokko(delivery as unknown as Delivery, integration);
           integrationsSucceeded.push("TOKKO");
           break;
         case "WEBHOOK":
-          await deliverToWebhook(delivery as Delivery, integration);
+          await deliverToWebhook(delivery as unknown as Delivery, integration);
           integrationsSucceeded.push("WEBHOOK");
           break;
       }
@@ -230,14 +246,14 @@ export async function processDelivery(deliveryId: string): Promise<DeliveryResul
           p_integrations_succeeded: integrationsSucceeded,
           p_integrations_failed: integrationsFailed,
           p_final_status: finalStatus,
-        }
+        } as any
       );
 
       if (atomicError) {
         throw new Error(atomicError.message);
       }
 
-      const result = Array.isArray(atomicResult) ? atomicResult[0] : atomicResult;
+      const result = (Array.isArray(atomicResult) ? atomicResult[0] : atomicResult) as { success: boolean; message?: string; credit_consumed?: boolean; new_balance?: number } | null;
 
       if (!result?.success) {
         throw new Error(result?.message || "Atomic delivery completion failed");
@@ -300,8 +316,7 @@ export async function processDelivery(deliveryId: string): Promise<DeliveryResul
   // Log metrics
   Metrics.deliveryAttempted(
     finalStatus === "DELIVERED" ? "success" :
-    finalStatus === "PARTIAL" ? "partial" :
-    finalStatus === "DEAD_LETTER" ? "dead_letter" : "failed"
+    finalStatus === "PARTIAL" ? "partial" : "failed"
   );
   Metrics.deliveryLatency(timer());
 
@@ -334,14 +349,10 @@ async function moveToDeadLetter(
 ): Promise<void> {
   const supabase = createAdminClient();
 
-  await queryWithTimeout(
-    supabase.rpc("move_to_dead_letter", {
-      p_delivery_id: deliveryId,
-      p_reason: reason,
-    }),
-    10000,
-    "move to dead letter"
-  );
+  await supabase.rpc("move_to_dead_letter", {
+    p_delivery_id: deliveryId,
+    p_reason: reason,
+  } as any);
 
   // Alert on dead letter
   Alerts.deliveryDeadLetter(deliveryId, reason, tenantId);
@@ -356,7 +367,7 @@ async function moveToDeadLetter(
 async function checkBillingEligibility(tenantId: string): Promise<boolean> {
   const supabase = createAdminClient();
 
-  const { data: balance } = await queryWithTimeout(
+  const { data: balanceData } = await queryWithTimeout(
     supabase
       .from("tenant_credit_balance")
       .select("current_balance")
@@ -366,6 +377,8 @@ async function checkBillingEligibility(tenantId: string): Promise<boolean> {
     "check billing eligibility",
     false // Don't retry balance checks
   );
+  
+  const balance = balanceData as { current_balance: number } | null;
 
   return (balance?.current_balance || 0) >= 1;
 }
@@ -399,19 +412,12 @@ async function consumeCredit(
   }
 
   // Atomic credit consumption (locks per-tenant)
-  const rpcTimeoutPromise = new Promise((_, reject) => {
-    setTimeout(() => reject(new Error("Timeout: RPC operation took more than 10 seconds")), 10000);
-  });
-
-  const { data, error } = await Promise.race([
-    supabase.rpc("consume_credit", {
-      p_tenant_id: tenantId,
-      p_delivery_id: deliveryId,
-      p_lead_offer_id: leadOfferId,
-      p_description: "Lead delivery",
-    }),
-    rpcTimeoutPromise,
-  ]) as { data: unknown; error: { message: string } | null };
+  const { data, error } = await supabase.rpc("consume_credit", {
+    p_tenant_id: tenantId,
+    p_delivery_id: deliveryId,
+    p_lead_offer_id: leadOfferId,
+    p_description: "Lead delivery",
+  } as any);
 
   if (error) {
     throw new Error(error.message);
@@ -424,7 +430,7 @@ async function consumeCredit(
   }
 
   // Backfill delivery.credit_ledger_id for traceability
-  const { data: ledger } = await queryWithTimeout(
+  const { data: ledgerData } = await queryWithTimeout(
     supabase
       .from("credit_ledger")
       .select("id")
@@ -437,6 +443,8 @@ async function consumeCredit(
     10000,
     "get credit ledger entry"
   );
+  
+  const ledger = ledgerData as { id: string } | null;
 
   if (ledger?.id) {
     await queryWithTimeout(
@@ -642,25 +650,20 @@ export async function refundCredit(
     `fetch delivery ${deliveryId} for refund`
   );
 
-  if (!delivery || delivery.status === "REFUNDED") {
+  const typedDelivery = delivery as { status: string; tenant_id: string; lead_offer_id: string } | null;
+  
+  if (!typedDelivery || typedDelivery.status === "REFUNDED") {
     throw new Error("Cannot refund this delivery");
   }
 
   // Atomic refund via DB function
-  const rpcTimeoutPromise = new Promise((_, reject) => {
-    setTimeout(() => reject(new Error("Timeout: RPC operation took more than 10 seconds")), 10000);
-  });
-
-  const { error: refundError } = await Promise.race([
-    supabase.rpc("refund_credit", {
-      p_tenant_id: delivery.tenant_id,
-      p_delivery_id: deliveryId,
-      p_lead_offer_id: delivery.lead_offer_id,
-      p_reason: reason,
-      p_created_by: null,
-    }),
-    rpcTimeoutPromise,
-  ]) as { error: { message: string } | null };
+  const { error: refundError } = await supabase.rpc("refund_credit", {
+    p_tenant_id: typedDelivery.tenant_id,
+    p_delivery_id: deliveryId,
+    p_lead_offer_id: typedDelivery.lead_offer_id,
+    p_reason: reason,
+    p_created_by: null,
+  } as any);
 
   if (refundError) {
     throw new Error(refundError.message);
@@ -674,13 +677,13 @@ export async function refundCredit(
         billing_eligibility: "PENDING",
         billing_notes: `Refunded: ${reason}`,
       })
-      .eq("id", delivery.lead_offer_id),
+      .eq("id", typedDelivery.lead_offer_id),
     10000,
     "update lead offer after refund"
   );
 
-  Metrics.creditRefunded(delivery.tenant_id);
-  logger.billing("credit_refunded", delivery.tenant_id, { deliveryId, reason });
+  Metrics.creditRefunded(typedDelivery.tenant_id);
+  logger.billing("credit_refunded", typedDelivery.tenant_id, { deliveryId, reason });
 }
 
 // ============================================

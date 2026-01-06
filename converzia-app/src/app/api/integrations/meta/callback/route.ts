@@ -149,8 +149,8 @@ export async function GET(request: NextRequest) {
     
     try {
       while (pagesUrl) {
-        const pagesResponse = await fetch(pagesUrl);
-        const pagesData = await pagesResponse.json();
+        const pagesResponse: Response = await fetch(pagesUrl);
+        const pagesData: any = await pagesResponse.json();
         
         if (pagesData.data) {
           allPages = [...allPages, ...pagesData.data];

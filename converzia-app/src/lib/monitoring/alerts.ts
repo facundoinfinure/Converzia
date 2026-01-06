@@ -173,17 +173,17 @@ async function sendToEmail(alert: Alert): Promise<void> {
     // Determine which email template to use based on alert type
     if (alert.config.name.includes('webhook') || alert.config.name.includes('Webhook')) {
       await sendWebhookFailureAlert(
-        alert.context?.webhookType || 'unknown',
-        alert.context?.failureCount || 1,
+        String(alert.context?.webhookType ?? 'unknown'),
+        Number(alert.context?.failureCount ?? 1),
         alert.message
       );
     } else if (alert.config.name.includes('credits') || alert.config.name.includes('Credits')) {
       // This would need tenant info from context
       if (alert.context?.tenantEmail && alert.context?.tenantName) {
         await sendLowCreditsAlert(
-          alert.context.tenantEmail,
-          alert.context.tenantName,
-          alert.context.currentBalance || 0
+          String(alert.context.tenantEmail),
+          String(alert.context.tenantName),
+          Number(alert.context.currentBalance ?? 0)
         );
       }
     } else {
@@ -191,7 +191,7 @@ async function sendToEmail(alert: Alert): Promise<void> {
       await sendCriticalErrorAlert(
         alert.config.name,
         alert.message,
-        alert.context?.tenantId
+        alert.context?.tenantId ? String(alert.context.tenantId) : undefined
       );
     }
 
@@ -200,9 +200,7 @@ async function sendToEmail(alert: Alert): Promise<void> {
       severity: alert.config.severity,
     });
   } catch (error) {
-    logger.error("Failed to send email alert", error, {
-      alertName: alert.config.name,
-    });
+    logger.error("Failed to send email alert", { error, alertName: alert.config.name });
   }
 }
 

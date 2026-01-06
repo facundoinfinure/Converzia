@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 
 export interface ActionDrawerItem {
   label: string;
-  icon?: LucideIcon;
+  icon?: LucideIcon | ReactNode;
   onPress: () => void;
   variant?: "default" | "destructive";
   disabled?: boolean;
@@ -59,7 +59,10 @@ export function ActionDrawer({
   };
 
   const renderItem = (item: ActionDrawerItem, index: number) => {
-    const Icon = item.icon;
+    const icon = item.icon;
+    // Check if icon is a LucideIcon (function) or ReactNode
+    const isLucideIcon = typeof icon === 'function';
+    const IconComponent = isLucideIcon ? icon as LucideIcon : null;
     
     return (
       <button
@@ -76,11 +79,20 @@ export function ActionDrawer({
           item.disabled && "opacity-50 cursor-not-allowed"
         )}
       >
-        {Icon && (
-          <Icon className={cn(
-            "h-5 w-5 flex-shrink-0",
-            item.variant === "destructive" ? "text-destructive" : "text-muted-foreground"
-          )} />
+        {icon && (
+          isLucideIcon && IconComponent ? (
+            <IconComponent className={cn(
+              "h-5 w-5 flex-shrink-0",
+              item.variant === "destructive" ? "text-destructive" : "text-muted-foreground"
+            )} />
+          ) : (
+            <span className={cn(
+              "h-5 w-5 flex-shrink-0 flex items-center justify-center",
+              item.variant === "destructive" ? "text-destructive" : "text-muted-foreground"
+            )}>
+              {icon as ReactNode}
+            </span>
+          )
         )}
         <div className="flex-1 min-w-0">
           <span className="font-medium">{item.label}</span>

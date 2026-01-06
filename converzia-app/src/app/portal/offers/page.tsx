@@ -46,7 +46,7 @@ export default function PortalOffersPage() {
   const { offers, isLoading } = usePortalOffers();
   const { hasPermission } = useAuth();
   
-  const canManageOffers = hasPermission?.('manage_offers') ?? false;
+  const canManageOffers = hasPermission?.('offers:manage') ?? false;
 
   if (isLoading) {
     return (

@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if user profile exists
-    const { data: profile } = await queryWithTimeout(
+    const { data: profileData } = await queryWithTimeout(
       supabase
         .from("user_profiles")
         .select("id, is_converzia_admin")
@@ -56,6 +56,8 @@ export async function GET(request: NextRequest) {
       10000,
       "get user profile in callback"
     );
+    
+    const profile = profileData as { id: string; is_converzia_admin: boolean } | null;
 
     // If profile doesn't exist, create it
     if (!profile) {

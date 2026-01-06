@@ -126,7 +126,7 @@ export default function RegisterPage() {
         p_website: formData.website.trim() || null,
         p_description: formData.description.trim() || null,
         p_vertical: formData.vertical,
-      });
+      } as any);
 
       const { error: registerError } = await rpcPromise;
 

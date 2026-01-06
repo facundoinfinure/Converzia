@@ -185,7 +185,7 @@ export default function PortalLeadsPage() {
       setStats(statsData);
       
       // Load offer options for filter
-      const { data: offersData } = await queryWithTimeout(
+      const { data: offersDataRaw } = await queryWithTimeout(
         supabase
           .from("offers")
           .select("id, name")
@@ -196,10 +196,12 @@ export default function PortalLeadsPage() {
         "offers list"
       );
       
-      if (offersData) {
+      const offersData = Array.isArray(offersDataRaw) ? offersDataRaw as Array<{ id: string; name: string }> : [];
+      
+      if (offersData.length > 0) {
         setOfferOptions([
           { value: "", label: "Todos los proyectos" },
-          ...offersData.map((o: any) => ({ value: o.id, label: o.name }))
+          ...offersData.map((o) => ({ value: o.id, label: o.name }))
         ]);
       }
       
@@ -241,15 +243,17 @@ export default function PortalLeadsPage() {
         query = query.eq("offer_id", offerFilter);
       }
       
-      const { data, error } = await queryWithTimeout(query, 15000, "leads list");
+      const { data: leadsDataRaw, error } = await queryWithTimeout(query, 15000, "leads list");
       
       if (error) {
         console.error("Error fetching leads:", error);
         return;
       }
       
-      if (data) {
-        const processedLeads: TenantLeadView[] = data.map((d: any) => {
+      const leadsData = Array.isArray(leadsDataRaw) ? leadsDataRaw : [];
+      
+      if (leadsData.length > 0) {
+        const processedLeads: TenantLeadView[] = leadsData.map((d: any) => {
           const lead = Array.isArray(d.lead) ? d.lead[0] : d.lead;
           const offer = Array.isArray(d.offer) ? d.offer[0] : d.offer;
           const isDropped = selectedCategory === "dropped";

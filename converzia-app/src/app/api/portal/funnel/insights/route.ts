@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     }
     
     // Get user's active tenant membership
-    const { data: membership } = await queryWithTimeout(
+    const { data: membershipData } = await queryWithTimeout(
       supabase
         .from("tenant_members")
         .select("tenant_id, role")
@@ -30,6 +30,8 @@ export async function GET(request: NextRequest) {
       5000,
       "get tenant membership"
     );
+    
+    const membership = membershipData as { tenant_id: string; role: string } | null;
     
     if (!membership) {
       return NextResponse.json({ error: "No tiene acceso a ningún tenant" }, { status: 403 });
@@ -53,7 +55,7 @@ export async function GET(request: NextRequest) {
       query = query.eq("offer_id", offerId);
     }
     
-    const { data: disqualifications, error } = await queryWithTimeout(
+    const { data: disqualificationsData, error } = await queryWithTimeout(
       query,
       10000,
       "get disqualification insights"
@@ -63,6 +65,10 @@ export async function GET(request: NextRequest) {
       console.error("Error fetching insights:", error);
       return NextResponse.json({ error: "Error al obtener insights" }, { status: 500 });
     }
+    
+    const disqualifications = Array.isArray(disqualificationsData) 
+      ? disqualificationsData as Array<{ disqualification_category: string; disqualification_reason: string | null }>
+      : [];
     
     // Aggregate by category
     const categoryLabels: Record<string, string> = {
@@ -79,7 +85,7 @@ export async function GET(request: NextRequest) {
     
     const categoryCounts: Record<string, { count: number; label: string; reasons: string[] }> = {};
     
-    for (const dq of disqualifications || []) {
+    for (const dq of disqualifications) {
       const cat = dq.disqualification_category;
       if (!categoryCounts[cat]) {
         categoryCounts[cat] = {
@@ -100,7 +106,7 @@ export async function GET(request: NextRequest) {
         category,
         label: data.label,
         count: data.count,
-        percentage: disqualifications?.length 
+        percentage: disqualifications.length 
           ? Math.round((data.count / disqualifications.length) * 100) 
           : 0,
         sampleReasons: data.reasons.slice(0, 3), // Top 3 specific reasons
@@ -110,7 +116,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        totalDisqualified: disqualifications?.length || 0,
+        totalDisqualified: disqualifications.length,
         insights,
       }
     });

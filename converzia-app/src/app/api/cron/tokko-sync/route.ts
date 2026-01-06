@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
 
   try {
     // Get all active Tokko integrations
-    const { data: integrations, error: fetchError } = await queryWithTimeout(
+    const { data: integrationsRaw, error: fetchError } = await queryWithTimeout(
       supabase
         .from("tenant_integrations")
         .select("id, tenant_id, config")
@@ -39,6 +39,8 @@ export async function GET(request: NextRequest) {
       30000,
       "fetch active Tokko integrations"
     );
+    
+    const integrations = Array.isArray(integrationsRaw) ? integrationsRaw : [];
 
     if (fetchError) {
       logger.error("Error fetching Tokko integrations", { error: fetchError });
@@ -48,7 +50,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (!integrations || integrations.length === 0) {
+    if (integrations.length === 0) {
       logger.info("No active Tokko integrations found");
       return NextResponse.json({
         message: "No active Tokko integrations to sync",

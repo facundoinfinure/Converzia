@@ -254,7 +254,11 @@ Debés obtener estos campos para considerar un lead calificado:
         {/* Right: Editor and Preview */}
         <div className="lg:col-span-3">
           <Card>
-            <Tabs value={activeTab} onChange={setActiveTab}>
+            <Tabs 
+              defaultValue="edit" 
+              value={activeTab} 
+              onChange={(value) => setActiveTab(value as "edit" | "preview" | "test")}
+            >
               <TabsList>
                 <TabTrigger value="edit">Editar</TabTrigger>
                 <TabTrigger value="preview">Preview</TabTrigger>

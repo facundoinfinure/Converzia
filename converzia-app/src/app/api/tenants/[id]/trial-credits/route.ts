@@ -67,7 +67,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     // Get current balance
     const { data: currentBalance } = await supabase.rpc("get_tenant_credits", {
       p_tenant_id: tenantId,
-    });
+    } as any);
 
     const newBalance = (currentBalance || 0) + amount;
 

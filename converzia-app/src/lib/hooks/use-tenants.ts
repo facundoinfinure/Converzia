@@ -521,7 +521,7 @@ export function useTenantMutations() {
       // Send approval notification (email + in-app)
       try {
         // Get tenant info and user emails
-        const { data: tenantData } = await queryWithTimeout(
+        const { data: tenantDataRaw } = await queryWithTimeout(
           supabase
             .from("tenants")
             .select("name, contact_email")
@@ -530,8 +530,10 @@ export function useTenantMutations() {
           10000,
           "get tenant for approval notification"
         );
+        
+        const tenantData = tenantDataRaw as { name: string; contact_email: string | null } | null;
 
-        const { data: members } = await queryWithTimeout(
+        const { data: membersRaw } = await queryWithTimeout(
           supabase
             .from("tenant_members")
             .select("user_id, user_profiles(email, full_name)")
@@ -540,12 +542,14 @@ export function useTenantMutations() {
           10000,
           "get members for approval notification"
         );
+        
+        const members = Array.isArray(membersRaw) ? membersRaw : [];
 
         // Send email notifications
         if (tenantData) {
           const emailsToNotify = [
             tenantData.contact_email,
-            ...(members || []).map((m: any) => {
+            ...members.map((m: any) => {
               const profile = Array.isArray(m.user_profiles) ? m.user_profiles[0] : m.user_profiles;
               return profile?.email;
             }).filter(Boolean),
