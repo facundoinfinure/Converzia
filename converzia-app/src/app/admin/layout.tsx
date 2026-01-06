@@ -45,8 +45,8 @@ export default function AdminLayout({
                 <AdminContent>{children}</AdminContent>
               </main>
             </SidebarInset>
-          </AdminSidebarProvider>
-        </PendingApprovalsProvider>
+          </div>
+        </AdminSidebarProvider>
       </PendingApprovalsProvider>
     </AdminProvider>
   );

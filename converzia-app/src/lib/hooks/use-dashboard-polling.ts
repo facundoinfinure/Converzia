@@ -115,12 +115,11 @@ export function useDashboardPolling() {
     }
 
     // Set up interval for polling every 60 seconds
-    intervalsRef.current.stats = setInterval(pollStats, 60000);
+    const statsInterval = setInterval(pollStats, 60000);
+    intervalsRef.current.stats = statsInterval;
 
     return () => {
-      if (intervalsRef.current.stats) {
-        clearInterval(intervalsRef.current.stats);
-      }
+      clearInterval(statsInterval);
     };
   }, [activeTenantId, supabase, updateStats, setLoading, lastUpdated.stats]);
 
@@ -179,23 +178,25 @@ export function useDashboardPolling() {
     }
 
     // Set up interval for polling every 30 seconds
-    intervalsRef.current.billing = setInterval(pollBilling, 30000);
+    const billingInterval = setInterval(pollBilling, 30000);
+    intervalsRef.current.billing = billingInterval;
 
     return () => {
-      if (intervalsRef.current.billing) {
-        clearInterval(intervalsRef.current.billing);
-      }
+      clearInterval(billingInterval);
     };
   }, [activeTenantId, supabase, updateBilling, setLoading, lastUpdated.billing]);
 
   // Cleanup all intervals on unmount
   useEffect(() => {
+    const statsInterval = intervalsRef.current.stats;
+    const billingInterval = intervalsRef.current.billing;
+    
     return () => {
-      if (intervalsRef.current.stats) {
-        clearInterval(intervalsRef.current.stats);
+      if (statsInterval) {
+        clearInterval(statsInterval);
       }
-      if (intervalsRef.current.billing) {
-        clearInterval(intervalsRef.current.billing);
+      if (billingInterval) {
+        clearInterval(billingInterval);
       }
     };
   }, []);
