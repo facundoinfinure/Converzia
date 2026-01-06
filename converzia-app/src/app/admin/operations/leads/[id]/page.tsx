@@ -196,13 +196,13 @@ export default function LeadDetailPage({ params }: Props) {
         return;
       }
       
-      // Type assertion for Supabase response
-      const data = leadOfferData as Record<string, unknown>;
-      const processedData = {
-        ...data,
-        lead: Array.isArray(data.lead) ? data.lead[0] : data.lead,
-        tenant: Array.isArray(data.tenant) ? data.tenant[0] : data.tenant,
-        offer: Array.isArray(data.offer) ? data.offer[0] : data.offer,
+      // Process nested relations (Supabase returns arrays for single relations)
+      const rawData = leadOfferData as any;
+      const processedData: LeadDetail = {
+        ...rawData,
+        lead: Array.isArray(rawData.lead) ? rawData.lead[0] : rawData.lead,
+        tenant: Array.isArray(rawData.tenant) ? rawData.tenant[0] : rawData.tenant,
+        offer: Array.isArray(rawData.offer) ? rawData.offer[0] : rawData.offer,
       };
       
       setLeadOffer(processedData);
