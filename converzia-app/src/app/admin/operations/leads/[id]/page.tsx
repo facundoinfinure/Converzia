@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState, useEffect, useRef } from "react";
+import { use, useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -148,18 +148,7 @@ export default function LeadDetailPage({ params }: Props) {
   
   const supabase = createClient();
   
-  useEffect(() => {
-    loadData();
-  }, [id]);
-  
-  useEffect(() => {
-    // Scroll to bottom of messages when they change
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [messages]);
-  
-  async function loadData() {
+  const loadData = useCallback(async () => {
     setIsLoading(true);
     
     try {
@@ -275,7 +264,18 @@ export default function LeadDetailPage({ params }: Props) {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [id, supabase, toast]);
+  
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+  
+  useEffect(() => {
+    // Scroll to bottom of messages when they change
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages]);
   
   if (isLoading) {
     return (

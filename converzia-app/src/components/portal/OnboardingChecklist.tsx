@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
   CheckCircle2,
@@ -35,11 +35,7 @@ export function OnboardingChecklist({ tenantId }: OnboardingChecklistProps) {
   const [isExpanded, setIsExpanded] = useState(true);
   const [isDismissed, setIsDismissed] = useState(false);
 
-  useEffect(() => {
-    loadOnboardingStatus();
-  }, [tenantId]);
-
-  async function loadOnboardingStatus() {
+  const loadOnboardingStatus = useCallback(async () => {
     setIsLoading(true);
     const supabase = createClient();
 
@@ -86,7 +82,11 @@ export function OnboardingChecklist({ tenantId }: OnboardingChecklistProps) {
     ]);
 
     setIsLoading(false);
-  }
+  }, [tenantId]);
+
+  useEffect(() => {
+    loadOnboardingStatus();
+  }, [loadOnboardingStatus]);
 
   const completedCount = steps.filter((s) => s.isCompleted).length;
   const totalSteps = steps.length;

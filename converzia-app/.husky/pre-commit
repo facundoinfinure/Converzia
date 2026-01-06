@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Run ESLint with zero warnings allowed
+npm run lint -- --max-warnings=0
+
+# Run TypeScript type checking
+npm run typecheck

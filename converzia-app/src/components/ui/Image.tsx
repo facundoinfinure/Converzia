@@ -73,6 +73,7 @@ export function OptimizedImage({
   } catch {
     // Fallback to regular img if Next.js Image fails
     return (
+      // eslint-disable-next-line @next/next/no-img-element
       <img
         src={src}
         alt={alt}

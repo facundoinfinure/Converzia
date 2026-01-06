@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { Package, Users, MapPin, Plus, TrendingUp, Clock, CheckCircle, XCircle, Pause, Play } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -99,10 +100,11 @@ export default function PortalOffersPage() {
                   {/* Image */}
                   <div className="h-36 bg-gradient-to-br from-primary-500/20 to-accent-500/20 flex items-center justify-center relative">
                     {offer.image_url ? (
-                      <img
+                      <Image
                         src={offer.image_url}
                         alt={offer.name}
-                        className="w-full h-full object-cover"
+                        fill
+                        className="object-cover"
                       />
                     ) : (
                       <Package className="h-10 w-10 text-slate-600" />

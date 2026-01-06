@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { Plus, Package, Users, Layers, Megaphone, MapPin, Building2, Clock, AlertTriangle, CheckCircle, XCircle, Edit, Trash2, Pause, Play, Archive, Eye } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { FloatingActionButton } from "@/components/layout/BottomNavigation";
@@ -224,9 +225,11 @@ export default function OffersPage() {
           <div className="flex items-center gap-3">
             <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shrink-0">
               {offer.image_url ? (
-                <img
+                <Image
                   src={offer.image_url}
                   alt={offer.name}
+                  width={48}
+                  height={48}
                   className="h-12 w-12 rounded-lg object-cover"
                 />
               ) : (

@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import {
   Package,
   ArrowLeft,
@@ -150,11 +151,7 @@ export default function PortalOfferDetailPage() {
 
   const canManageOffers = hasPermission?.('offers:manage') ?? false;
 
-  useEffect(() => {
-    loadOfferData();
-  }, [offerId, activeTenantId]);
-
-  async function loadOfferData() {
+  const loadOfferData = useCallback(async () => {
     if (!offerId || !activeTenantId) return;
     
     setIsLoading(true);
@@ -243,7 +240,11 @@ export default function PortalOfferDetailPage() {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [offerId, activeTenantId, toast, router]);
+
+  useEffect(() => {
+    loadOfferData();
+  }, [loadOfferData]);
 
   async function handlePauseResume() {
     if (!offer || !canManageOffers) return;
@@ -707,10 +708,11 @@ export default function PortalOfferDetailPage() {
                 <div className="absolute inset-0 bg-gradient-to-r from-[var(--bg-primary)] via-[var(--bg-primary)]/90 via-[var(--bg-primary)]/70 to-transparent z-10" />
                 {/* Image container - positioned to the right */}
                 <div className="relative w-[55%] h-full z-0">
-                  <img
+                  <Image
                     src={offer.image_url}
                     alt={offer.name}
-                    className="w-full h-full object-cover object-center"
+                    fill
+                    className="object-cover object-center"
                   />
                   {/* Additional gradient from left edge of image */}
                   <div className="absolute inset-0 bg-gradient-to-l from-[var(--bg-primary)]/60 via-transparent to-transparent" />

@@ -171,6 +171,7 @@ export function FullAvatar({
   return (
     <div className={cn("relative inline-flex flex-shrink-0", className)}>
       {src ? (
+        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={src}
           alt={alt || name || "Avatar"}

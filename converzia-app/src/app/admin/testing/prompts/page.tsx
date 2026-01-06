@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { FileText, Eye, Save, RefreshCw } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -93,7 +93,7 @@ Debés obtener estos campos para considerar un lead calificado:
   };
 
   // Generate preview with variables replaced
-  const generatePreview = async () => {
+  const generatePreview = useCallback(async () => {
     if (!tenantId || !promptTemplate) {
       setPreview("Seleccioná un tenant para ver el preview");
       return;
@@ -146,14 +146,14 @@ Debés obtener estos campos para considerar un lead calificado:
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [tenantId, promptTemplate, offerId, supabase]);
 
   // Auto-generate preview when template or tenant changes
   useEffect(() => {
     if (promptTemplate && tenantId) {
       generatePreview();
     }
-  }, [promptTemplate, tenantId, offerId]);
+  }, [promptTemplate, tenantId, offerId, generatePreview]);
 
   const handleSave = async () => {
     if (!promptTemplate.trim()) {

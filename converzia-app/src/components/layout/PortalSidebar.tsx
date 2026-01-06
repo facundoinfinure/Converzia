@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import Image from "next/image";
 import {
   LayoutDashboard,
   Package,
@@ -113,9 +114,11 @@ export function PortalSidebar() {
             <div className="px-4 py-4" style={{ boxSizing: "content-box", borderBottomWidth: "0px", borderBottomColor: "rgba(0, 0, 0, 0)", borderBottomStyle: "none", borderImage: "none" }}>
               <div className="flex items-center gap-3 p-3 rounded-xl bg-[var(--bg-tertiary)]" style={{ backgroundColor: "unset", background: "unset" }}>
                 {logoUrl ? (
-                  <img
+                  <Image
                     src={logoUrl}
                     alt={activeTenant.name}
+                    width={44}
+                    height={44}
                     className="h-11 w-11 rounded-xl object-cover"
                   />
                 ) : (
@@ -215,9 +218,11 @@ export function PortalSidebar() {
             <div className="px-4 py-4 border-b border-[var(--sidebar-border)]">
               <div className="flex items-center gap-3 p-3 rounded-xl bg-[var(--bg-tertiary)]">
                 {logoUrl ? (
-                  <img
+                  <Image
                     src={logoUrl}
                     alt={activeTenant.name}
+                    width={40}
+                    height={40}
                     className="h-10 w-10 rounded-xl object-cover"
                   />
                 ) : (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -16,6 +16,7 @@ import {
   MessageSquare,
   Calendar,
   ExternalLink,
+  Info,
 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -68,11 +69,7 @@ export default function PortalLeadDetailPage() {
   
   const supabase = createClient();
 
-  useEffect(() => {
-    loadLeadDetails();
-  }, [leadOfferId, activeTenantId]);
-
-  async function loadLeadDetails() {
+  const loadLeadDetails = useCallback(async () => {
     if (!leadOfferId || !activeTenantId) return;
     
     setIsLoading(true);
@@ -150,7 +147,11 @@ export default function PortalLeadDetailPage() {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [leadOfferId, activeTenantId, supabase, toast, router]);
+
+  useEffect(() => {
+    loadLeadDetails();
+  }, [loadLeadDetails]);
 
   // Get status info
   const getStatusInfo = (status: string) => {

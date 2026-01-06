@@ -75,7 +75,7 @@ export default function PortalSettingsPage() {
   // Load tenant and pricing data
   useEffect(() => {
     loadData();
-  }, [activeTenantId]);
+  }, [loadData]);
 
   const loadData = useCallback(async () => {
     if (!activeTenantId) return;
@@ -268,9 +268,11 @@ export default function PortalSettingsPage() {
                 <div className="relative">
                   {logoPreview ? (
                     <div className="relative group">
-                      <img
+                      <Image
                         src={logoPreview}
                         alt="Logo"
+                        width={96}
+                        height={96}
                         className="h-24 w-24 rounded-lg object-cover border border-[var(--border-primary)]"
                       />
                       {canEdit && (

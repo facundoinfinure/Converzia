@@ -143,7 +143,7 @@ export function useTenants(options: UseTenantsOptions = {}): UseTenantsResult {
     } finally {
       setIsLoading(false);
     }
-  }, [supabase, search, status, vertical, minCredits, page, pageSize]);
+  }, [supabase, search, status, vertical, page, pageSize]);
 
   useEffect(() => {
     fetchTenants();
