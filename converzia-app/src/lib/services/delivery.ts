@@ -240,14 +240,14 @@ export async function processDelivery(deliveryId: string): Promise<DeliveryResul
       // Use atomic function for delivery completion + credit consumption
       // This ensures both operations succeed or neither does
       const { data: atomicResult, error: atomicError } = await rpcWithTimeout(
-        supabase.rpc(
+        (supabase.rpc as any)(
           "complete_delivery_and_consume_credit",
           {
             p_delivery_id: deliveryId,
             p_integrations_succeeded: integrationsSucceeded,
             p_integrations_failed: integrationsFailed,
             p_final_status: finalStatus,
-          } as any
+          }
         ),
         30000, // 30 second timeout for critical delivery operation
         "complete_delivery_and_consume_credit",
@@ -355,10 +355,10 @@ async function moveToDeadLetter(
   const supabase = createAdminClient();
 
   await rpcWithTimeout(
-    supabase.rpc("move_to_dead_letter", {
+    (supabase.rpc as any)("move_to_dead_letter", {
       p_delivery_id: deliveryId,
       p_reason: reason,
-    } as any),
+    }),
     15000, // 15 second timeout for dead letter operation
     "move_to_dead_letter",
     true // Enable retry
@@ -423,12 +423,12 @@ async function consumeCredit(
 
   // Atomic credit consumption (locks per-tenant)
   const { data, error } = await rpcWithTimeout(
-    supabase.rpc("consume_credit", {
+    (supabase.rpc as any)("consume_credit", {
       p_tenant_id: tenantId,
       p_delivery_id: deliveryId,
       p_lead_offer_id: leadOfferId,
       p_description: "Lead delivery",
-    } as any),
+    }),
     20000, // 20 second timeout for credit consumption
     "consume_credit",
     true // Enable retry
@@ -673,13 +673,13 @@ export async function refundCredit(
 
   // Atomic refund via DB function
   const { error: refundError } = await rpcWithTimeout(
-    supabase.rpc("refund_credit", {
+    (supabase.rpc as any)("refund_credit", {
       p_tenant_id: typedDelivery.tenant_id,
       p_delivery_id: deliveryId,
       p_lead_offer_id: typedDelivery.lead_offer_id,
       p_reason: reason,
       p_created_by: null,
-    } as any),
+    }),
     20000, // 20 second timeout for credit refund
     "refund_credit",
     true // Enable retry
