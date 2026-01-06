@@ -698,44 +698,67 @@ export default function PortalOfferDetailPage() {
       {/* Funnel Stats */}
       {funnel && funnel.total_leads > 0 && (
         <>
-          {/* Funnel Visualization */}
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle>Funnel de leads</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-end justify-between gap-4 h-48">
-                {funnelStages.map((stage, idx) => {
-                  const maxValue = Math.max(...funnelStages.map(s => s.value));
-                  const height = maxValue > 0 ? (stage.value / maxValue) * 100 : 0;
-                  const percentage = funnel.total_leads > 0 
-                    ? Math.round((stage.value / funnel.total_leads) * 100) 
-                    : 0;
-
-                  return (
-                    <div key={stage.label} className="flex-1 flex flex-col items-center">
-                      <span className="text-2xl font-bold text-white mb-1">{stage.value}</span>
-                      <span className="text-xs text-slate-500 mb-2">{percentage}%</span>
-                      <div 
-                        className={`w-full rounded-t-lg ${stage.color} transition-all duration-500`}
-                        style={{ height: `${Math.max(height, 5)}%` }}
-                      />
-                      <span className="text-sm text-slate-400 mt-2 text-center">{stage.label}</span>
-                      {idx < funnelStages.length - 1 && (
-                        <ChevronRight className="absolute h-4 w-4 text-slate-600" style={{ right: '-0.75rem' }} />
-                      )}
-                    </div>
-                  );
-                })}
+          {/* Funnel Visualization with Background Image */}
+          <div className="relative mb-6 rounded-xl overflow-hidden min-h-[450px] bg-[var(--bg-primary)]">
+            {/* Background Image - Right Side */}
+            {offer.image_url && (
+              <div className="absolute inset-0 flex items-center justify-end pointer-events-none">
+                {/* Gradient overlay to ensure cards are readable */}
+                <div className="absolute inset-0 bg-gradient-to-r from-[var(--bg-primary)] via-[var(--bg-primary)]/90 via-[var(--bg-primary)]/70 to-transparent z-10" />
+                {/* Image container - positioned to the right */}
+                <div className="relative w-[55%] h-full z-0">
+                  <img
+                    src={offer.image_url}
+                    alt={offer.name}
+                    className="w-full h-full object-cover object-center"
+                  />
+                  {/* Additional gradient from left edge of image */}
+                  <div className="absolute inset-0 bg-gradient-to-l from-[var(--bg-primary)]/60 via-transparent to-transparent" />
+                </div>
               </div>
+            )}
+            
+            {/* Cards Content - Left Side */}
+            <div className="relative z-20 p-6 max-w-2xl">
+              <Card className="bg-[var(--bg-primary)]/98 backdrop-blur-md border-[var(--border-primary)] shadow-lg">
+                <CardHeader>
+                  <CardTitle>Funnel de leads</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-end justify-between gap-4 h-48">
+                    {funnelStages.map((stage, idx) => {
+                      const maxValue = Math.max(...funnelStages.map(s => s.value));
+                      const height = maxValue > 0 ? (stage.value / maxValue) * 100 : 0;
+                      const percentage = funnel.total_leads > 0 
+                        ? Math.round((stage.value / funnel.total_leads) * 100) 
+                        : 0;
 
-              {/* Conversion rate */}
-              <div className="mt-6 pt-4 border-t border-card-border flex items-center justify-between">
-                <span className="text-slate-400">Tasa de conversión</span>
-                <span className="text-2xl font-bold text-emerald-400">{funnel.conversion_rate}%</span>
-              </div>
-            </CardContent>
-          </Card>
+                      return (
+                        <div key={stage.label} className="flex-1 flex flex-col items-center relative">
+                          <span className="text-2xl font-bold text-[var(--text-primary)] mb-1">{stage.value}</span>
+                          <span className="text-xs text-[var(--text-tertiary)] mb-2">{percentage}%</span>
+                          <div 
+                            className={`w-full rounded-t-lg ${stage.color} transition-all duration-500`}
+                            style={{ height: `${Math.max(height, 5)}%` }}
+                          />
+                          <span className="text-sm text-[var(--text-secondary)] mt-2 text-center">{stage.label}</span>
+                          {idx < funnelStages.length - 1 && (
+                            <ChevronRight className="absolute h-4 w-4 text-[var(--text-tertiary)]" style={{ right: '-0.75rem' }} />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Conversion rate */}
+                  <div className="mt-6 pt-4 border-t border-[var(--border-primary)] flex items-center justify-between">
+                    <span className="text-[var(--text-secondary)]">Tasa de conversión</span>
+                    <span className="text-2xl font-bold text-[var(--accent-primary)]">{funnel.conversion_rate}%</span>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
 
           {/* Disqualification Insights */}
           {totalDisqualified > 0 && (
