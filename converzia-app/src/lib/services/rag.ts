@@ -74,19 +74,26 @@ export async function searchKnowledge(
     const embedding = await generateEmbedding(query);
 
     // Use hybrid search function from database
-    const { data: results, error } = await queryWithTimeout(
-      supabase.rpc("search_rag_chunks", {
-        p_tenant_id: tenantId,
-        p_offer_id: offerId || null,
-        p_query_embedding: embedding,
-        p_query_text: query,
-        p_limit: limit,
-        p_vector_weight: 0.7,
-        p_text_weight: 0.3,
-      }),
-      15000, // 15 seconds for RAG search
-      "RAG hybrid search"
-    );
+    interface RagSearchRow {
+      chunk_id: string;
+      document_id: string;
+      content: string;
+      metadata: Record<string, unknown>;
+      combined_score?: number;
+      vector_score?: number;
+    }
+    const rpcResult = await (supabase.rpc as any)("search_rag_chunks", {
+      p_tenant_id: tenantId,
+      p_offer_id: offerId || null,
+      p_query_embedding: embedding,
+      p_query_text: query,
+      p_limit: limit,
+      p_vector_weight: 0.7,
+      p_text_weight: 0.3,
+    });
+    
+    const results = (rpcResult.data || []) as RagSearchRow[];
+    const error = rpcResult.error;
 
     if (error) {
       console.error("RAG search error:", error);
@@ -94,7 +101,7 @@ export async function searchKnowledge(
       return await vectorOnlySearch(embedding, tenantId, offerId, limit);
     }
 
-    return (results || []).map((r: any) => ({
+    return results.map((r) => ({
       chunk_id: r.chunk_id,
       document_id: r.document_id,
       content: r.content,
@@ -118,23 +125,29 @@ async function vectorOnlySearch(
 ): Promise<RagSearchResult[]> {
   const supabase = createAdminClient();
 
-  const { data: results, error } = await queryWithTimeout(
-    supabase.rpc("search_rag_chunks_vector", {
-      p_tenant_id: tenantId,
-      p_offer_id: offerId || null,
-      p_query_embedding: embedding,
-      p_limit: limit,
-    }),
-    15000, // 15 seconds for vector search
-    "RAG vector search"
-  );
+  interface VectorSearchRow {
+    chunk_id: string;
+    document_id: string;
+    content: string;
+    metadata: Record<string, unknown>;
+    similarity?: number;
+  }
+  const rpcResult = await (supabase.rpc as any)("search_rag_chunks_vector", {
+    p_tenant_id: tenantId,
+    p_offer_id: offerId || null,
+    p_query_embedding: embedding,
+    p_limit: limit,
+  });
+  
+  const results = (rpcResult.data || []) as VectorSearchRow[];
+  const error = rpcResult.error;
 
   if (error) {
     console.error("Vector search error:", error);
     return [];
   }
 
-  return (results || []).map((r: any) => ({
+  return results.map((r) => ({
     chunk_id: r.chunk_id,
     document_id: r.document_id,
     content: r.content,
@@ -186,6 +199,15 @@ export async function ingestDocument(
 
   try {
     // Get source info
+    interface RagSourceRow {
+      id: string;
+      tenant_id: string;
+      offer_id: string | null;
+      source_type: string;
+      name: string;
+      source_url?: string;
+      storage_path?: string;
+    }
     const { data: source, error: sourceError } = await queryWithTimeout(
       supabase
         .from("rag_sources")
@@ -194,7 +216,7 @@ export async function ingestDocument(
         .single(),
       10000,
       `fetch RAG source ${sourceId}`
-    );
+    ) as { data: RagSourceRow | null; error: Error | null };
 
     if (sourceError || !source) {
       return { success: false, chunkCount: 0, error: "Source not found" };
@@ -230,6 +252,23 @@ export async function ingestDocument(
     );
 
     // Create document record
+    interface RagDocumentRow {
+      id: string;
+      source_id: string;
+      tenant_id: string;
+      offer_id: string | null;
+      title: string;
+      url?: string;
+      raw_content: string;
+      cleaned_content: string;
+      content_hash: string;
+      status: string;
+      doc_type: string;
+      word_count: number;
+      chunk_count?: number;
+      is_current?: boolean;
+      processed_at?: string;
+    }
     const { data: doc, error: docError } = await queryWithTimeout(
       supabase
         .from("rag_documents")
@@ -250,7 +289,7 @@ export async function ingestDocument(
         .single(),
       30000,
       "create RAG document"
-    );
+    ) as { data: RagDocumentRow | null; error: Error | null };
 
     if (docError || !doc) {
       return { success: false, chunkCount: 0, error: docError?.message || "Failed to create document" };
@@ -387,6 +426,14 @@ export async function ingestManualContent(
 
   try {
     // Create source
+    interface RagSourceInsertRow {
+      id: string;
+      tenant_id: string;
+      offer_id: string | null;
+      source_type: string;
+      name: string;
+      is_active: boolean;
+    }
     const { data: source, error: sourceError } = await queryWithTimeout(
       supabase
         .from("rag_sources")
@@ -401,7 +448,7 @@ export async function ingestManualContent(
         .single(),
       30000,
       "create RAG source"
-    );
+    ) as { data: RagSourceInsertRow | null; error: Error | null };
 
     if (sourceError || !source) {
       return { success: false, chunkCount: 0, error: sourceError?.message || "Failed to create source" };
@@ -649,6 +696,13 @@ export async function reindexSource(sourceId: string): Promise<{ success: boolea
 
   try {
     // Get source
+    interface ReindexSourceRow {
+      id: string;
+      source_type: string;
+      source_url?: string;
+      storage_path?: string;
+      name: string;
+    }
     const { data: source } = await queryWithTimeout(
       supabase
         .from("rag_sources")
@@ -657,7 +711,7 @@ export async function reindexSource(sourceId: string): Promise<{ success: boolea
         .single(),
       10000,
       `fetch RAG source ${sourceId} for reindex`
-    );
+    ) as { data: ReindexSourceRow | null };
 
     if (!source) {
       return { success: false, error: "Source not found" };
@@ -683,6 +737,11 @@ export async function reindexSource(sourceId: string): Promise<{ success: boolea
     }
 
     // For manual content, get from existing document
+    interface ReindexDocRow {
+      raw_content: string;
+      title: string;
+      doc_type: string;
+    }
     const { data: doc } = await queryWithTimeout(
       supabase
         .from("rag_documents")
@@ -692,7 +751,7 @@ export async function reindexSource(sourceId: string): Promise<{ success: boolea
         .single(),
       10000,
       "get document for reindex"
-    );
+    ) as { data: ReindexDocRow | null };
 
     if (doc) {
       return await ingestDocument(sourceId, doc.raw_content, {

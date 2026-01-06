@@ -13,43 +13,44 @@ const createMockQuery = (): any => {
   let tableName = "";
   let filters: Record<string, any> = {};
   
-  const query: any = {
-    from: (table: string) => {
-      tableName = table;
-      return query;
-    },
-    select: vi.fn().mockReturnValue(query),
-    insert: vi.fn().mockImplementation((data) => {
-      const existing = mockTableData.get(tableName) || [];
-      mockTableData.set(tableName, [...existing, { id: `mock-${Date.now()}`, ...data }]);
-      return query;
-    }),
-    update: vi.fn().mockReturnValue(query),
-    delete: vi.fn().mockReturnValue(query),
-    eq: vi.fn().mockImplementation((field, value) => {
-      filters[field] = value;
-      return query;
-    }),
-    single: vi.fn().mockImplementation(() => {
-      const data = mockTableData.get(tableName)?.find(row => 
-        Object.entries(filters).every(([k, v]) => row[k] === v)
-      );
-      return Promise.resolve({ data, error: null });
-    }),
-    maybeSingle: vi.fn().mockImplementation(() => {
-      const data = mockTableData.get(tableName)?.find(row => 
-        Object.entries(filters).every(([k, v]) => row[k] === v)
-      );
-      return Promise.resolve({ data, error: null });
-    }),
-    rpc: vi.fn().mockImplementation((funcName, params) => {
-      const result = mockRpcResults.get(funcName);
-      if (result) {
-        return Promise.resolve({ data: result(params), error: null });
-      }
-      return Promise.resolve({ data: null, error: { message: "Function not mocked" } });
-    }),
+  // Create query object first, then add methods that reference it
+  const query: any = {};
+  
+  query.from = (table: string) => {
+    tableName = table;
+    return query;
   };
+  query.select = vi.fn().mockReturnValue(query);
+  query.insert = vi.fn().mockImplementation((data) => {
+    const existing = mockTableData.get(tableName) || [];
+    mockTableData.set(tableName, [...existing, { id: `mock-${Date.now()}`, ...data }]);
+    return query;
+  });
+  query.update = vi.fn().mockReturnValue(query);
+  query.delete = vi.fn().mockReturnValue(query);
+  query.eq = vi.fn().mockImplementation((field, value) => {
+    filters[field] = value;
+    return query;
+  });
+  query.single = vi.fn().mockImplementation(() => {
+    const data = mockTableData.get(tableName)?.find(row => 
+      Object.entries(filters).every(([k, v]) => row[k] === v)
+    );
+    return Promise.resolve({ data, error: null });
+  });
+  query.maybeSingle = vi.fn().mockImplementation(() => {
+    const data = mockTableData.get(tableName)?.find(row => 
+      Object.entries(filters).every(([k, v]) => row[k] === v)
+    );
+    return Promise.resolve({ data, error: null });
+  });
+  query.rpc = vi.fn().mockImplementation((funcName, params) => {
+    const result = mockRpcResults.get(funcName);
+    if (result) {
+      return Promise.resolve({ data: result(params), error: null });
+    }
+    return Promise.resolve({ data: null, error: { message: "Function not mocked" } });
+  });
   
   return query;
 };

@@ -72,7 +72,7 @@ async function getTenantName(tenantId: string): Promise<string> {
     supabase.from("tenants").select("name").eq("id", tenantId).single(),
     10000,
     `get tenant name ${tenantId}`
-  );
+  ) as { data: { name: string } | null };
   const name = data?.name || "la desarrolladora";
 
   tenantNameCache.set(tenantId, { value: name, at: now });
@@ -132,7 +132,7 @@ export async function getOpenAI(): Promise<OpenAI> {
     10000,
     "get OpenAI API key",
     false // Don't retry settings
-  );
+  ) as { data: { value: string } | null };
 
   const apiKey = setting?.value || process.env.OPENAI_API_KEY;
 
@@ -167,7 +167,7 @@ export async function getModel(type: "extraction" | "response" | "embedding"): P
     10000,
     `get OpenAI model for ${type}`,
     false // Don't retry settings
-  );
+  ) as { data: { value: string } | null };
 
   return setting?.value || defaultMap[type];
 }
@@ -506,19 +506,20 @@ export async function ragSearch(
   const embedding = await generateEmbedding(query);
 
   // Search knowledge chunks using vector similarity
-  const { data: chunks } = await queryWithTimeout(
-    supabase.rpc("match_knowledge_chunks", {
-      query_embedding: embedding,
-      match_threshold: 0.7,
-      match_count: limit,
-      p_tenant_id: tenantId,
-      p_offer_id: offerId || null,
-    }),
-    15000, // 15 seconds for RAG search
-    "match knowledge chunks RPC"
-  );
+  interface KnowledgeChunk {
+    content: string;
+    similarity: number;
+  }
+  const rpcResult = await (supabase.rpc as any)("match_knowledge_chunks", {
+    query_embedding: embedding,
+    match_threshold: 0.7,
+    match_count: limit,
+    p_tenant_id: tenantId,
+    p_offer_id: offerId || null,
+  });
+  const chunks = (rpcResult.data || []) as KnowledgeChunk[];
 
-  return (chunks || []).map((chunk: any) => ({
+  return chunks.map((chunk) => ({
     content: chunk.content,
     score: chunk.similarity,
   }));

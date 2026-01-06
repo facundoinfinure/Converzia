@@ -1,7 +1,6 @@
 "use client";
 
 import { createBrowserClient, type CookieOptions } from "@supabase/ssr";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 
 // ============================================
@@ -17,9 +16,11 @@ const getPublishableKey = () =>
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-let clientInstance: SupabaseClient<Database> | null = null;
+// Using ReturnType to get the correct type from createBrowserClient
+type BrowserClient = ReturnType<typeof createBrowserClient<Database>>;
+let clientInstance: BrowserClient | null = null;
 
-export function createClient(): SupabaseClient<Database> {
+export function createClient(): BrowserClient {
   // Reuse the same client instance to avoid creating multiple clients
   if (clientInstance) {
     return clientInstance;
@@ -64,7 +65,7 @@ export function createClient(): SupabaseClient<Database> {
     }
   );
 
-  clientInstance = newClient;
-  return newClient;
+  clientInstance = newClient as BrowserClient;
+  return newClient as BrowserClient;
 }
 
