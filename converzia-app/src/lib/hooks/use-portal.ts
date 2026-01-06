@@ -207,7 +207,7 @@ export function usePortalLeads(options: UsePortalLeadsOptions = {}) {
         .select(`
           *,
           lead:leads(id, phone, full_name, email, first_contact_at, last_contact_at),
-          offer:offers(id, name)
+          offer:offers!lead_offers_offer_id_fkey(id, name)
         `, { count: "exact" })
         .eq("tenant_id", activeTenantId);
 

@@ -38,6 +38,7 @@ import { ConfirmModal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { CustomSelect } from "@/components/ui/Select";
+import { Spinner } from "@/components/ui/Spinner";
 import { createClient } from "@/lib/supabase/client";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { formatCurrency, formatRelativeTime, formatDate, cn } from "@/lib/utils";
@@ -218,28 +219,32 @@ export default function OperationsPage() {
         ] = await Promise.all([
           queryWithTimeout(
             supabase.from("deliveries").select("id", { count: "exact", head: true }),
-            10000,
+            30000,
             "total deliveries"
           ),
           queryWithTimeout(
             supabase.from("deliveries").select("id", { count: "exact", head: true }).eq("status", "DELIVERED"),
-            10000,
+            30000,
             "successful deliveries"
           ),
           queryWithTimeout(
             supabase.from("deliveries").select("id", { count: "exact", head: true }).eq("status", "FAILED"),
-            10000,
+            30000,
             "failed deliveries"
           ),
           queryWithTimeout(
             supabase.from("deliveries").select("id", { count: "exact", head: true }).eq("status", "PENDING"),
-            10000,
+            30000,
             "pending deliveries"
           ),
         ]);
 
+        // Silently handle errors - stats will show 0 if queries fail
         if (totalError || successError || failedError || pendingError) {
-          console.error("Error fetching delivery stats:", { totalError, successError, failedError, pendingError });
+          // Only log if all queries failed (critical error)
+          if (totalError && successError && failedError && pendingError) {
+            console.error("Error fetching delivery stats:", { totalError, successError, failedError, pendingError });
+          }
         }
 
         // Fetch refund stats
@@ -252,8 +257,12 @@ export default function OperationsPage() {
           "refund stats"
         );
 
+        // Silently handle refund errors - not critical
         if (refundError) {
-          console.error("Error fetching refund stats:", refundError);
+          // Only log if it's not a timeout (timeouts are expected sometimes)
+          if (!refundError.message?.includes("Timeout")) {
+            console.warn("Error fetching refund stats (non-critical):", refundError);
+          }
         }
 
         const totalRefunds = Array.isArray(refundData) ? refundData.length : 0;
@@ -271,8 +280,12 @@ export default function OperationsPage() {
           "active conversations"
         );
 
+        // Silently handle conversation errors - not critical
         if (conversationsError) {
-          console.error("Error fetching active conversations:", conversationsError);
+          // Only log if it's not a timeout (timeouts are expected sometimes)
+          if (!conversationsError.message?.includes("Timeout")) {
+            console.warn("Error fetching active conversations (non-critical):", conversationsError);
+          }
         }
 
         setStats({
@@ -414,7 +427,7 @@ export default function OperationsPage() {
           query = query.eq("tenant_id", tenantFilter);
         }
         
-        return queryWithTimeout(query, 10000, `count ${status}`);
+        return queryWithTimeout(query, 30000, `count ${status}`);
       });
       
       const results = await Promise.all(countPromises);
@@ -470,7 +483,7 @@ export default function OperationsPage() {
               first_response_at,
               lead:leads(phone, full_name, email, first_name, last_name),
               tenant:tenants(id, name),
-              offer:offers(id, name)
+              offer:offers!lead_offers_offer_id_fkey(id, name)
             `)
             .in("status", stage.statuses)
             .order("updated_at", { ascending: false })
@@ -837,6 +850,28 @@ export default function OperationsPage() {
       ),
     },
   ];
+
+  // Show loading overlay while initial data is loading
+  if (isLoading && !stats) {
+    return (
+      <PageContainer>
+        <PageHeader
+          title="Operaciones"
+          description="Monitoreo de entregas, reembolsos y estado del sistema"
+          breadcrumbs={[
+            { label: "Admin", href: "/admin" },
+            { label: "Operaciones" },
+          ]}
+        />
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="flex flex-col items-center gap-4">
+            <Spinner size="lg" />
+            <p className="text-[var(--text-secondary)]">Cargando datos de operaciones...</p>
+          </div>
+        </div>
+      </PageContainer>
+    );
+  }
 
   return (
     <PageContainer>
