@@ -29,7 +29,7 @@ export async function checkSupabaseHealth(): Promise<HealthCheckResult> {
 
   try {
     // 1. Check authentication (with longer timeout and non-blocking)
-    console.log("🔍 Checking authentication...");
+    // Silently check auth - don't log unless there's a real issue
     const authTimeoutPromise = new Promise((_, reject) => {
       setTimeout(() => reject(new Error("Timeout: Auth check tardó más de 15 segundos")), 15000);
     });
@@ -41,15 +41,18 @@ export async function checkSupabaseHealth(): Promise<HealthCheckResult> {
 
     if (authResult.error) {
       result.error = `Auth error: ${authResult.error.message}`;
-      console.warn("⚠️ Auth check failed (non-critical):", authResult.error);
+      // Only log if it's not a timeout (timeouts are expected sometimes)
+      if (!authResult.error.message?.includes("Timeout")) {
+        console.warn("⚠️ Auth check failed (non-critical):", authResult.error);
+      }
       // Don't return early, continue with database check
     } else {
       result.authenticated = !!(authResult.data?.user);
-      console.log(`✅ Auth check: ${result.authenticated ? "Authenticated" : "Not authenticated"}`);
+      // Don't log successful auth checks to reduce console noise
     }
 
     // 2. Check database connection with a simple query (non-blocking)
-    console.log("🔍 Checking database connection...");
+    // Silently check database - don't log unless there's a real issue
     const { error: dbError } = await queryWithTimeout(
       supabase.from("tenants").select("id").limit(1),
       15000,
@@ -59,18 +62,24 @@ export async function checkSupabaseHealth(): Promise<HealthCheckResult> {
 
     if (dbError) {
       result.error = result.error || `Database error: ${dbError.message} (${dbError.code})`;
-      console.warn("⚠️ Database check failed (non-critical):", dbError);
+      // Only log if it's not a timeout (timeouts are expected sometimes)
+      if (!dbError.message?.includes("Timeout")) {
+        console.warn("⚠️ Database check failed (non-critical):", dbError);
+      }
       // Still return result, don't block app initialization
     } else {
       result.database = true;
       result.connected = true;
-      console.log("✅ Database check: Connected");
+      // Don't log successful database checks to reduce console noise
     }
 
     return result;
   } catch (error: any) {
     result.error = `Health check error: ${error?.message || "Unknown error"}`;
-    console.warn("⚠️ Health check failed (non-critical):", error);
+    // Only log if it's not a timeout (timeouts are expected sometimes)
+    if (!error?.message?.includes("Timeout")) {
+      console.warn("⚠️ Health check failed (non-critical):", error);
+    }
     // Return result anyway, don't block app
     return result;
   }

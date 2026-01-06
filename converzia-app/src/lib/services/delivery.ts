@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/server";
-import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
+import { queryWithTimeout, rpcWithTimeout } from "@/lib/supabase/query-with-timeout";
 import type { Delivery, TenantIntegration } from "@/types";
 import { createTokkoLead, TokkoConfig } from "./tokko";
 import { appendToGoogleSheets, GoogleSheetsConfig } from "./google-sheets";
@@ -239,14 +239,19 @@ export async function processDelivery(deliveryId: string): Promise<DeliveryResul
     try {
       // Use atomic function for delivery completion + credit consumption
       // This ensures both operations succeed or neither does
-      const { data: atomicResult, error: atomicError } = await supabase.rpc(
+      const { data: atomicResult, error: atomicError } = await rpcWithTimeout(
+        supabase.rpc(
+          "complete_delivery_and_consume_credit",
+          {
+            p_delivery_id: deliveryId,
+            p_integrations_succeeded: integrationsSucceeded,
+            p_integrations_failed: integrationsFailed,
+            p_final_status: finalStatus,
+          } as any
+        ),
+        30000, // 30 second timeout for critical delivery operation
         "complete_delivery_and_consume_credit",
-        {
-          p_delivery_id: deliveryId,
-          p_integrations_succeeded: integrationsSucceeded,
-          p_integrations_failed: integrationsFailed,
-          p_final_status: finalStatus,
-        } as any
+        true // Enable retry
       );
 
       if (atomicError) {
@@ -349,10 +354,15 @@ async function moveToDeadLetter(
 ): Promise<void> {
   const supabase = createAdminClient();
 
-  await supabase.rpc("move_to_dead_letter", {
-    p_delivery_id: deliveryId,
-    p_reason: reason,
-  } as any);
+  await rpcWithTimeout(
+    supabase.rpc("move_to_dead_letter", {
+      p_delivery_id: deliveryId,
+      p_reason: reason,
+    } as any),
+    15000, // 15 second timeout for dead letter operation
+    "move_to_dead_letter",
+    true // Enable retry
+  );
 
   // Alert on dead letter
   Alerts.deliveryDeadLetter(deliveryId, reason, tenantId);
@@ -412,12 +422,17 @@ async function consumeCredit(
   }
 
   // Atomic credit consumption (locks per-tenant)
-  const { data, error } = await supabase.rpc("consume_credit", {
-    p_tenant_id: tenantId,
-    p_delivery_id: deliveryId,
-    p_lead_offer_id: leadOfferId,
-    p_description: "Lead delivery",
-  } as any);
+  const { data, error } = await rpcWithTimeout(
+    supabase.rpc("consume_credit", {
+      p_tenant_id: tenantId,
+      p_delivery_id: deliveryId,
+      p_lead_offer_id: leadOfferId,
+      p_description: "Lead delivery",
+    } as any),
+    20000, // 20 second timeout for credit consumption
+    "consume_credit",
+    true // Enable retry
+  );
 
   if (error) {
     throw new Error(error.message);
@@ -657,13 +672,18 @@ export async function refundCredit(
   }
 
   // Atomic refund via DB function
-  const { error: refundError } = await supabase.rpc("refund_credit", {
-    p_tenant_id: typedDelivery.tenant_id,
-    p_delivery_id: deliveryId,
-    p_lead_offer_id: typedDelivery.lead_offer_id,
-    p_reason: reason,
-    p_created_by: null,
-  } as any);
+  const { error: refundError } = await rpcWithTimeout(
+    supabase.rpc("refund_credit", {
+      p_tenant_id: typedDelivery.tenant_id,
+      p_delivery_id: deliveryId,
+      p_lead_offer_id: typedDelivery.lead_offer_id,
+      p_reason: reason,
+      p_created_by: null,
+    } as any),
+    20000, // 20 second timeout for credit refund
+    "refund_credit",
+    true // Enable retry
+  );
 
   if (refundError) {
     throw new Error(refundError.message);

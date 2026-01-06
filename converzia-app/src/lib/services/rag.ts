@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/server";
-import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
+import { queryWithTimeout, rpcWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { fetchWithTimeout } from "@/lib/utils/fetch-with-timeout";
 import { generateEmbedding } from "./openai";
 import { extractTextFromPdf, cleanPdfText } from "./pdf";
@@ -82,15 +82,20 @@ export async function searchKnowledge(
       combined_score?: number;
       vector_score?: number;
     }
-    const rpcResult = await (supabase.rpc as any)("search_rag_chunks", {
-      p_tenant_id: tenantId,
-      p_offer_id: offerId || null,
-      p_query_embedding: embedding,
-      p_query_text: query,
-      p_limit: limit,
-      p_vector_weight: 0.7,
-      p_text_weight: 0.3,
-    });
+    const rpcResult = await rpcWithTimeout<RagSearchRow[]>(
+      (supabase.rpc as any)("search_rag_chunks", {
+        p_tenant_id: tenantId,
+        p_offer_id: offerId || null,
+        p_query_embedding: embedding,
+        p_query_text: query,
+        p_limit: limit,
+        p_vector_weight: 0.7,
+        p_text_weight: 0.3,
+      }),
+      20000, // 20 second timeout for RAG search
+      "search_rag_chunks",
+      true // Enable retry
+    );
     
     const results = (rpcResult.data || []) as RagSearchRow[];
     const error = rpcResult.error;
@@ -132,12 +137,17 @@ async function vectorOnlySearch(
     metadata: Record<string, unknown>;
     similarity?: number;
   }
-  const rpcResult = await (supabase.rpc as any)("search_rag_chunks_vector", {
-    p_tenant_id: tenantId,
-    p_offer_id: offerId || null,
-    p_query_embedding: embedding,
-    p_limit: limit,
-  });
+  const rpcResult = await rpcWithTimeout<VectorSearchRow[]>(
+    (supabase.rpc as any)("search_rag_chunks_vector", {
+      p_tenant_id: tenantId,
+      p_offer_id: offerId || null,
+      p_query_embedding: embedding,
+      p_limit: limit,
+    }),
+    20000, // 20 second timeout for vector search
+    "search_rag_chunks_vector",
+    true // Enable retry
+  );
   
   const results = (rpcResult.data || []) as VectorSearchRow[];
   const error = rpcResult.error;

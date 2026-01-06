@@ -35,23 +35,24 @@ import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { createClient } from "@/lib/supabase/client";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { formatRelativeTime, cn } from "@/lib/utils";
+import { TENANT_FUNNEL_STAGES, type TenantFunnelStage } from "@/lib/constants/tenant-funnel";
 
 // ============================================
 // Types - Privacy-focused for tenants
 // ============================================
 
 interface TenantLeadStats {
-  interested: number;        // ENGAGED, QUALIFYING
-  inProgress: number;        // CONTACTED, SCORED
-  ready: number;             // LEAD_READY, SENT_TO_DEVELOPER
-  dropped: number;           // DISQUALIFIED, STOPPED, COOLING
+  in_chat: number;        // CONTACTED, ENGAGED, QUALIFYING
+  qualified: number;     // SCORED, LEAD_READY
+  delivered: number;     // SENT_TO_DEVELOPER
+  not_qualified: number; // DISQUALIFIED, STOPPED, COOLING, REACTIVATION
 }
 
 // Simplified lead view for tenants - NO personal data for dropped leads
 interface TenantLeadView {
   id: string;
   status: string;
-  category: "interested" | "in_progress" | "ready" | "dropped";
+  category: "in_chat" | "qualified" | "delivered" | "not_qualified";
   // Basic info - only shown for non-dropped leads
   firstName: string | null;  // Hidden for dropped leads
   offerName: string | null;
@@ -62,53 +63,22 @@ interface TenantLeadView {
   dropReason: string | null;
 }
 
-// Lead categories for tenant view
-const LEAD_CATEGORIES = [
-  { 
-    key: "interested", 
-    label: "Interesados", 
-    description: "Leads que están interesados y en conversación activa",
-    statuses: ["ENGAGED", "QUALIFYING"],
-    icon: Sparkles,
-    color: "from-cyan-500 to-blue-500",
-    bgColor: "bg-cyan-500/10",
-    textColor: "text-cyan-400",
-    borderColor: "border-cyan-500/30",
-  },
-  { 
-    key: "in_progress", 
-    label: "En Proceso", 
-    description: "Leads siendo contactados o en calificación",
-    statuses: ["CONTACTED", "SCORED", "TO_BE_CONTACTED"],
-    icon: MessageSquare,
-    color: "from-amber-500 to-orange-500",
-    bgColor: "bg-amber-500/10",
-    textColor: "text-amber-400",
-    borderColor: "border-amber-500/30",
-  },
-  { 
-    key: "ready", 
-    label: "Listos para vos", 
-    description: "Leads calificados y entregados",
-    statuses: ["LEAD_READY", "SENT_TO_DEVELOPER"],
-    icon: CheckCircle,
-    color: "from-emerald-500 to-green-500",
-    bgColor: "bg-emerald-500/10",
-    textColor: "text-emerald-400",
-    borderColor: "border-emerald-500/30",
-  },
-  { 
-    key: "dropped", 
-    label: "No Calificados", 
-    description: "Leads que no cumplieron los criterios",
-    statuses: ["DISQUALIFIED", "STOPPED", "COOLING", "REACTIVATION"],
-    icon: XCircle,
-    color: "from-slate-500 to-slate-600",
-    bgColor: "bg-slate-500/10",
-    textColor: "text-slate-400",
-    borderColor: "border-slate-500/30",
-  },
-];
+// Lead categories for tenant view - using standardized funnel stages
+// Map standardized stages to icons for the leads page
+const LEAD_CATEGORY_ICONS: Record<string, typeof Sparkles> = {
+  in_chat: MessageSquare,
+  qualified: TrendingUp,
+  delivered: CheckCircle,
+  not_qualified: XCircle,
+};
+
+// Lead categories for tenant view - using standardized names
+const LEAD_CATEGORIES = TENANT_FUNNEL_STAGES
+  .filter(stage => stage.key !== "received") // Exclude "received" as it's too broad
+  .map((stage): TenantFunnelStage & { icon: typeof Sparkles } => ({
+    ...stage,
+    icon: LEAD_CATEGORY_ICONS[stage.key] || Users,
+  }));
 
 // Drop reason mapping
 const DROP_REASONS: Record<string, string> = {
@@ -176,10 +146,10 @@ export default function PortalLeadsPage() {
       const results = await Promise.all(categoryPromises);
       
       const statsData: TenantLeadStats = {
-        interested: results.find(r => r.key === "interested")?.count || 0,
-        inProgress: results.find(r => r.key === "in_progress")?.count || 0,
-        ready: results.find(r => r.key === "ready")?.count || 0,
-        dropped: results.find(r => r.key === "dropped")?.count || 0,
+        in_chat: results.find(r => r.key === "in_chat")?.count || 0,
+        qualified: results.find(r => r.key === "qualified")?.count || 0,
+        delivered: results.find(r => r.key === "delivered")?.count || 0,
+        not_qualified: results.find(r => r.key === "not_qualified")?.count || 0,
       };
       
       setStats(statsData);
@@ -256,7 +226,7 @@ export default function PortalLeadsPage() {
         const processedLeads: TenantLeadView[] = leadsData.map((d: any) => {
           const lead = Array.isArray(d.lead) ? d.lead[0] : d.lead;
           const offer = Array.isArray(d.offer) ? d.offer[0] : d.offer;
-          const isDropped = selectedCategory === "dropped";
+          const isDropped = selectedCategory === "not_qualified";
           
           // Get drop reason from qualification fields or status
           let dropReason: string | null = null;
@@ -310,12 +280,12 @@ export default function PortalLeadsPage() {
   
   // Calculate totals
   const totalLeads = stats 
-    ? stats.interested + stats.inProgress + stats.ready + stats.dropped 
+    ? stats.in_chat + stats.qualified + stats.delivered + stats.not_qualified 
     : 0;
   
   // Columns for lead table
   const getColumns = (): Column<TenantLeadView>[] => {
-    const isDroppedCategory = selectedCategory === "dropped";
+    const isDroppedCategory = selectedCategory === "not_qualified";
     
     if (isDroppedCategory) {
       // Dropped leads - privacy protected, no personal data
@@ -379,19 +349,23 @@ export default function PortalLeadsPage() {
           <div className="flex items-center gap-3">
             <div className={cn(
               "h-9 w-9 rounded-full flex items-center justify-center",
-              l.category === "ready" 
+              l.category === "delivered" 
                 ? "bg-emerald-500/20" 
-                : l.category === "interested"
-                  ? "bg-cyan-500/20"
-                  : "bg-amber-500/20"
+                : l.category === "in_chat"
+                  ? "bg-blue-500/20"
+                  : l.category === "qualified"
+                    ? "bg-purple-500/20"
+                    : "bg-amber-500/20"
             )}>
               <span className={cn(
                 "text-sm font-medium",
-                l.category === "ready" 
+                l.category === "delivered" 
                   ? "text-emerald-400" 
-                  : l.category === "interested"
-                    ? "text-cyan-400"
-                    : "text-amber-400"
+                  : l.category === "in_chat"
+                    ? "text-blue-400"
+                    : l.category === "qualified"
+                      ? "text-purple-400"
+                      : "text-amber-400"
               )}>
                 {(l.firstName?.[0] || "L").toUpperCase()}
               </span>
@@ -498,7 +472,7 @@ export default function PortalLeadsPage() {
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {LEAD_CATEGORIES.map((category) => {
-          const count = stats?.[category.key === "in_progress" ? "inProgress" : category.key as keyof TenantLeadStats] || 0;
+          const count = stats?.[category.key as keyof TenantLeadStats] || 0;
           const Icon = category.icon;
           const isSelected = selectedCategory === category.key;
           
@@ -548,7 +522,7 @@ export default function PortalLeadsPage() {
         <CardContent>
           <div className="flex items-center justify-between">
             {LEAD_CATEGORIES.slice(0, 3).map((category, index) => {
-              const count = stats?.[category.key === "in_progress" ? "inProgress" : category.key as keyof TenantLeadStats] || 0;
+              const count = stats?.[category.key as keyof TenantLeadStats] || 0;
               const percentage = totalLeads > 0 ? Math.round((count / totalLeads) * 100) : 0;
               
               return (
@@ -574,12 +548,12 @@ export default function PortalLeadsPage() {
           </div>
           
           {/* Conversion rate */}
-          {stats && stats.ready > 0 && totalLeads > 0 && (
+          {stats && stats.delivered > 0 && totalLeads > 0 && (
             <div className="mt-6 pt-4 border-t border-[var(--border-primary)] text-center">
               <p className="text-sm text-[var(--text-tertiary)]">
                 Tasa de conversión: 
                 <span className="font-semibold text-emerald-400 ml-1">
-                  {Math.round((stats.ready / totalLeads) * 100)}%
+                  {Math.round((stats.delivered / totalLeads) * 100)}%
                 </span>
               </p>
             </div>
@@ -611,7 +585,7 @@ export default function PortalLeadsPage() {
             </div>
           </CardHeader>
           
-          {selectedCategory === "dropped" && (
+          {selectedCategory === "not_qualified" && (
             <div className="mx-4 mb-4 p-4 rounded-lg bg-slate-500/10 border border-slate-500/20">
               <div className="flex items-start gap-3">
                 <Info className="h-5 w-5 text-slate-400 mt-0.5" />
@@ -635,7 +609,7 @@ export default function PortalLeadsPage() {
               keyExtractor={(l) => l.id}
               isLoading={isRefreshing}
               renderMobileItem={(l) => {
-                const isDropped = l.category === "dropped";
+                const isDropped = l.category === "not_qualified";
                 const categoryInfo = LEAD_CATEGORIES.find(c => c.key === l.category);
                 
                 const statusLabels: Record<string, { label: string; variant: "success" | "warning" | "info" | "primary" }> = {
@@ -656,7 +630,7 @@ export default function PortalLeadsPage() {
                         <MobileCardAvatar variant="default" icon={Users} />
                       ) : (
                         <MobileCardAvatar 
-                          variant={l.category === "ready" ? "success" : l.category === "interested" ? "info" : "warning"} 
+                          variant={l.category === "delivered" ? "success" : l.category === "in_chat" ? "info" : l.category === "qualified" ? "default" : "warning"} 
                           fallback={l.firstName || "L"}
                         />
                       )

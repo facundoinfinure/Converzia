@@ -31,6 +31,7 @@ import { createClient } from "@/lib/supabase/client";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { useAuth } from "@/lib/auth/context";
 import { formatRelativeTime, formatCurrency } from "@/lib/utils";
+import { TENANT_FUNNEL_STAGES, standardizeFunnelStats, type StandardizedFunnelData } from "@/lib/constants/tenant-funnel";
 
 interface FunnelStats {
   offer_id: string;
@@ -210,12 +211,31 @@ export default function PortalOfferDetailPage() {
     return null;
   }
 
-  // Funnel stage data for visualization
-  const funnelStages = funnel ? [
-    { label: "Recibidos", value: funnel.total_leads, color: "bg-slate-500" },
-    { label: "En chat", value: funnel.leads_in_chat, color: "bg-blue-500" },
-    { label: "Calificados", value: funnel.leads_qualified, color: "bg-purple-500" },
-    { label: "Entregados", value: funnel.leads_delivered, color: "bg-emerald-500" },
+  // Standardize funnel data
+  const standardizedFunnel = funnel ? standardizeFunnelStats(funnel) : null;
+  
+  // Funnel stage data for visualization - using standardized names
+  const funnelStages = standardizedFunnel ? [
+    { 
+      label: TENANT_FUNNEL_STAGES.find(s => s.key === "received")?.label || "Recibidos", 
+      value: standardizedFunnel.received, 
+      color: "bg-slate-500" 
+    },
+    { 
+      label: TENANT_FUNNEL_STAGES.find(s => s.key === "in_chat")?.label || "En Chat", 
+      value: standardizedFunnel.in_chat, 
+      color: "bg-blue-500" 
+    },
+    { 
+      label: TENANT_FUNNEL_STAGES.find(s => s.key === "qualified")?.label || "Calificados", 
+      value: standardizedFunnel.qualified, 
+      color: "bg-purple-500" 
+    },
+    { 
+      label: TENANT_FUNNEL_STAGES.find(s => s.key === "delivered")?.label || "Entregados", 
+      value: standardizedFunnel.delivered, 
+      color: "bg-emerald-500" 
+    },
   ] : [];
 
   // Disqualification insights

@@ -95,7 +95,7 @@ export function AuthProvider({ children, initialUser = null }: AuthProviderProps
           .select("*")
           .eq("id", userId)
           .single(),
-        20000,
+        30000,
         "fetch user profile"
       );
 
@@ -143,7 +143,7 @@ export function AuthProvider({ children, initialUser = null }: AuthProviderProps
           `)
           .eq("user_id", userId)
           .eq("status", "ACTIVE"),
-        20000,
+        30000,
         "fetch user memberships"
       );
 
@@ -199,9 +199,12 @@ export function AuthProvider({ children, initialUser = null }: AuthProviderProps
 
     // Start health monitoring (non-blocking, runs in background)
     // Delay initial check to avoid blocking app initialization
+    // Silently monitor health - only log critical issues
     setTimeout(() => {
       healthMonitor.start(30000, (result) => {
-        if (!result.connected && !result.authenticated) {
+        // Only log if both connection and auth fail (critical issue)
+        // Don't log timeouts as they're expected sometimes
+        if (!result.connected && !result.authenticated && result.error && !result.error.includes("Timeout")) {
           console.warn("⚠️ Supabase health check failed:", result.error);
         }
       });

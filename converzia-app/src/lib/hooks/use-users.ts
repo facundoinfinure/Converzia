@@ -179,7 +179,7 @@ export function usePendingApprovals() {
           `, { count: "exact" })
           .eq("status", "PENDING_APPROVAL")
           .order("created_at", { ascending: false }),
-        10000,
+        30000,
         "fetch pending approvals"
       );
 

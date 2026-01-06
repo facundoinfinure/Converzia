@@ -244,24 +244,19 @@ export default function PortalDashboard() {
             <div className="space-y-4">
               {[
                 { 
-                  label: "Contactados", 
+                  label: "En Chat", 
                   count: stats?.pipelineStats?.contacted || 0, 
                   color: "bg-[var(--info)]",
                 },
                 { 
-                  label: "En calificación", 
-                  count: stats?.pipelineStats?.qualifying || 0, 
-                  color: "bg-[var(--accent-primary)]",
-                },
-                { 
                   label: "Calificados", 
                   count: stats?.pipelineStats?.leadReady || 0, 
-                  color: "bg-[var(--success)]",
+                  color: "bg-[var(--accent-primary)]",
                 },
                 { 
                   label: "Entregados", 
                   count: stats?.pipelineStats?.delivered || 0, 
-                  color: "bg-[var(--text-tertiary)]",
+                  color: "bg-[var(--success)]",
                 },
               ].map((stage, index) => {
                 const total = (stats?.totalLeads || 1);

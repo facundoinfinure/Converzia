@@ -88,10 +88,13 @@ export async function retryQuery<T>(
 
       // Calculate exponential backoff delay
       const delay = retryDelay * Math.pow(2, attempt);
-      console.warn(
-        `⚠️ Query failed (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delay}ms...`,
-        lastError?.message
-      );
+      // Only log warnings for critical queries or after first retry
+      if (attempt >= 1) {
+        console.warn(
+          `⚠️ Query failed (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delay}ms...`,
+          lastError?.message
+        );
+      }
 
       await sleep(delay);
       attempt++;
@@ -111,10 +114,13 @@ export async function retryQuery<T>(
       }
 
       const delay = retryDelay * Math.pow(2, attempt);
-      console.warn(
-        `⚠️ Query exception (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delay}ms...`,
-        error?.message
-      );
+      // Only log warnings for critical queries or after first retry
+      if (attempt >= 1) {
+        console.warn(
+          `⚠️ Query exception (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delay}ms...`,
+          error?.message
+        );
+      }
 
       await sleep(delay);
       attempt++;

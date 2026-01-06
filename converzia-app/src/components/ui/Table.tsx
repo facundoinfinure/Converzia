@@ -295,6 +295,7 @@ function DataTable<T extends object>({
               {columns.map((col) => (
                 <TableCell
                   key={col.key}
+                  style={{ width: col.width }}
                   className={cn(
                     col.align === "center" && "text-center",
                     col.align === "right" && "text-right"

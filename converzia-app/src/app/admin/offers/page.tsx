@@ -264,6 +264,7 @@ export default function OffersPage() {
     {
       key: "status",
       header: "Estado",
+      width: "75px",
       cell: (offer) => {
         const approval = approvalStatusConfig[offer.approval_status || 'APPROVED'];
         const status = statusConfig[offer.status];
