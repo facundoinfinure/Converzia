@@ -185,98 +185,100 @@ export function usePortalOffers() {
         return;
       }
 
-      // Fetch offers (stats are optional and can be loaded lazily)
-      const { data: offersData } = await queryWithTimeout(
-        supabase
-          .from("offers")
-          .select("*")
-          .eq("tenant_id", activeTenantId)
-          .order("priority", { ascending: false }),
-        8000, // Reduced timeout
-        "fetch portal offers",
-        false // Don't retry
-      );
+      try {
+        // Fetch offers (stats are optional and can be loaded lazily)
+        const { data: offersData } = await queryWithTimeout(
+          supabase
+            .from("offers")
+            .select("*")
+            .eq("tenant_id", activeTenantId)
+            .order("priority", { ascending: false }),
+          8000, // Reduced timeout
+          "fetch portal offers",
+          false // Don't retry
+        );
 
-      if (offersData && Array.isArray(offersData)) {
-        try {
-          // Usar offer_funnel_stats para obtener conteos consistentes con otras vistas
-          // Esto asegura que usemos la misma fuente de datos que el Dashboard y Mis Leads
-          const { data: funnelStatsData } = await queryWithTimeout(
-            supabase
-              .from("offer_funnel_stats")
-              .select("offer_id, total_leads")
-              .in("offer_id", offersData.map(o => o.id))
-              .eq("tenant_id", activeTenantId),
-            10000,
-            "fetch offer funnel stats",
-            false // Don't retry
-          );
+        if (offersData && Array.isArray(offersData)) {
+          try {
+            // Usar offer_funnel_stats para obtener conteos consistentes con otras vistas
+            // Esto asegura que usemos la misma fuente de datos que el Dashboard y Mis Leads
+            const { data: funnelStatsData } = await queryWithTimeout(
+              supabase
+                .from("offer_funnel_stats")
+                .select("offer_id, total_leads")
+                .in("offer_id", offersData.map(o => o.id))
+                .eq("tenant_id", activeTenantId),
+              10000,
+              "fetch offer funnel stats",
+              false // Don't retry
+            );
 
-          // Crear mapa de stats por offer_id para acceso rápido
-          const statsMap = new Map(
-            (Array.isArray(funnelStatsData) ? funnelStatsData : []).map((s: any) => [
-              s.offer_id,
-              s.total_leads || 0
-            ])
-          );
+            // Crear mapa de stats por offer_id para acceso rápido
+            const statsMap = new Map(
+              (Array.isArray(funnelStatsData) ? funnelStatsData : []).map((s: any) => [
+                s.offer_id,
+                s.total_leads || 0
+              ])
+            );
 
-          // Si hay pocos offers (<= 10), también cargar variant_count
-          if (offersData.length <= 10) {
-            const offersWithStats = await Promise.allSettled(
-              offersData.map(async (offer: Offer) => {
-                const variantResult = await Promise.allSettled([
-                  queryWithTimeout(
-                    supabase
-                      .from("offer_variants")
-                      .select("id", { count: "exact", head: true })
-                      .eq("offer_id", offer.id),
-                    5000,
-                    `variant count for offer ${offer.id}`,
-                    false // Don't retry
-                  ),
-                ]);
+            // Si hay pocos offers (<= 10), también cargar variant_count
+            if (offersData.length <= 10) {
+              const offersWithStats = await Promise.allSettled(
+                offersData.map(async (offer: Offer) => {
+                  const variantResult = await Promise.allSettled([
+                    queryWithTimeout(
+                      supabase
+                        .from("offer_variants")
+                        .select("id", { count: "exact", head: true })
+                        .eq("offer_id", offer.id),
+                      5000,
+                      `variant count for offer ${offer.id}`,
+                      false // Don't retry
+                    ),
+                  ]);
 
-                const variantCount = variantResult[0].status === "fulfilled" 
-                  ? (variantResult[0].value.count || 0) 
-                  : 0;
+                  const variantCount = variantResult[0].status === "fulfilled" 
+                    ? (variantResult[0].value.count || 0) 
+                    : 0;
 
-                return {
+                  return {
+                    ...offer,
+                    lead_count: statsMap.get(offer.id) || 0,
+                    variant_count: variantCount,
+                  };
+                })
+              );
+
+              setOffers(
+                offersWithStats
+                  .filter((result) => result.status === "fulfilled")
+                  .map((result) => (result as PromiseFulfilledResult<any>).value)
+              );
+            } else {
+              // Para muchos offers, usar solo los stats de funnel (más eficiente)
+              setOffers(
+                offersData.map((offer) => ({
                   ...offer,
                   lead_count: statsMap.get(offer.id) || 0,
-                  variant_count: variantCount,
-                };
-              })
-            );
-
-            setOffers(
-              offersWithStats
-                .filter((result) => result.status === "fulfilled")
-                .map((result) => (result as PromiseFulfilledResult<any>).value)
-            );
-          } else {
-            // Para muchos offers, usar solo los stats de funnel (más eficiente)
-            setOffers(
-              offersData.map((offer) => ({
-                ...offer,
-                lead_count: statsMap.get(offer.id) || 0,
-                variant_count: 0, // Puede cargarse después si es necesario
-              }))
-            );
+                  variant_count: 0, // Puede cargarse después si es necesario
+                }))
+              );
+            }
+          } catch (error) {
+            console.error("Error fetching offer stats:", error);
+            // En caso de error, resetear array y usar valores por defecto
+            setOffers(offersData.map((offer) => ({ ...offer, lead_count: 0, variant_count: 0 })));
           }
-        } catch (error) {
-          console.error("Error fetching offer stats:", error);
-          // En caso de error, resetear array y usar valores por defecto
-          setOffers(offersData.map((offer) => ({ ...offer, lead_count: 0, variant_count: 0 })));
+        } else {
+          setOffers([]);
         }
-      } else {
+      } catch (error) {
+        console.error("Error fetching offers:", error);
+        // Resetear array en caso de error general
         setOffers([]);
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error) {
-      console.error("Error fetching offers:", error);
-      // Resetear array en caso de error general
-      setOffers([]);
-    } finally {
-      setIsLoading(false);
     }
 
     fetchOffers();

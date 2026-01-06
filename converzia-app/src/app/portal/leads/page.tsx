@@ -315,7 +315,7 @@ export default function PortalLeadsPage() {
     } finally {
       setIsRefreshing(false);
     }
-  }, [activeTenantId, selectedCategory, offerFilter, supabase]);
+  }, [activeTenantId, selectedCategory, offerFilter, supabase, toast]);
 
   useEffect(() => {
     if (activeTenantId) {
