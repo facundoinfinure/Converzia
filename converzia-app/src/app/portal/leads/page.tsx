@@ -117,56 +117,27 @@ export default function PortalLeadsPage() {
     setIsLoading(true);
     
     try {
-      // Fetch stats for each category
-      const categoryPromises = LEAD_CATEGORIES.map(async (cat) => {
-        // For "received", count only PENDING_MAPPING + TO_BE_CONTACTED
-        if (cat.key === "received") {
-          const [pendingMappingResult, pendingContactResult] = await Promise.all([
-            queryWithTimeout(
-              supabase
-                .from("lead_offers")
-                .select("id", { count: "exact", head: true })
-                .eq("tenant_id", activeTenantId)
-                .eq("status", "PENDING_MAPPING"),
-              10000,
-              "count pending_mapping"
-            ),
-            queryWithTimeout(
-              supabase
-                .from("lead_offers")
-                .select("id", { count: "exact", head: true })
-                .eq("tenant_id", activeTenantId)
-                .eq("status", "TO_BE_CONTACTED"),
-              10000,
-              "count to_be_contacted"
-            ),
-          ]);
-          return { 
-            key: cat.key, 
-            count: (pendingMappingResult.count || 0) + (pendingContactResult.count || 0) 
-          };
-        }
-        
-        const { count } = await queryWithTimeout(
-          supabase
-            .from("lead_offers")
-            .select("id", { count: "exact", head: true })
-            .eq("tenant_id", activeTenantId)
-            .in("status", cat.statuses),
-          10000,
-          `count ${cat.key}`
-        );
-        return { key: cat.key, count: count || 0 };
-      });
+      // Use tenant_funnel_stats view for consistent stats (same source as dashboard)
+      const { data: funnelStatsData } = await queryWithTimeout(
+        supabase
+          .from("tenant_funnel_stats")
+          .select("*")
+          .eq("tenant_id", activeTenantId)
+          .maybeSingle(),
+        10000,
+        "tenant funnel stats"
+      );
+
+      const funnelStats = funnelStatsData as any;
       
-      const results = await Promise.all(categoryPromises);
-      
+      // Map funnel stats to our format using the same logic as standardizeFunnelStats
+      // "received" = leads_pending_mapping + leads_pending_contact
       const statsData: TenantLeadStats = {
-        received: results.find(r => r.key === "received")?.count || 0,
-        in_chat: results.find(r => r.key === "in_chat")?.count || 0,
-        qualified: results.find(r => r.key === "qualified")?.count || 0,
-        delivered: results.find(r => r.key === "delivered")?.count || 0,
-        not_qualified: results.find(r => r.key === "not_qualified")?.count || 0,
+        received: (funnelStats?.leads_pending_mapping || 0) + (funnelStats?.leads_pending_contact || 0),
+        in_chat: funnelStats?.leads_in_chat || 0,
+        qualified: funnelStats?.leads_qualified || 0,
+        delivered: funnelStats?.leads_delivered || 0,
+        not_qualified: (funnelStats?.leads_disqualified || 0) + (funnelStats?.leads_stopped || 0),
       };
       
       setStats(statsData);

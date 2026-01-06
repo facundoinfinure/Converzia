@@ -45,54 +45,38 @@ export function usePortalDashboard() {
     setError(null);
 
     try {
-      // Fetch critical stats in parallel with shorter timeouts and better error handling
-      // Use Promise.allSettled to prevent one failure from blocking all data
-      const [
-        totalLeadsResult,
-        leadReadyResult,
-        deliveredResult,
-        creditResult,
-        offersResult,
-        membersResult,
-        contactedResult,
-        qualifyingResult,
-      ] = await Promise.allSettled([
+      // Use tenant_funnel_stats view for all aggregated stats (single query instead of 8)
+      const [funnelStatsResult, teamMembersResult] = await Promise.allSettled([
         queryWithTimeout(
-          supabase.from("lead_offers").select("id", { count: "exact", head: true }).eq("tenant_id", activeTenantId),
-          8000, // Reduced from 10000
-          "total leads",
-          false // Disable retry for faster failure
-        ),
-        queryWithTimeout(
-          supabase.from("lead_offers").select("id", { count: "exact", head: true }).eq("tenant_id", activeTenantId).eq("status", "LEAD_READY"),
-          8000,
-          "lead ready count",
+          supabase
+            .from("tenant_funnel_stats")
+            .select("*")
+            .eq("tenant_id", activeTenantId)
+            .maybeSingle(),
+          10000, // Increased timeout for credit balance
+          "tenant funnel stats",
           false
         ),
         queryWithTimeout(
-          supabase.from("deliveries").select("id", { count: "exact", head: true }).eq("tenant_id", activeTenantId).eq("status", "DELIVERED"),
-          8000,
-          "delivered count",
-          false
-        ),
-        queryWithTimeout(
-          supabase.from("tenant_credit_balance").select("current_balance").eq("tenant_id", activeTenantId).maybeSingle(),
-          5000,
-          "credit balance",
-          false // Don't retry credit balance
-        ),
-        queryWithTimeout(
-          supabase.from("offers").select("id", { count: "exact", head: true }).eq("tenant_id", activeTenantId).eq("status", "ACTIVE"),
-          8000,
-          "active offers",
-          false
-        ),
-        queryWithTimeout(
-          supabase.from("tenant_members").select("id", { count: "exact", head: true }).eq("tenant_id", activeTenantId).eq("status", "ACTIVE"),
+          supabase
+            .from("tenant_members")
+            .select("id", { count: "exact", head: true })
+            .eq("tenant_id", activeTenantId)
+            .eq("status", "ACTIVE"),
           8000,
           "team members",
           false
         ),
+      ]);
+
+      // Extract funnel stats
+      const funnelStats = funnelStatsResult.status === "fulfilled" ? funnelStatsResult.value.data : null;
+      const teamMembers = teamMembersResult.status === "fulfilled" ? (teamMembersResult.value.count || 0) : 0;
+
+      // Calculate contacted count (CONTACTED + ENGAGED) and qualifying count (QUALIFYING)
+      // Note: leads_in_chat includes CONTACTED, ENGAGED, QUALIFYING
+      // We need to get them separately for pipelineStats
+      const [contactedCountResult, qualifyingCountResult] = await Promise.allSettled([
         queryWithTimeout(
           supabase
             .from("lead_offers")
@@ -115,32 +99,27 @@ export function usePortalDashboard() {
         ),
       ]);
 
-      // Extract results with fallback to 0 on error
-      const totalLeads = totalLeadsResult.status === "fulfilled" ? (totalLeadsResult.value.count || 0) : 0;
-      const leadReadyCount = leadReadyResult.status === "fulfilled" ? (leadReadyResult.value.count || 0) : 0;
-      const deliveredCount = deliveredResult.status === "fulfilled" ? (deliveredResult.value.count || 0) : 0;
-      const creditData = creditResult.status === "fulfilled" ? creditResult.value.data : null;
-      const activeOffers = offersResult.status === "fulfilled" ? (offersResult.value.count || 0) : 0;
-      const teamMembers = membersResult.status === "fulfilled" ? (membersResult.value.count || 0) : 0;
-      const contactedCount = contactedResult.status === "fulfilled" ? (contactedResult.value.count || 0) : 0;
-      const qualifyingCount = qualifyingResult.status === "fulfilled" ? (qualifyingResult.value.count || 0) : 0;
+      const contactedCount = contactedCountResult.status === "fulfilled" ? (contactedCountResult.value.count || 0) : 0;
+      const qualifyingCount = qualifyingCountResult.status === "fulfilled" ? (qualifyingCountResult.value.count || 0) : 0;
 
-      const total = totalLeads || 0;
-      const delivered = deliveredCount || 0;
+      const totalLeads = funnelStats?.total_leads || 0;
+      const deliveredCount = funnelStats?.leads_delivered || 0;
+      const leadReadyCount = funnelStats?.leads_qualified || 0;
+      const conversionRate = funnelStats?.conversion_rate || (totalLeads > 0 ? Math.round((deliveredCount / totalLeads) * 100) : 0);
 
       setStats({
-        totalLeads: total,
-        leadReadyCount: leadReadyCount || 0,
-        deliveredCount: delivered,
-        conversionRate: total > 0 ? Math.round((delivered / total) * 100) : 0,
-        creditBalance: (creditData as any)?.current_balance || 0,
-        activeOffers: activeOffers || 0,
-        teamMembers: teamMembers || 0,
+        totalLeads,
+        leadReadyCount,
+        deliveredCount,
+        conversionRate: Math.round(conversionRate),
+        creditBalance: funnelStats?.credit_balance || 0,
+        activeOffers: funnelStats?.active_offers_count || 0,
+        teamMembers,
         pipelineStats: {
-          contacted: contactedCount || 0,
-          qualifying: qualifyingCount || 0,
-          leadReady: leadReadyCount || 0,
-          delivered: delivered || 0,
+          contacted: contactedCount,
+          qualifying: qualifyingCount,
+          leadReady: leadReadyCount,
+          delivered: deliveredCount,
         },
       });
 
@@ -385,7 +364,7 @@ export function usePortalBilling() {
           .select("current_balance")
           .eq("tenant_id", activeTenantId)
           .maybeSingle(),
-        5000,
+        10000, // Increased timeout to prevent missing credits
         "credit balance",
         false // Don't retry balance queries
       );

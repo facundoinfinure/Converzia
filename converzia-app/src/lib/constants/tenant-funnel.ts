@@ -32,8 +32,8 @@ export const TENANT_FUNNEL_STAGES: TenantFunnelStage[] = [
   {
     key: "received",
     label: "Recibidos",
-    description: "Todos los leads recibidos para este proyecto",
-    statuses: ["PENDING_MAPPING", "TO_BE_CONTACTED", "CONTACTED", "ENGAGED", "QUALIFYING", "SCORED", "LEAD_READY", "SENT_TO_DEVELOPER", "DISQUALIFIED", "STOPPED", "COOLING", "REACTIVATION"],
+    description: "Leads recibidos pendientes de mapeo o contacto",
+    statuses: ["PENDING_MAPPING", "TO_BE_CONTACTED"],
     color: "from-slate-500 to-slate-600",
     bgColor: "bg-slate-500/10",
     textColor: "text-slate-400",
@@ -101,6 +101,7 @@ export function getFunnelStageByStatus(status: string): TenantFunnelStage | unde
  */
 export interface DatabaseFunnelStats {
   total_leads?: number;
+  leads_pending_mapping?: number;
   leads_pending_contact?: number;
   leads_in_chat?: number;
   leads_qualified?: number;
@@ -119,10 +120,11 @@ export interface StandardizedFunnelData {
 
 /**
  * Convert database funnel stats to standardized format
+ * "received" = leads_pending_mapping + leads_pending_contact (not total_leads)
  */
 export function standardizeFunnelStats(dbStats: DatabaseFunnelStats): StandardizedFunnelData {
   return {
-    received: dbStats.total_leads || 0,
+    received: (dbStats.leads_pending_mapping || 0) + (dbStats.leads_pending_contact || 0),
     in_chat: dbStats.leads_in_chat || 0,
     qualified: dbStats.leads_qualified || 0,
     delivered: dbStats.leads_delivered || 0,
