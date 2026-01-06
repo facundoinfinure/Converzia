@@ -97,10 +97,10 @@ interface AdminState {
 
 interface AdminContextType extends AdminState {
   // Update methods
-  updateStats: (stats: AdminDashboardStats) => void;
+  updateStats: (stats: AdminDashboardStats | ((prev: AdminDashboardStats | null) => AdminDashboardStats)) => void;
   updateRecentActivity: (activity: RecentActivity[]) => void;
   updatePendingApprovals: (approvals: PendingApproval[]) => void;
-  updateBilling: (billing: AdminState["billing"]) => void;
+  updateBilling: (billing: AdminState["billing"] | ((prev: AdminState["billing"]) => AdminState["billing"])) => void;
   
   // Loading state methods
   setInitialLoading: (loading: boolean) => void;
@@ -171,10 +171,10 @@ export function AdminProvider({ children }: AdminProviderProps) {
   const [state, setState] = useState<AdminState>(initialState);
 
   // Update methods
-  const updateStats = useCallback((stats: AdminDashboardStats) => {
+  const updateStats = useCallback((stats: AdminDashboardStats | ((prev: AdminDashboardStats | null) => AdminDashboardStats)) => {
     setState((prev) => ({
       ...prev,
-      stats,
+      stats: typeof stats === "function" ? stats(prev.stats) : stats,
       lastUpdated: { ...prev.lastUpdated, stats: Date.now() },
       errors: { ...prev.errors, stats: null },
     }));
@@ -198,10 +198,10 @@ export function AdminProvider({ children }: AdminProviderProps) {
     }));
   }, []);
 
-  const updateBilling = useCallback((billing: AdminState["billing"]) => {
+  const updateBilling = useCallback((billing: AdminState["billing"] | ((prev: AdminState["billing"]) => AdminState["billing"])) => {
     setState((prev) => ({
       ...prev,
-      billing,
+      billing: typeof billing === "function" ? billing(prev.billing) : billing,
       lastUpdated: { ...prev.lastUpdated, billing: Date.now() },
       errors: { ...prev.errors, billing: null },
     }));

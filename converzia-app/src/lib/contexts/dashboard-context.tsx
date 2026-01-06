@@ -268,11 +268,6 @@ export function DashboardProvider({ children }: DashboardProviderProps) {
     ]);
   }, [refreshStats, refreshLeads, refreshTeam, refreshOffers, refreshBilling]);
 
-  // Method to set refresh callbacks (used by use-dashboard-initial-load)
-  const setRefreshCallbacks = useCallback((callbacks: typeof refreshCallbacks) => {
-    setRefreshCallbacks(callbacks);
-  }, []);
-
   const value: DashboardContextType = {
     ...state,
     updateStats,
