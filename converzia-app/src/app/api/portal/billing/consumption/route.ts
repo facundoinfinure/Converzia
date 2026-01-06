@@ -44,11 +44,20 @@ export async function GET(request: NextRequest) {
     // Get authenticated user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
+      console.error("[Billing Consumption] Auth error:", {
+        error: authError,
+        hasUser: !!user,
+      });
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
     
+    console.log("[Billing Consumption] User authenticated:", {
+      userId: user.id,
+      email: user.email,
+    });
+    
     // Get user's active tenant membership
-    const { data: membershipData } = await queryWithTimeout(
+    const { data: membershipData, error: membershipError } = await queryWithTimeout(
       supabase
         .from("tenant_members")
         .select("tenant_id, role")
@@ -59,13 +68,29 @@ export async function GET(request: NextRequest) {
       "get tenant membership"
     );
     
+    if (membershipError) {
+      console.error("[Billing Consumption] Membership query failed:", {
+        userId: user.id,
+        error: membershipError,
+      });
+    }
+    
     const membership = membershipData as { tenant_id: string; role: string } | null;
     
     if (!membership) {
+      console.error("[Billing Consumption] No active membership found:", {
+        userId: user.id,
+      });
       return NextResponse.json({ error: "No tiene acceso a ningún tenant" }, { status: 403 });
     }
     
     const tenantId = membership.tenant_id;
+    
+    console.log("[Billing Consumption] Tenant membership verified:", {
+      userId: user.id,
+      tenantId,
+      role: membership.role,
+    });
     
     // Parse query params
     const { searchParams } = new URL(request.url);
@@ -145,8 +170,17 @@ export async function GET(request: NextRequest) {
     );
     
     if (ledgerError) {
-      console.error("Error fetching ledger:", ledgerError);
-      return NextResponse.json({ error: "Error al obtener historial" }, { status: 500 });
+      console.error("[Billing Consumption] Ledger query failed:", {
+        tenantId,
+        code: ledgerError.code,
+        message: ledgerError.message,
+        details: ledgerError.details,
+        hint: ledgerError.hint,
+      });
+      return NextResponse.json({ 
+        error: "Error al obtener historial",
+        details: ledgerError.message 
+      }, { status: 500 });
     }
     
     // Transform and filter transactions
@@ -252,7 +286,7 @@ export async function GET(request: NextRequest) {
     const paginatedTransactions = allTransactions.slice(offset, offset + limit);
     
     // Get current balance
-    const { data: balanceData } = await queryWithTimeout(
+    const { data: balanceData, error: balanceError } = await queryWithTimeout(
       supabase
         .from("tenant_credit_balance")
         .select("current_balance")
@@ -261,6 +295,13 @@ export async function GET(request: NextRequest) {
       5000,
       "get balance"
     );
+    
+    if (balanceError) {
+      console.warn("[Billing Consumption] Balance query failed (non-fatal):", {
+        tenantId,
+        error: balanceError,
+      });
+    }
     
     const balance = balanceData as { current_balance: number } | null;
     
@@ -288,6 +329,13 @@ export async function GET(request: NextRequest) {
       .filter((s) => s.transaction_type === 'CREDIT_REFUND')
       .reduce((sum, s) => sum + Math.abs(s.amount), 0);
     
+    console.log("[Billing Consumption] Successfully retrieved data:", {
+      tenantId,
+      transactionCount: paginatedTransactions.length,
+      totalCount,
+      balance: balance?.current_balance || 0,
+    });
+
     return NextResponse.json({
       success: true,
       data: {
@@ -307,9 +355,15 @@ export async function GET(request: NextRequest) {
       }
     });
   } catch (error) {
-    console.error("Consumption API error:", error);
+    console.error("[Billing Consumption] Unexpected error:", {
+      error: error instanceof Error ? error.message : error,
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return NextResponse.json(
-      { error: "Error interno del servidor" },
+      { 
+        error: "Error interno del servidor",
+        details: error instanceof Error ? error.message : "Unknown error"
+      },
       { status: 500 }
     );
   }

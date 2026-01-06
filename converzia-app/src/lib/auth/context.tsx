@@ -139,12 +139,13 @@ export function AuthProvider({ children, initialUser = null }: AuthProviderProps
               name,
               slug,
               status,
+              logo_url,
               settings
             )
           `)
           .eq("user_id", userId)
           .eq("status", "ACTIVE"),
-        30000,
+        10000,
         "fetch user memberships"
       );
 
