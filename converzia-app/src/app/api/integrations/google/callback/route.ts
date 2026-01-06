@@ -49,7 +49,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Validate environment
-      if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+    if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+      console.error("[Google OAuth Callback] Missing environment variables");
       const redirectUrl = returnUrl || `${APP_URL}/admin/tenants/${tenantId}`;
       return NextResponse.redirect(
         `${redirectUrl}?error=google_not_configured`

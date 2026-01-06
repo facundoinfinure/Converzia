@@ -151,7 +151,7 @@ export function IntegrationConfigModal({
         `/api/integrations/google/spreadsheets?tenant_id=${tenantId}`
       );
       
-      // Handle non-JSON responses (like 500 errors)
+      // Handle non-JSON responses (like 500/503 errors)
       if (!response.ok) {
         const errorText = await response.text();
         let errorMessage = "Error al verificar conexión";
@@ -163,6 +163,8 @@ export function IntegrationConfigModal({
           // If response is not JSON, use status-based message
           if (response.status === 401) {
             errorMessage = "No hay cuenta de Google conectada";
+          } else if (response.status === 503) {
+            errorMessage = "Google OAuth no está configurado en el servidor";
           } else if (response.status === 500) {
             errorMessage = "Error del servidor al verificar conexión";
           }
@@ -260,8 +262,8 @@ export function IntegrationConfigModal({
           const errorData = JSON.parse(errorText);
           errorMessage = errorData.error || errorMessage;
         } catch {
-          if (response.status === 500) {
-            errorMessage = "Google OAuth no está configurado en el servidor. Contactá al administrador.";
+          if (response.status === 503 || response.status === 500) {
+            errorMessage = "Google OAuth no está configurado en el servidor. El administrador del sistema debe configurar las credenciales de Google OAuth.";
           }
         }
         

@@ -25,8 +25,8 @@ export async function GET(request: NextRequest) {
         hasClientSecret: !!GOOGLE_CLIENT_SECRET,
       });
       return NextResponse.json(
-        { error: "Google OAuth no está configurado" },
-        { status: 500 }
+        { error: "Google OAuth no está configurado en el servidor" },
+        { status: 503 } // Service Unavailable - más apropiado que 500
       );
     }
 

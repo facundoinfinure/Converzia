@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
           error: "Google OAuth no está configurado en el servidor", 
           connected: false 
         },
-        { status: 500 }
+        { status: 503 } // Service Unavailable - más apropiado que 500
       );
     }
 
@@ -236,6 +236,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { error: "Sesión de Google expirada", connected: false },
         { status: 401 }
+      );
+    }
+
+    // Check if it's a configuration error
+    if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+      return NextResponse.json(
+        { 
+          error: "Google OAuth no está configurado en el servidor",
+          connected: false 
+        },
+        { status: 503 }
       );
     }
 
