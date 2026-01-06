@@ -126,29 +126,6 @@ export default function PortalIntegrationsPage() {
     existingId?: string;
   } | null>(null);
 
-  // Handle OAuth callback success message
-  useEffect(() => {
-    const googleConnected = searchParams.get("google_connected");
-    const error = searchParams.get("error");
-
-    if (googleConnected === "true") {
-      toast.success("Cuenta de Google conectada correctamente");
-      router.replace("/portal/integrations", { scroll: false });
-      fetchIntegrations();
-    } else if (error) {
-      const errorMessages: Record<string, string> = {
-        google_auth_denied: "Acceso a Google denegado",
-        google_auth_invalid: "Error de autenticación con Google",
-        google_auth_no_tokens: "No se recibieron tokens de Google",
-        google_auth_save_failed: "Error al guardar la conexión",
-        google_not_configured: "Google OAuth no está configurado",
-        google_auth_failed: "Error de autenticación con Google",
-      };
-      toast.error(errorMessages[error] || "Error de autenticación");
-      router.replace("/portal/integrations", { scroll: false });
-    }
-  }, [searchParams, router, toast, fetchIntegrations]);
-
   // Fetch integrations
   const fetchIntegrations = useCallback(async () => {
     if (!activeTenantId) return;
@@ -177,6 +154,29 @@ export default function PortalIntegrationsPage() {
       setIntegrationsLoading(false);
     }
   }, [activeTenantId, supabase, toast]);
+
+  // Handle OAuth callback success message
+  useEffect(() => {
+    const googleConnected = searchParams.get("google_connected");
+    const error = searchParams.get("error");
+
+    if (googleConnected === "true") {
+      toast.success("Cuenta de Google conectada correctamente");
+      router.replace("/portal/integrations", { scroll: false });
+      fetchIntegrations();
+    } else if (error) {
+      const errorMessages: Record<string, string> = {
+        google_auth_denied: "Acceso a Google denegado",
+        google_auth_invalid: "Error de autenticación con Google",
+        google_auth_no_tokens: "No se recibieron tokens de Google",
+        google_auth_save_failed: "Error al guardar la conexión",
+        google_not_configured: "Google OAuth no está configurado",
+        google_auth_failed: "Error de autenticación con Google",
+      };
+      toast.error(errorMessages[error] || "Error de autenticación");
+      router.replace("/portal/integrations", { scroll: false });
+    }
+  }, [searchParams, router, toast, fetchIntegrations]);
 
   useEffect(() => {
     if (activeTenantId) {

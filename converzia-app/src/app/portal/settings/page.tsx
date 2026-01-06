@@ -73,11 +73,6 @@ export default function PortalSettingsPage() {
 
   const canEdit = hasPermission?.("settings:manage") ?? false;
 
-  // Load tenant and pricing data
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
   const loadData = useCallback(async () => {
     if (!activeTenantId) return;
     setIsLoading(true);
@@ -137,6 +132,11 @@ export default function PortalSettingsPage() {
       setIsLoading(false);
     }
   }, [activeTenantId, supabase, toast]);
+
+  // Load tenant and pricing data
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handleSave = async () => {
     if (!activeTenantId || !canEdit) {

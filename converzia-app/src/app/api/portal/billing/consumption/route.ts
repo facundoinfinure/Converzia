@@ -150,7 +150,7 @@ export async function GET(request: NextRequest) {
     }
     
     // Transform and filter transactions
-    const allTransactions = (ledgerData || []).map((tx: any) => {
+    const allTransactions = (Array.isArray(ledgerData) ? ledgerData : []).map((tx: any) => {
       const isPurchase = tx.transaction_type === "CREDIT_PURCHASE";
       const billingOrder = Array.isArray(tx.billing_order) ? tx.billing_order[0] : tx.billing_order;
       const purchaser = Array.isArray(tx.purchaser) ? tx.purchaser[0] : tx.purchaser;

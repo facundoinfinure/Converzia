@@ -125,17 +125,18 @@ export default function PortalLeadDetailPage() {
       }
 
       // Transform the data to match our interface
-      const lead = Array.isArray(leadOfferData.lead) ? leadOfferData.lead[0] : leadOfferData.lead;
-      const offer = Array.isArray(leadOfferData.offer) ? leadOfferData.offer[0] : leadOfferData.offer;
-      const delivery = Array.isArray(leadOfferData.delivery) ? leadOfferData.delivery[0] : leadOfferData.delivery;
+      const data = leadOfferData as any;
+      const lead = Array.isArray(data.lead) ? data.lead[0] : data.lead;
+      const offer = Array.isArray(data.offer) ? data.offer[0] : data.offer;
+      const delivery = Array.isArray(data.delivery) ? data.delivery[0] : data.delivery;
 
       setLeadDetails({
-        id: leadOfferData.id,
-        status: leadOfferData.status,
-        score_total: leadOfferData.score_total,
-        qualification_fields: leadOfferData.qualification_fields,
-        created_at: leadOfferData.created_at,
-        updated_at: leadOfferData.updated_at,
+        id: data.id,
+        status: data.status,
+        score_total: data.score_total,
+        qualification_fields: data.qualification_fields,
+        created_at: data.created_at,
+        updated_at: data.updated_at,
         lead: lead || null,
         offer: offer || null,
         delivery: delivery || null,
@@ -219,7 +220,7 @@ export default function PortalLeadDetailPage() {
           { label: "Mis Leads", href: "/portal/leads" },
           { label: "Detalle" },
         ]}
-        action={
+        actions={
           <Button
             variant="secondary"
             onClick={() => router.push("/portal/leads")}
