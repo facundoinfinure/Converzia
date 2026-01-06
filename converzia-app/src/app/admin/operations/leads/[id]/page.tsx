@@ -208,7 +208,7 @@ export default function LeadDetailPage({ params }: Props) {
       setLeadOffer(processedData);
       
       // Load conversation messages
-      const { data: conversationData } = await queryWithTimeout(
+      const { data: conversationData } = await queryWithTimeout<{ id: string }[]>(
         supabase
           .from("conversations")
           .select("id")
@@ -220,10 +220,10 @@ export default function LeadDetailPage({ params }: Props) {
         "conversation lookup"
       );
       
-      if (conversationData && conversationData.length > 0) {
+      if (conversationData && Array.isArray(conversationData) && conversationData.length > 0) {
         const conversationId = conversationData[0].id;
         
-        const { data: messagesData } = await queryWithTimeout(
+        const { data: messagesData } = await queryWithTimeout<Message[]>(
           supabase
             .from("messages")
             .select("id, direction, sender, content, media_type, media_url, sent_at, extracted_data")
@@ -233,13 +233,13 @@ export default function LeadDetailPage({ params }: Props) {
           "messages"
         );
         
-        if (messagesData) {
+        if (messagesData && Array.isArray(messagesData)) {
           setMessages(messagesData);
         }
       }
       
       // Load lead events
-      const { data: eventsData } = await queryWithTimeout(
+      const { data: eventsData } = await queryWithTimeout<LeadEvent[]>(
         supabase
           .from("lead_events")
           .select("id, event_type, details, actor_type, created_at")
@@ -250,12 +250,12 @@ export default function LeadDetailPage({ params }: Props) {
         "lead events"
       );
       
-      if (eventsData) {
+      if (eventsData && Array.isArray(eventsData)) {
         setEvents(eventsData);
       }
       
       // Load deliveries
-      const { data: deliveriesData } = await queryWithTimeout(
+      const { data: deliveriesData } = await queryWithTimeout<Delivery[]>(
         supabase
           .from("deliveries")
           .select("id, status, created_at, delivered_at, error_message, integrations_succeeded, integrations_failed")
@@ -265,7 +265,7 @@ export default function LeadDetailPage({ params }: Props) {
         "deliveries"
       );
       
-      if (deliveriesData) {
+      if (deliveriesData && Array.isArray(deliveriesData)) {
         setDeliveries(deliveriesData);
       }
       
@@ -325,9 +325,9 @@ export default function LeadDetailPage({ params }: Props) {
               items={[
                 { label: "Ver en Chatwoot", icon: <MessageSquare className="h-4 w-4" />, onClick: () => {} },
                 { label: "Reintentar entrega", icon: <RefreshCw className="h-4 w-4" />, onClick: () => {} },
-                { type: "separator" },
-                { label: "Marcar como STOPPED", icon: <XCircle className="h-4 w-4" />, onClick: () => {}, variant: "danger" },
-              ]}
+                { label: "", divider: true },
+                { label: "Marcar como STOPPED", icon: <XCircle className="h-4 w-4" />, onClick: () => {}, danger: true },
+              ] as any}
             />
           </div>
         }
@@ -560,7 +560,7 @@ export default function LeadDetailPage({ params }: Props) {
       </div>
       
       {/* Tabs: Conversation, Timeline, Deliveries */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs defaultValue="conversation" value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabTrigger value="conversation" count={messages.length}>
             <MessageSquare className="h-4 w-4 mr-1.5" />

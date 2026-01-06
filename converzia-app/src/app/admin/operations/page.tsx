@@ -352,15 +352,15 @@ export default function OperationsPage() {
         }
         
         // Fetch tenant options for filter
-        const { data: tenantsData } = await queryWithTimeout(
+        const { data: tenantsData } = await queryWithTimeout<{ id: string; name: string }[]>(
           supabase.from("tenants").select("id, name").eq("status", "ACTIVE").order("name"),
           10000,
           "tenants list"
         );
-        if (tenantsData) {
+        if (tenantsData && Array.isArray(tenantsData)) {
           setTenantOptions([
             { value: "", label: "Todos los tenants" },
-            ...tenantsData.map((t: any) => ({ value: t.id, label: t.name }))
+            ...tenantsData.map((t) => ({ value: t.id, label: t.name }))
           ]);
         }
         
@@ -454,11 +454,11 @@ export default function OperationsPage() {
             query = query.eq("tenant_id", tenantFilter);
           }
           
-          const { data, error } = await queryWithTimeout(query, 15000, "pipeline leads");
+          const { data, error } = await queryWithTimeout<any[]>(query, 15000, "pipeline leads");
           
           if (error) {
             console.error("Error fetching pipeline leads:", error);
-          } else if (data) {
+          } else if (data && Array.isArray(data)) {
             setPipelineLeads(
               data.map((d: any) => ({
                 ...d,

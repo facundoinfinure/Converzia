@@ -152,7 +152,7 @@ import { ActionDropdown } from "./Dropdown";
 interface ResponsiveActionMenuProps {
   items: Array<{
     label: string;
-    icon?: LucideIcon;
+    icon?: LucideIcon | ReactNode;
     onClick?: () => void;
     danger?: boolean;
     divider?: boolean;
@@ -204,8 +204,14 @@ export function ResponsiveActionMenu({
     );
   }
 
-  // Desktop: use existing ActionDropdown
-  return <ActionDropdown items={items} />;
+  // Desktop: use existing ActionDropdown - convert icons to ReactNode
+  const dropdownItems = items.map(item => ({
+    ...item,
+    icon: item.icon && typeof item.icon === 'function' 
+      ? <item.icon className="h-4 w-4" /> 
+      : item.icon,
+  }));
+  return <ActionDropdown items={dropdownItems} />;
 }
 
 // ============================================
