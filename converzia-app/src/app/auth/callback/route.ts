@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
+import type { Database } from "@/types/database";
 
 // Publishable key - supports both new and legacy formats
 const getPublishableKey = () =>
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest) {
   if (code) {
     const cookieStore = await cookies();
     
-    const supabase = createServerClient(
+    const supabase = createServerClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       getPublishableKey()!,
       {
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
           getAll() {
             return cookieStore.getAll();
           },
-          setAll(cookiesToSet: { name: string; value: string; options?: any }[]) {
+          setAll(cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]) {
             try {
               cookiesToSet.forEach(({ name, value, options }) =>
                 cookieStore.set(name, value, options)
@@ -80,7 +81,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if user is Converzia admin
-    if ((profile as any).is_converzia_admin) {
+    if (profile.is_converzia_admin) {
       return NextResponse.redirect(`${origin}/admin`);
     }
 

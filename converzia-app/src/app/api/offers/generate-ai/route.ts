@@ -2,18 +2,36 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { searchKnowledge } from "@/lib/services/rag";
 import { getOpenAI, getModel } from "@/lib/services/openai";
+import { z } from "zod";
+import { logger, sanitizeForLogging } from "@/lib/utils/logger";
+
+const generateOfferSchema = z.object({
+  tenant_id: z.string().uuid('Invalid tenant_id format'),
+  offer_type: z.enum(['PROPERTY', 'AUTO', 'LOAN', 'INSURANCE']),
+  name: z.string().min(1, 'Name is required').max(200, 'Name too long'),
+  city: z.string().max(100).optional(),
+  zone: z.string().max(100).optional(),
+});
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { tenant_id, offer_type, name } = body;
 
-    if (!tenant_id || !offer_type || !name) {
+    // Validate input with Zod
+    const validation = generateOfferSchema.safeParse(body);
+    if (!validation.success) {
+      const firstError = validation.error.errors[0];
+      logger.warn('Invalid offer generation request', {
+        error: `${firstError.path.join('.')}: ${firstError.message}`,
+        body: sanitizeForLogging(body),
+      });
       return NextResponse.json(
-        { error: "tenant_id, offer_type y name son requeridos" },
+        { error: `${firstError.path.join('.')}: ${firstError.message}` },
         { status: 400 }
       );
     }
+
+    const { tenant_id, offer_type, name } = validation.data;
 
     const supabase = createAdminClient();
 
@@ -105,10 +123,10 @@ ${ragContext ? `\n\nCONTEXTO DEL RAG:\n${ragContext}` : "\n\nADVERTENCIA: No se 
         },
       }
     );
-  } catch (error: any) {
-    console.error("Error generating offer with AI:", error);
+  } catch (error) {
+    logger.error("Error generating offer with AI", error);
     return NextResponse.json(
-      { success: false, error: error?.message || "Error al generar la oferta con AI" },
+      { success: false, error: error instanceof Error ? error.message : "Error al generar la oferta con AI" },
       {
         status: 500,
         headers: {

@@ -95,6 +95,7 @@ export default function SettingsPage() {
     selected_page_id?: string;
     selected_waba_id?: string;
     selected_phone_number_id?: string;
+    token_expired?: boolean;
   } | null>(null);
 
   // Check Meta OAuth connection
@@ -103,12 +104,14 @@ export default function SettingsPage() {
     try {
       const response = await fetch("/api/integrations/meta/config");
       const data = await response.json();
-      
-      console.log("Meta config response:", data); // Debug log
-      
+      console.log("Meta config response:", data);
+
       if (response.ok && data.connected) {
         setMetaConnected(true);
-        setMetaConfig(data);
+        setMetaConfig({
+          ...data,
+          token_expired: data.token_expired || false,
+        });
       } else {
         setMetaConnected(false);
         setMetaConfig(null);
@@ -162,6 +165,7 @@ export default function SettingsPage() {
 
   // Update Meta config selections
   const handleUpdateMetaConfig = async (updates: {
+    selected_ad_account_id?: string;
     selected_page_id?: string;
     selected_waba_id?: string;
     selected_phone_number_id?: string;
@@ -554,28 +558,68 @@ export default function SettingsPage() {
 
                 {!metaChecking && metaConnected === true && metaConfig ? (
                   <div className="space-y-6">
+                    {/* Token expired warning */}
+                    {metaConfig.token_expired && (
+                      <Alert variant="warning">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-medium">Token de Meta expirado</p>
+                            <p className="text-sm mt-1">Tu sesión de Meta expiró. Reconectá para seguir usando las funcionalidades de ads y mapeo.</p>
+                          </div>
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={handleConnectMeta}
+                            isLoading={metaConnecting}
+                            leftIcon={<RefreshCw className="h-4 w-4" />}
+                          >
+                            Reconectar
+                          </Button>
+                        </div>
+                      </Alert>
+                    )}
+                    
                     {/* User info */}
                     <div className="flex items-center justify-between p-4 bg-[var(--bg-tertiary)] rounded-lg">
                       <div className="flex items-center gap-3">
-                        <CheckCircle className="h-5 w-5 text-green-500" />
+                        {metaConfig.token_expired ? (
+                          <XCircle className="h-5 w-5 text-amber-500" />
+                        ) : (
+                          <CheckCircle className="h-5 w-5 text-green-500" />
+                        )}
                         <div>
                           <p className="font-medium text-[var(--text-primary)]">
                             Conectado como {metaConfig.user_name || "Usuario de Meta"}
                           </p>
                           <p className="text-sm text-[var(--text-tertiary)]">
                             {metaConfig.ad_accounts?.length || 0} Ad Accounts • {metaConfig.pages?.length || 0} Pages • {metaConfig.whatsapp_business_accounts?.length || 0} WhatsApp
+                            {metaConfig.token_expired && (
+                              <span className="text-amber-500 ml-2">• Token expirado</span>
+                            )}
                           </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={checkMetaConnection}
-                          leftIcon={<RefreshCw className="h-4 w-4" />}
-                        >
-                          Actualizar
-                        </Button>
+                        {metaConfig.token_expired ? (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={handleConnectMeta}
+                            isLoading={metaConnecting}
+                            leftIcon={<RefreshCw className="h-4 w-4" />}
+                          >
+                            Reconectar
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={checkMetaConnection}
+                            leftIcon={<RefreshCw className="h-4 w-4" />}
+                          >
+                            Actualizar
+                          </Button>
+                        )}
                         <Button
                           variant="secondary"
                           size="sm"

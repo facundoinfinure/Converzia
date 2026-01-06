@@ -167,12 +167,43 @@ async function sendToSlack(alert: Alert): Promise<void> {
 }
 
 async function sendToEmail(alert: Alert): Promise<void> {
-  // TODO: Implement email sending (Resend, SendGrid, etc.)
-  logger.info("Email alert would be sent", {
-    alertName: alert.config.name,
-    severity: alert.config.severity,
-    message: alert.message,
-  });
+  const { sendCriticalErrorAlert, sendWebhookFailureAlert, sendLowCreditsAlert } = await import('@/lib/services/email');
+
+  try {
+    // Determine which email template to use based on alert type
+    if (alert.config.name.includes('webhook') || alert.config.name.includes('Webhook')) {
+      await sendWebhookFailureAlert(
+        alert.context?.webhookType || 'unknown',
+        alert.context?.failureCount || 1,
+        alert.message
+      );
+    } else if (alert.config.name.includes('credits') || alert.config.name.includes('Credits')) {
+      // This would need tenant info from context
+      if (alert.context?.tenantEmail && alert.context?.tenantName) {
+        await sendLowCreditsAlert(
+          alert.context.tenantEmail,
+          alert.context.tenantName,
+          alert.context.currentBalance || 0
+        );
+      }
+    } else {
+      // Generic critical error alert
+      await sendCriticalErrorAlert(
+        alert.config.name,
+        alert.message,
+        alert.context?.tenantId
+      );
+    }
+
+    logger.info("Email alert sent successfully", {
+      alertName: alert.config.name,
+      severity: alert.config.severity,
+    });
+  } catch (error) {
+    logger.error("Failed to send email alert", error, {
+      alertName: alert.config.name,
+    });
+  }
 }
 
 async function sendToWebhook(alert: Alert): Promise<void> {

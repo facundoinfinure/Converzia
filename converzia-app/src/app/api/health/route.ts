@@ -17,7 +17,11 @@ export async function GET() {
     services: {
       database: "connected" | "disconnected" | "error";
       redis: "connected" | "disconnected" | "not_configured";
-      openai?: "configured" | "not_configured";
+      openai: "configured" | "not_configured" | "error";
+      resend: "configured" | "not_configured";
+      chatwoot: "configured" | "not_configured";
+      meta: "configured" | "not_configured";
+      stripe: "configured" | "not_configured";
     };
     env?: {
       valid: boolean;
@@ -31,6 +35,11 @@ export async function GET() {
     services: {
       database: "disconnected",
       redis: "not_configured",
+      openai: "not_configured",
+      resend: "not_configured",
+      chatwoot: "not_configured",
+      meta: "not_configured",
+      stripe: "not_configured",
     },
   };
 
@@ -80,17 +89,42 @@ export async function GET() {
     health.services.redis = "not_configured";
   }
 
-  // Check OpenAI (optional)
+  // Check OpenAI
   if (process.env.OPENAI_API_KEY) {
-    health.services.openai = "configured";
+    try {
+      // Optionally test the API key by making a lightweight request
+      health.services.openai = "configured";
+    } catch (error) {
+      health.services.openai = "error";
+      errors.push("OpenAI API key configured but validation failed");
+    }
   } else {
     health.services.openai = "not_configured";
+    errors.push("OpenAI API key not configured");
   }
+
+  // Check Resend
+  health.services.resend = process.env.RESEND_API_KEY ? "configured" : "not_configured";
+
+  // Check Chatwoot
+  health.services.chatwoot = (process.env.CHATWOOT_API_URL && process.env.CHATWOOT_API_TOKEN)
+    ? "configured"
+    : "not_configured";
+
+  // Check Meta/Facebook
+  health.services.meta = (process.env.META_APP_SECRET && process.env.META_WEBHOOK_VERIFY_TOKEN)
+    ? "configured"
+    : "not_configured";
+
+  // Check Stripe
+  health.services.stripe = process.env.STRIPE_SECRET_KEY ? "configured" : "not_configured";
 
   // Set overall status
   if (errors.length > 0 || health.services.database !== "connected") {
     health.status = "degraded";
   }
+
+  health.errors = errors.length > 0 ? errors : undefined;
 
   // Add version if available
   if (process.env.VERCEL_GIT_COMMIT_SHA) {

@@ -218,8 +218,20 @@ export async function GET(request: NextRequest) {
               "insert credit alert event"
             );
             
-            // TODO: Send email notification
-            console.log(`Tenant ${tenant.name} (${item.tenant_id}) has low credits: ${item.current_balance}`);
+            // Send email notification
+            try {
+              const { sendLowCreditsAlert } = await import('@/lib/services/email');
+              if (tenant.contact_email) {
+                await sendLowCreditsAlert(
+                  tenant.contact_email,
+                  tenant.name,
+                  item.current_balance
+                );
+                console.log(`Low credits alert sent to ${tenant.name}: ${item.current_balance} credits`);
+              }
+            } catch (emailError) {
+              console.error(`Failed to send low credits email to ${tenant.name}:`, emailError);
+            }
             creditAlerts.sent++;
           } catch (err) {
             console.error(`Error sending credit alert to tenant ${item.tenant_id}:`, err);

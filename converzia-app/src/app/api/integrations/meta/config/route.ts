@@ -40,9 +40,14 @@ export async function GET(request: NextRequest) {
     }
 
     const config = integration.config as any;
+    const oauthTokens = integration.oauth_tokens as any;
+    
+    // Check if token is expired
+    const tokenExpired = oauthTokens?.expires_at && Date.now() > oauthTokens.expires_at;
 
     return NextResponse.json({
       connected: true,
+      token_expired: tokenExpired,
       user_name: config?.user_name,
       ad_accounts: config?.ad_accounts || [],
       pages: (config?.pages || []).map((p: any) => ({

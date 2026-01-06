@@ -14,15 +14,13 @@ export default function AdminLayout({
     <PendingApprovalsProvider>
       <AdminSidebarProvider>
         <div className="flex min-h-screen w-full bg-background">
-        <AdminSidebar />
-        
+          <AdminSidebar />
           <SidebarInset className="flex flex-col">
-          <AdminHeader />
-          
-          {/* Main content with padding for mobile bottom nav */}
-          <main className="flex-1 pb-[calc(72px+env(safe-area-inset-bottom,0px))] lg:pb-0">
-            {children}
-          </main>
+            <AdminHeader />
+            {/* Main content with padding for mobile bottom nav */}
+            <main className="flex-1 pb-[calc(72px+env(safe-area-inset-bottom,0px))] lg:pb-0">
+              {children}
+            </main>
           </SidebarInset>
         </div>
       </AdminSidebarProvider>

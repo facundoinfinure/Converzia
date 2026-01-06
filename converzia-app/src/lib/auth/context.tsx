@@ -95,7 +95,7 @@ export function AuthProvider({ children, initialUser = null }: AuthProviderProps
           .select("*")
           .eq("id", userId)
           .single(),
-        15000,
+        20000,
         "fetch user profile"
       );
 
@@ -143,7 +143,7 @@ export function AuthProvider({ children, initialUser = null }: AuthProviderProps
           `)
           .eq("user_id", userId)
           .eq("status", "ACTIVE"),
-        15000,
+        20000,
         "fetch user memberships"
       );
 
@@ -197,12 +197,15 @@ export function AuthProvider({ children, initialUser = null }: AuthProviderProps
 
     initAuth();
 
-    // Start health monitoring
-    healthMonitor.start(30000, (result) => {
-      if (!result.connected && !result.authenticated) {
-        console.warn("⚠️ Supabase health check failed:", result.error);
-      }
-    });
+    // Start health monitoring (non-blocking, runs in background)
+    // Delay initial check to avoid blocking app initialization
+    setTimeout(() => {
+      healthMonitor.start(30000, (result) => {
+        if (!result.connected && !result.authenticated) {
+          console.warn("⚠️ Supabase health check failed:", result.error);
+        }
+      });
+    }, 2000); // Wait 2 seconds before starting health checks
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: any, session: any) => {

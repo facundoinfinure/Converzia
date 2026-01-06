@@ -5,15 +5,15 @@ const nextConfig: NextConfig = {
   
   // Security: Hide X-Powered-By header
   poweredByHeader: false,
-  
-  // TODO: Fix pre-existing type errors and remove this
+
+  // TypeScript strict mode enabled - No errors allowed in production
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
-  
-  // Ignore ESLint errors during build (warnings are OK)
+
+  // ESLint warnings are OK, but errors will fail the build
   eslint: {
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: false,
   },
   
   images: {

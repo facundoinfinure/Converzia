@@ -311,7 +311,19 @@ export function PlatformAdPicker({
         {/* Error state */}
         {error && (
           <Alert variant="error" title="Error">
-            {error}
+            {error.includes("expired") || error.includes("token") ? (
+              <div>
+                <p>El token de Meta expiró. Por favor, reconectá tu cuenta de Meta.</p>
+                <a 
+                  href="/admin/settings?tab=integraciones" 
+                  className="inline-flex items-center gap-1 mt-2 text-sm font-medium text-[var(--accent-primary)] hover:underline"
+                >
+                  Ir a Configuración →
+                </a>
+              </div>
+            ) : (
+              error
+            )}
           </Alert>
         )}
 
