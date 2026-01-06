@@ -248,7 +248,7 @@ export async function processDelivery(deliveryId: string): Promise<DeliveryResul
             p_integrations_failed: integrationsFailed,
             p_final_status: finalStatus,
           } as any
-        ),
+        ) as Promise<{ data: any; error: any }>,
         30000, // 30 second timeout for critical delivery operation
         "complete_delivery_and_consume_credit",
         true // Enable retry
@@ -358,7 +358,7 @@ async function moveToDeadLetter(
     supabase.rpc("move_to_dead_letter", {
       p_delivery_id: deliveryId,
       p_reason: reason,
-    } as any),
+    } as any) as Promise<{ data: any; error: any }>,
     15000, // 15 second timeout for dead letter operation
     "move_to_dead_letter",
     true // Enable retry
@@ -428,7 +428,7 @@ async function consumeCredit(
       p_delivery_id: deliveryId,
       p_lead_offer_id: leadOfferId,
       p_description: "Lead delivery",
-    } as any),
+    } as any) as Promise<{ data: any; error: any }>,
     20000, // 20 second timeout for credit consumption
     "consume_credit",
     true // Enable retry
@@ -679,7 +679,7 @@ export async function refundCredit(
       p_lead_offer_id: typedDelivery.lead_offer_id,
       p_reason: reason,
       p_created_by: null,
-    } as any),
+    } as any) as Promise<{ data: any; error: any }>,
     20000, // 20 second timeout for credit refund
     "refund_credit",
     true // Enable retry
