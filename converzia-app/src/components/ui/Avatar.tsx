@@ -8,10 +8,13 @@ import { cn } from "@/lib/utils";
 // Root Avatar container
 interface AvatarRootProps extends HTMLAttributes<HTMLDivElement> {
   size?: "xs" | "sm" | "md" | "lg" | "xl";
+  src?: string | null;
+  name?: string;
+  alt?: string;
 }
 
 const AvatarRoot = forwardRef<HTMLDivElement, AvatarRootProps>(
-  ({ className, size = "md", ...props }, ref) => {
+  ({ className, size = "md", src, name, alt, children, ...props }, ref) => {
     const sizes = {
       xs: "h-6 w-6",
       sm: "h-8 w-8",
@@ -20,6 +23,44 @@ const AvatarRoot = forwardRef<HTMLDivElement, AvatarRootProps>(
       xl: "h-16 w-16",
     };
 
+    const getInitials = (n: string) => {
+      return n
+        .split(" ")
+        .map((word) => word[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2);
+    };
+
+    // If src or name provided, render a complete avatar
+    if (src || name) {
+      return (
+        <div
+          ref={ref}
+          className={cn(
+            "relative flex shrink-0 overflow-hidden rounded-full",
+            sizes[size],
+            className
+          )}
+          {...props}
+        >
+          {src ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={src}
+              alt={alt || name || "Avatar"}
+              className="aspect-square h-full w-full object-cover"
+            />
+          ) : name ? (
+            <div className="flex h-full w-full items-center justify-center rounded-full bg-muted text-muted-foreground font-medium">
+              {getInitials(name)}
+            </div>
+          ) : null}
+        </div>
+      );
+    }
+
+    // Otherwise render as compound component container
     return (
       <div
         ref={ref}
@@ -29,7 +70,9 @@ const AvatarRoot = forwardRef<HTMLDivElement, AvatarRootProps>(
           className
         )}
         {...props}
-      />
+      >
+        {children}
+      </div>
     );
   }
 );

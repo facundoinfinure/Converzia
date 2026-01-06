@@ -1,5 +1,6 @@
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import type { Database } from "@/types/database";
 
 // ============================================
 // Supabase API Keys Configuration
@@ -25,7 +26,7 @@ const getSecretKey = () =>
 export async function createClient() {
   const cookieStore = await cookies();
 
-  return createServerClient(
+  return createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     getPublishableKey()!,
     {
@@ -33,7 +34,7 @@ export async function createClient() {
         getAll() {
           return cookieStore.getAll();
         },
-        setAll(cookiesToSet: any[]) {
+        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
               cookieStore.set(name, value, options)
@@ -44,7 +45,7 @@ export async function createClient() {
         },
       },
     }
-  ) as any;
+  );
 }
 
 /**
@@ -64,7 +65,7 @@ export function createAdminClient() {
     );
   }
 
-  return createServerClient(
+  return createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     secretKey,
     {
@@ -73,6 +74,6 @@ export function createAdminClient() {
         setAll: () => {},
       },
     }
-  ) as any;
+  );
 }
 

@@ -9,6 +9,25 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[];
 
+// Helper types for accessing table rows
+export type Tables<T extends keyof Database["public"]["Tables"]> = Database["public"]["Tables"][T]["Row"];
+export type TablesInsert<T extends keyof Database["public"]["Tables"]> = Database["public"]["Tables"][T]["Insert"];
+export type TablesUpdate<T extends keyof Database["public"]["Tables"]> = Database["public"]["Tables"][T]["Update"];
+export type Views<T extends keyof Database["public"]["Views"]> = Database["public"]["Views"][T]["Row"];
+
+// Common entity type aliases for easier use
+export type Tenant = Tables<"tenants">;
+export type UserProfile = Tables<"user_profiles">;
+export type TenantMember = Tables<"tenant_members">;
+export type Offer = Tables<"offers">;
+export type Lead = Tables<"leads">;
+export type LeadOffer = Tables<"lead_offers">;
+export type Conversation = Tables<"conversations">;
+export type Message = Tables<"messages">;
+export type Delivery = Tables<"deliveries">;
+export type CreditLedger = Tables<"credit_ledger">;
+export type TenantCreditBalance = Views<"tenant_credit_balance">;
+
 export type Database = {
   public: {
     Tables: {
@@ -247,6 +266,79 @@ export type Database = {
           p_description?: string;
         };
         Returns: { success: boolean; new_balance: number; message: string }[];
+      };
+      approve_offer: {
+        Args: { p_offer_id: string };
+        Returns: void;
+      };
+      reject_offer: {
+        Args: { p_offer_id: string; p_reason: string };
+        Returns: void;
+      };
+      search_rag_chunks: {
+        Args: {
+          p_tenant_id: string;
+          p_offer_id: string | null;
+          p_query_embedding: number[];
+          p_query_text: string;
+          p_limit: number;
+          p_vector_weight?: number;
+          p_text_weight?: number;
+        };
+        Returns: unknown[];
+      };
+      search_rag_chunks_vector: {
+        Args: {
+          p_tenant_id: string;
+          p_offer_id: string | null;
+          p_query_embedding: number[];
+          p_limit: number;
+        };
+        Returns: unknown[];
+      };
+      match_knowledge_chunks: {
+        Args: {
+          query_embedding: number[];
+          match_threshold: number;
+          match_count: number;
+          p_tenant_id: string;
+          p_offer_id: string | null;
+        };
+        Returns: unknown[];
+      };
+      register_tenant: {
+        Args: {
+          p_name: string;
+          p_slug: string;
+          p_contact_email: string;
+          p_contact_phone: string;
+          p_website?: string | null;
+          p_description?: string | null;
+          p_vertical: string;
+        };
+        Returns: unknown;
+      };
+      add_credits: {
+        Args: {
+          p_tenant_id: string;
+          p_amount: number;
+          p_reason?: string;
+          p_billing_order_id?: string | null;
+        };
+        Returns: number;
+      };
+      get_tenant_revenue: {
+        Args: {
+          p_date_start: string;
+          p_date_end: string;
+          p_tenant_id?: string | null;
+        };
+        Returns: unknown[];
+      };
+      // Add other RPC functions as needed
+      [key: string]: {
+        Args: Record<string, unknown>;
+        Returns: unknown;
       };
     };
   };

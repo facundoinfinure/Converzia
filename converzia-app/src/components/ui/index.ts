@@ -2,15 +2,16 @@
 // Converzia: UI Components Library
 // ============================================
 
+// Core form components
 export * from "./Button";
-export * from "./Input";
+export { Input, type InputProps, FormInput } from "./Input";
 export * from "./Select";
 export * from "./TextArea";
 export * from "./Checkbox";
 export * from "./Switch";
 export * from "./Badge";
 export * from "./Card";
-export * from "./Modal";
+export { Modal, ConfirmModal, AlertModal, Drawer, type ModalProps } from "./Modal";
 export * from "./Dropdown";
 export * from "./Tabs";
 export * from "./Avatar";
@@ -22,7 +23,7 @@ export * from "./Spinner";
 export * from "./Table";
 export * from "./Pagination";
 export * from "./StatCard";
-export * from "./SearchInput";
+export { SearchInput, SearchWithFilters, CommandPalette } from "./SearchInput";
 export * from "./FileUpload";
 export * from "./DatePicker";
 export * from "./SimpleChart";
@@ -52,7 +53,7 @@ export * from "./aspect-ratio";
 export * from "./chart";
 export * from "./hover-card";
 export * from "./slider";
-export * from "./resizable";
+// export * from "./resizable"; // Disabled due to react-resizable-panels type issues
 export * from "./radio-group";
 export * from "./form";
 export * from "./calendar";

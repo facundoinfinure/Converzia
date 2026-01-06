@@ -111,8 +111,8 @@ export default function OffersPage() {
         "fetch approved offers"
       );
 
-      if (approvedOffers) {
-        const offerIds = approvedOffers.map((o: any) => o.id);
+      if (approvedOffers && Array.isArray(approvedOffers)) {
+        const offerIds = (approvedOffers as { id: string }[]).map((o) => o.id);
         const { data: mappedOffers } = await queryWithTimeout(
           supabase
             .from("ad_offer_map")
@@ -123,7 +123,8 @@ export default function OffersPage() {
           "fetch mapped offers"
         );
         
-        const mappedIds = new Set((mappedOffers || []).map((m: any) => m.offer_id));
+        const mappedList = (mappedOffers as { offer_id: string }[] | null) || [];
+        const mappedIds = new Set(mappedList.map((m) => m.offer_id));
         setBacklogCount(offerIds.filter(id => !mappedIds.has(id)).length);
       }
     }
@@ -157,7 +158,7 @@ export default function OffersPage() {
     setIsProcessing(true);
     
     try {
-      const { error } = await supabase.rpc("approve_offer", {
+      const { error } = await (supabase.rpc as Function)("approve_offer", {
         p_offer_id: reviewingOffer.id,
       });
       
@@ -181,7 +182,7 @@ export default function OffersPage() {
     setIsProcessing(true);
     
     try {
-      const { error } = await supabase.rpc("reject_offer", {
+      const { error } = await (supabase.rpc as Function)("reject_offer", {
         p_offer_id: reviewingOffer.id,
         p_reason: rejectionReason,
       });
@@ -542,7 +543,7 @@ export default function OffersPage() {
                         { label: "Archivar", icon: Archive, onClick: () => handleStatusChange(offer.id, "ARCHIVED") },
                         { divider: true, label: "" },
                         { label: "Eliminar", icon: Trash2, onClick: () => setDeleteId(offer.id), danger: true },
-                      ]}
+                      ].filter((item): item is NonNullable<typeof item> => item !== null)}
                     />
                   }
                   showChevron={false}

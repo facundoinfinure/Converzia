@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 // Dropdown Menu
 // ============================================
 
-interface DropdownItem {
+export interface DropdownItem {
   label: string;
   value?: string;
   icon?: ReactNode;
@@ -17,6 +17,8 @@ interface DropdownItem {
   disabled?: boolean;
   danger?: boolean;
   divider?: boolean;
+  type?: string;
+  variant?: string;
 }
 
 interface DropdownProps {

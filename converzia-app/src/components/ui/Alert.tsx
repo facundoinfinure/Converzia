@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 
 type AlertVariant = "info" | "success" | "warning" | "error";
 
-interface AlertProps {
+export interface AlertProps {
   variant?: AlertVariant;
   title?: string;
   children: ReactNode;
@@ -17,6 +17,7 @@ interface AlertProps {
   onDismiss?: () => void;
   action?: ReactNode;
   className?: string;
+  size?: "sm" | "md" | "lg";
 }
 
 export function Alert({

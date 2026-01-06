@@ -1,19 +1,24 @@
+import * as React from "react";
 import { cn } from "@/lib/utils";
 
 // ============================================
 // Skeleton Component
 // ============================================
 
-interface SkeletonProps {
+export interface SkeletonProps {
   className?: string;
   variant?: "text" | "circular" | "rectangular";
   animation?: "pulse" | "wave" | "none";
+  style?: React.CSSProperties;
+  "data-sidebar"?: string;
 }
 
 export function Skeleton({
   className,
   variant = "text",
   animation = "pulse",
+  style,
+  ...props
 }: SkeletonProps) {
   const variants = {
     text: "rounded",
@@ -35,6 +40,8 @@ export function Skeleton({
         animations[animation],
         className
       )}
+      style={style}
+      {...props}
     />
   );
 }

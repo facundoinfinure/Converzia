@@ -26,10 +26,11 @@ function useTabs() {
 // Tabs Root
 // ============================================
 
-interface TabsProps {
+export interface TabsProps {
   defaultValue: string;
   value?: string;
   onChange?: (value: string) => void;
+  onValueChange?: (value: string) => void;
   children: ReactNode;
   className?: string;
 }
@@ -38,6 +39,7 @@ export function Tabs({
   defaultValue,
   value,
   onChange,
+  onValueChange,
   children,
   className,
 }: TabsProps) {
@@ -49,6 +51,7 @@ export function Tabs({
       setInternalValue(newValue);
     }
     onChange?.(newValue);
+    onValueChange?.(newValue);
   };
 
   return (

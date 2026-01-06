@@ -116,13 +116,14 @@ Select.displayName = "Select";
 // Custom Dropdown Select (for more control)
 // ============================================
 
-interface CustomSelectProps {
+export interface CustomSelectProps {
   label?: string;
   error?: string;
   hint?: string;
   options: SelectOption[];
   value?: string;
   onChange?: (value: string) => void;
+  onValueChange?: (value: string) => void;
   placeholder?: string;
   disabled?: boolean;
   required?: boolean;
@@ -137,6 +138,7 @@ export function CustomSelect({
   options,
   value,
   onChange,
+  onValueChange,
   placeholder = "Seleccionar...",
   disabled = false,
   required = false,
@@ -212,6 +214,7 @@ export function CustomSelect({
                 type="button"
                 onClick={() => {
                   onChange?.(option.value);
+                  onValueChange?.(option.value);
                   setIsOpen(false);
                 }}
                 disabled={option.disabled}

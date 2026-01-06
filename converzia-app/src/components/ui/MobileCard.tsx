@@ -250,7 +250,7 @@ export function MobileCardList({ children, className, gap = "md" }: MobileCardLi
 
 interface MobileCardAvatarProps {
   children?: ReactNode;
-  icon?: LucideIcon;
+  icon?: LucideIcon | React.ElementType;
   src?: string;
   alt?: string;
   fallback?: string;
