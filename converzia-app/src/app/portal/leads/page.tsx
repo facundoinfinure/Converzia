@@ -8,13 +8,11 @@ import {
   XCircle,
   CheckCircle,
   Clock,
-  TrendingUp,
   ChevronRight,
   Filter,
   RefreshCw,
   Info,
   AlertTriangle,
-  ArrowRight,
   Star,
 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
@@ -316,19 +314,6 @@ export default function PortalLeadsPage() {
   }
   
   // Calculate totals
-  const totalLeads = stats 
-    ? stats.received + stats.in_chat + stats.qualified + stats.delivered + stats.not_qualified 
-    : 0;
-  
-  // Calculate conversion percentages between stages
-  const getConversionPercentage = (fromKey: keyof TenantLeadStats, toKey: keyof TenantLeadStats): number | null => {
-    if (!stats) return null;
-    const fromCount = stats[fromKey];
-    if (fromCount === 0) return null;
-    const toCount = stats[toKey];
-    return Math.round((toCount / fromCount) * 100);
-  };
-  
   // Columns for lead table
   const getColumns = (): Column<TenantLeadView>[] => {
     const isDroppedCategory = selectedCategory === "not_qualified";
@@ -562,17 +547,11 @@ export default function PortalLeadsPage() {
           const Icon = category.icon;
           const isSelected = selectedCategory === category.key;
           
-          // Calculate conversion percentage from previous stage
-          let conversionPercentage: number | null = null;
-          if (stats) {
-            if (category.key === "not_qualified") {
-              // For not_qualified, show what % of received leads ended up not qualified
-              conversionPercentage = getConversionPercentage("received", "not_qualified");
-            } else if (index > 0) {
-              const previousKey = LEAD_CATEGORIES[index - 1].key as keyof TenantLeadStats;
-              const currentKey = category.key as keyof TenantLeadStats;
-              conversionPercentage = getConversionPercentage(previousKey, currentKey);
-            }
+          // Calculate percentage based on "received" (initial stage)
+          let percentage: number | null = null;
+          if (stats && stats.received > 0) {
+            const currentCount = stats[category.key as keyof TenantLeadStats] || 0;
+            percentage = Math.round((currentCount / stats.received) * 100);
           }
           
           return (
@@ -594,9 +573,9 @@ export default function PortalLeadsPage() {
                   <span className="text-2xl font-bold text-[var(--text-primary)] block">
                     {count}
                   </span>
-                  {conversionPercentage !== null && (
+                  {percentage !== null && category.key !== "received" && (
                     <span className="text-xs font-medium text-[var(--text-secondary)]">
-                      {conversionPercentage}% conv.
+                      {percentage}%
                     </span>
                   )}
                 </div>
@@ -611,62 +590,6 @@ export default function PortalLeadsPage() {
           );
         })}
       </div>
-
-      {/* Funnel visualization */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-[var(--text-secondary)]" />
-            Tu Funnel de Leads
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between">
-            {(() => {
-              // Show only the first 4 stages (received, in_chat, qualified, delivered) for visualization
-              const funnelStages = LEAD_CATEGORIES.filter(cat => 
-                cat.key === "received" || cat.key === "in_chat" || cat.key === "qualified" || cat.key === "delivered"
-              );
-              
-              return funnelStages.map((category, index) => {
-                const count = stats?.[category.key as keyof TenantLeadStats] || 0;
-                const percentage = totalLeads > 0 ? Math.round((count / totalLeads) * 100) : 0;
-                const Icon = LEAD_CATEGORY_ICONS[category.key] || Users;
-                
-                return (
-                  <div key={category.key} className="flex items-center flex-1">
-                    <div className="flex-1 text-center">
-                      <div className="mx-auto h-16 w-16 md:h-20 md:w-20 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center mb-2">
-                        <Icon className="h-6 w-6 md:h-8 md:w-8 text-[var(--text-secondary)] mb-1" />
-                        <span className="text-xl md:text-2xl font-bold text-[var(--text-primary)] ml-2">{count}</span>
-                      </div>
-                      <p className="text-sm font-medium text-[var(--text-primary)]">{category.label}</p>
-                      <p className="text-xs text-[var(--text-tertiary)]">{percentage}%</p>
-                    </div>
-                    {index < funnelStages.length - 1 && (
-                      <div className="px-2 md:px-4">
-                        <ArrowRight className="h-6 w-6 text-[var(--text-tertiary)]" />
-                      </div>
-                    )}
-                  </div>
-                );
-              });
-            })()}
-          </div>
-          
-          {/* Conversion rate */}
-          {stats && stats.delivered > 0 && totalLeads > 0 && (
-            <div className="mt-6 pt-4 border-t border-[var(--border-primary)] text-center">
-              <p className="text-sm text-[var(--text-tertiary)]">
-                Tasa de conversión: 
-                <span className="font-semibold text-[var(--text-primary)] ml-1">
-                  {Math.round((stats.delivered / totalLeads) * 100)}%
-                </span>
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
       {/* Lead List */}
       {selectedCategory ? (

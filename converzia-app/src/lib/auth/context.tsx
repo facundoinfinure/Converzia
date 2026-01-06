@@ -124,7 +124,7 @@ export function AuthProvider({ children, initialUser = null }: AuthProviderProps
         setProfile(profileData as UserProfile);
       }
 
-      // Fetch memberships with tenant info
+      // Fetch memberships with tenant info (including settings for logo)
       const { data: membershipsData, error: membershipsError } = await queryWithTimeout(
         supabase
           .from("tenant_members")
@@ -138,7 +138,8 @@ export function AuthProvider({ children, initialUser = null }: AuthProviderProps
               id,
               name,
               slug,
-              status
+              status,
+              settings
             )
           `)
           .eq("user_id", userId)

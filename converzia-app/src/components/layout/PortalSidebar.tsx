@@ -103,23 +103,35 @@ export function PortalSidebar() {
         )}
 
         {/* Current Tenant - Single tenant view */}
-        {memberships.length === 1 && activeTenant && (
-          <div className="px-4 py-4 border-b border-[var(--sidebar-border)]">
-            <div className="flex items-center gap-3 p-3 rounded-xl bg-[var(--bg-tertiary)]">
-              <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-[var(--accent-primary)] to-purple-500 flex items-center justify-center text-white font-bold text-sm shadow-md">
-                {activeTenant.name.slice(0, 2).toUpperCase()}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-[var(--text-primary)] truncate">
-                  {activeTenant.name}
-                </p>
-                <p className="text-xs text-[var(--text-tertiary)]">
-                  /{activeTenant.slug}
-                </p>
+        {memberships.length === 1 && activeTenant && (() => {
+          // Get logo from settings or logo_url field
+          const settings = (activeTenant as any).settings || {};
+          const logoUrl = (activeTenant as any).logo_url || settings.logo_url || null;
+          const initials = activeTenant.name.slice(0, 2).toUpperCase();
+          
+          return (
+            <div className="px-4 py-4" style={{ boxSizing: "content-box", borderBottomWidth: "0px", borderBottomColor: "rgba(0, 0, 0, 0)", borderBottomStyle: "none", borderImage: "none" }}>
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-[var(--bg-tertiary)]" style={{ backgroundColor: "unset", background: "unset" }}>
+                {logoUrl ? (
+                  <img
+                    src={logoUrl}
+                    alt={activeTenant.name}
+                    className="h-11 w-11 rounded-xl object-cover"
+                  />
+                ) : (
+                  <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-[var(--accent-primary)] to-purple-500 flex items-center justify-center text-white font-bold text-sm shadow-md">
+                    {initials}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-[var(--text-primary)] truncate">
+                    {activeTenant.name}
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Main Navigation */}
         <nav className="flex-1 overflow-y-auto px-3 py-4 scrollbar-hide-mobile">
@@ -193,23 +205,35 @@ export function PortalSidebar() {
         </div>
 
         {/* Mobile Tenant Display */}
-        {activeTenant && (
-          <div className="px-4 py-4 border-b border-[var(--sidebar-border)]">
-            <div className="flex items-center gap-3 p-3 rounded-xl bg-[var(--bg-tertiary)]">
-              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[var(--accent-primary)] to-purple-500 flex items-center justify-center text-white font-bold text-sm">
-                {activeTenant.name.slice(0, 2).toUpperCase()}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-[var(--text-primary)] truncate">
-                  {activeTenant.name}
-                </p>
-                <p className="text-xs text-[var(--text-tertiary)]">
-                  /{activeTenant.slug}
-                </p>
+        {activeTenant && (() => {
+          // Get logo from settings or logo_url field
+          const settings = (activeTenant as any).settings || {};
+          const logoUrl = (activeTenant as any).logo_url || settings.logo_url || null;
+          const initials = activeTenant.name.slice(0, 2).toUpperCase();
+          
+          return (
+            <div className="px-4 py-4 border-b border-[var(--sidebar-border)]">
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-[var(--bg-tertiary)]">
+                {logoUrl ? (
+                  <img
+                    src={logoUrl}
+                    alt={activeTenant.name}
+                    className="h-10 w-10 rounded-xl object-cover"
+                  />
+                ) : (
+                  <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[var(--accent-primary)] to-purple-500 flex items-center justify-center text-white font-bold text-sm">
+                    {initials}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-[var(--text-primary)] truncate">
+                    {activeTenant.name}
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Mobile Nav Items */}
         <nav className="flex-1 overflow-y-auto px-3 py-4">
