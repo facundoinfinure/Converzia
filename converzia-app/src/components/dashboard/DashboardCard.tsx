@@ -437,7 +437,7 @@ export function AlertCard({
  */
 export interface ActivityItemProps {
   icon: ReactNode;
-  iconColor?: "primary" | "success" | "warning" | "danger" | "neutral";
+  iconColor?: "primary" | "success" | "warning" | "danger" | "neutral" | "info";
   title: string;
   subtitle?: string;
   timestamp: string;
@@ -458,6 +458,7 @@ export function ActivityItem({
     warning: "bg-[var(--warning-light)] text-[var(--warning)]",
     danger: "bg-[var(--error-light)] text-[var(--error)]",
     neutral: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
+    info: "bg-[var(--info-light)] text-[var(--info)]",
   };
 
   return (
