@@ -294,32 +294,41 @@ export default function PortalBillingPage() {
                     <Badge variant="primary">Recomendado</Badge>
                   </div>
                 )}
-                <CardContent className="p-6 text-center">
-                  <h3 className="text-xl font-bold text-[var(--text-primary)] mb-2">{pkg.name}</h3>
-                  <div className="flex items-baseline justify-center gap-1 mb-1">
-                    <span className="text-3xl font-bold text-[var(--text-primary)]">{pkg.credits}</span>
-                    <span className="text-[var(--text-secondary)]">créditos</span>
-                  </div>
-                  <p className="text-2xl font-semibold text-[var(--text-primary)] mb-1">
-                    {formatCurrency(pkg.price)}
-                  </p>
-                  <p className="text-sm text-[var(--text-tertiary)] mb-3">
-                    {formatCurrency(pkg.price / pkg.credits)} por crédito
-                  </p>
-                  {pkg.discount_pct && (
-                    <p className="text-[var(--text-secondary)] text-sm mb-4">
-                      {pkg.discount_pct}% de ahorro
+                <CardContent className="p-6 text-center flex flex-col h-full">
+                  <div className="flex-1">
+                    <h3 className="text-xl font-bold text-[var(--text-primary)] mb-2">{pkg.name}</h3>
+                    <div className="flex items-baseline justify-center gap-1 mb-1">
+                      <span className="text-3xl font-bold text-[var(--text-primary)]">{pkg.credits}</span>
+                      <span className="text-[var(--text-secondary)]">créditos</span>
+                    </div>
+                    <p className="text-2xl font-semibold text-[var(--text-primary)] mb-1">
+                      {formatCurrency(pkg.price)}
                     </p>
-                  )}
-                  <Button
-                    fullWidth
-                    variant={pkg.is_popular ? "primary" : "secondary"}
-                    onClick={() => handlePurchase(pkg)}
-                    isLoading={loadingCheckout === pkg.id}
-                    rightIcon={<ArrowRight className="h-4 w-4" />}
-                  >
-                    Comprar
-                  </Button>
+                    <p className="text-sm text-[var(--text-tertiary)] mb-3">
+                      {new Intl.NumberFormat("es-AR", {
+                        style: "currency",
+                        currency: "USD",
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      }).format(pkg.price / pkg.credits)} por crédito
+                    </p>
+                    {pkg.discount_pct && (
+                      <p className="text-[var(--text-secondary)] text-sm mb-4">
+                        {pkg.discount_pct}% de ahorro
+                      </p>
+                    )}
+                  </div>
+                  <div className="mt-auto pt-4">
+                    <Button
+                      fullWidth
+                      variant={pkg.is_popular ? "primary" : "secondary"}
+                      onClick={() => handlePurchase(pkg)}
+                      isLoading={loadingCheckout === pkg.id}
+                      rightIcon={<ArrowRight className="h-4 w-4" />}
+                    >
+                      Comprar
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))}

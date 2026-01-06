@@ -52,9 +52,9 @@ interface TenantLeadStats {
 interface TenantLeadView {
   id: string;
   status: string;
-  category: "in_chat" | "qualified" | "delivered" | "not_qualified";
+  category: "received" | "in_chat" | "qualified" | "delivered" | "not_qualified";
   // Basic info - only shown for non-dropped leads
-  firstName: string | null;  // Hidden for dropped leads
+  firstName: string | null;  // Hidden for dropped leads, only first name for received
   offerName: string | null;
   score: number | null;
   createdAt: string;
@@ -74,9 +74,8 @@ const LEAD_CATEGORY_ICONS: Record<string, typeof Users> = {
 };
 
 // Lead categories for tenant view - using standardized names
-// Include "received" for funnel visualization but filter it from category selection
+// Include "received" as a selectable category
 const LEAD_CATEGORIES = TENANT_FUNNEL_STAGES
-  .filter(stage => stage.key !== "received") // Exclude "received" from category selection (too broad)
   .map((stage): TenantFunnelStage & { icon: typeof Users } => ({
     ...stage,
     icon: LEAD_CATEGORY_ICONS[stage.key] || Users,
@@ -133,6 +132,34 @@ export default function PortalLeadsPage() {
     try {
       // Fetch stats for each category
       const categoryPromises = LEAD_CATEGORIES.map(async (cat) => {
+        // For "received", count only PENDING_MAPPING + TO_BE_CONTACTED
+        if (cat.key === "received") {
+          const [pendingMappingResult, pendingContactResult] = await Promise.all([
+            queryWithTimeout(
+              supabase
+                .from("lead_offers")
+                .select("id", { count: "exact", head: true })
+                .eq("tenant_id", activeTenantId)
+                .eq("status", "PENDING_MAPPING"),
+              10000,
+              "count pending_mapping"
+            ),
+            queryWithTimeout(
+              supabase
+                .from("lead_offers")
+                .select("id", { count: "exact", head: true })
+                .eq("tenant_id", activeTenantId)
+                .eq("status", "TO_BE_CONTACTED"),
+              10000,
+              "count to_be_contacted"
+            ),
+          ]);
+          return { 
+            key: cat.key, 
+            count: (pendingMappingResult.count || 0) + (pendingContactResult.count || 0) 
+          };
+        }
+        
         const { count } = await queryWithTimeout(
           supabase
             .from("lead_offers")
@@ -145,32 +172,10 @@ export default function PortalLeadsPage() {
         return { key: cat.key, count: count || 0 };
       });
       
-      // Fetch received stats (PENDING_MAPPING + TO_BE_CONTACTED)
-      const [pendingMappingResult, pendingContactResult] = await Promise.all([
-        queryWithTimeout(
-          supabase
-            .from("lead_offers")
-            .select("id", { count: "exact", head: true })
-            .eq("tenant_id", activeTenantId)
-            .eq("status", "PENDING_MAPPING"),
-          10000,
-          "count pending_mapping"
-        ),
-        queryWithTimeout(
-          supabase
-            .from("lead_offers")
-            .select("id", { count: "exact", head: true })
-            .eq("tenant_id", activeTenantId)
-            .eq("status", "TO_BE_CONTACTED"),
-          10000,
-          "count to_be_contacted"
-        ),
-      ]);
-      
       const results = await Promise.all(categoryPromises);
       
       const statsData: TenantLeadStats = {
-        received: (pendingMappingResult.count || 0) + (pendingContactResult.count || 0),
+        received: results.find(r => r.key === "received")?.count || 0,
         in_chat: results.find(r => r.key === "in_chat")?.count || 0,
         qualified: results.find(r => r.key === "qualified")?.count || 0,
         delivered: results.find(r => r.key === "delivered")?.count || 0,
@@ -217,6 +222,11 @@ export default function PortalLeadsPage() {
       const category = LEAD_CATEGORIES.find(c => c.key === selectedCategory);
       if (!category) return;
       
+      // For "received" category, only query PENDING_MAPPING and TO_BE_CONTACTED
+      const statuses = selectedCategory === "received" 
+        ? ["PENDING_MAPPING", "TO_BE_CONTACTED"]
+        : category.statuses;
+      
       let query = supabase
         .from("lead_offers")
         .select(`
@@ -230,7 +240,7 @@ export default function PortalLeadsPage() {
           offer:offers(name)
         `)
         .eq("tenant_id", activeTenantId)
-        .in("status", category.statuses)
+        .in("status", statuses)
         .order("updated_at", { ascending: false })
         .limit(100);
       
@@ -252,6 +262,7 @@ export default function PortalLeadsPage() {
           const lead = Array.isArray(d.lead) ? d.lead[0] : d.lead;
           const offer = Array.isArray(d.offer) ? d.offer[0] : d.offer;
           const isDropped = selectedCategory === "not_qualified";
+          const isReceived = selectedCategory === "received";
           
           // Get drop reason from qualification fields or status
           let dropReason: string | null = null;
@@ -276,8 +287,9 @@ export default function PortalLeadsPage() {
             id: d.id,
             status: d.status,
             category: selectedCategory as TenantLeadView["category"],
-            // Privacy: Hide personal info for dropped leads
-            firstName: isDropped ? null : (lead?.first_name || "Lead"),
+            // Privacy: For received, only show first name (no last name, email, phone)
+            // For dropped leads, hide all personal info
+            firstName: isDropped ? null : (isReceived ? (lead?.first_name || "Lead") : (lead?.first_name || "Lead")),
             offerName: offer?.name || null,
             score: d.score_total,
             createdAt: d.created_at,
@@ -308,9 +320,80 @@ export default function PortalLeadsPage() {
     ? stats.received + stats.in_chat + stats.qualified + stats.delivered + stats.not_qualified 
     : 0;
   
+  // Calculate conversion percentages between stages
+  const getConversionPercentage = (fromKey: keyof TenantLeadStats, toKey: keyof TenantLeadStats): number | null => {
+    if (!stats) return null;
+    const fromCount = stats[fromKey];
+    if (fromCount === 0) return null;
+    const toCount = stats[toKey];
+    return Math.round((toCount / fromCount) * 100);
+  };
+  
   // Columns for lead table
   const getColumns = (): Column<TenantLeadView>[] => {
     const isDroppedCategory = selectedCategory === "not_qualified";
+    const isReceivedCategory = selectedCategory === "received";
+    
+    if (isReceivedCategory) {
+      // Received leads - only first name (no last name, email, phone) but show offer data
+      return [
+        {
+          key: "lead",
+          header: "Lead",
+          cell: (l) => (
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-full flex items-center justify-center bg-[var(--bg-tertiary)]">
+                <span className="text-sm font-medium text-[var(--text-secondary)]">
+                  {(l.firstName?.[0] || "L").toUpperCase()}
+                </span>
+              </div>
+              <div>
+                <p className="font-medium text-[var(--text-primary)]">
+                  {l.firstName || "Lead"}
+                </p>
+              </div>
+            </div>
+          ),
+        },
+        {
+          key: "offer",
+          header: "Proyecto",
+          cell: (l) => (
+            <div className="flex flex-col">
+              <span className="text-sm font-medium text-[var(--text-secondary)]">
+                {l.offerName || "Sin proyecto asignado"}
+              </span>
+              {l.offerName && (
+                <span className="text-xs text-[var(--text-tertiary)] mt-0.5">
+                  Oferta por la cual se recibió
+                </span>
+              )}
+            </div>
+          ),
+        },
+        {
+          key: "status",
+          header: "Estado",
+          cell: (l) => {
+            const statusLabels: Record<string, { label: string; variant: "success" | "warning" | "info" | "primary" }> = {
+              PENDING_MAPPING: { label: "Pendiente de mapeo", variant: "warning" },
+              TO_BE_CONTACTED: { label: "Por contactar", variant: "warning" },
+            };
+            const config = statusLabels[l.status] || { label: l.status, variant: "info" as const };
+            return <Badge variant={config.variant} dot>{config.label}</Badge>;
+          },
+        },
+        {
+          key: "date",
+          header: "Fecha de recepción",
+          cell: (l) => (
+            <span className="text-sm text-[var(--text-tertiary)]">
+              {formatRelativeTime(l.createdAt)}
+            </span>
+          ),
+        },
+      ];
+    }
     
     if (isDroppedCategory) {
       // Dropped leads - privacy protected, no personal data
@@ -443,8 +526,8 @@ export default function PortalLeadsPage() {
       <PageContainer>
         <div className="space-y-6">
           <Skeleton className="h-10 w-48" />
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-32" />)}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-32" />)}
           </div>
         </div>
       </PageContainer>
@@ -473,11 +556,24 @@ export default function PortalLeadsPage() {
       />
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        {LEAD_CATEGORIES.map((category) => {
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+        {LEAD_CATEGORIES.map((category, index) => {
           const count = stats?.[category.key as keyof TenantLeadStats] || 0;
           const Icon = category.icon;
           const isSelected = selectedCategory === category.key;
+          
+          // Calculate conversion percentage from previous stage
+          let conversionPercentage: number | null = null;
+          if (stats) {
+            if (category.key === "not_qualified") {
+              // For not_qualified, show what % of received leads ended up not qualified
+              conversionPercentage = getConversionPercentage("received", "not_qualified");
+            } else if (index > 0) {
+              const previousKey = LEAD_CATEGORIES[index - 1].key as keyof TenantLeadStats;
+              const currentKey = category.key as keyof TenantLeadStats;
+              conversionPercentage = getConversionPercentage(previousKey, currentKey);
+            }
+          }
           
           return (
             <button
@@ -494,9 +590,16 @@ export default function PortalLeadsPage() {
                 <div className="h-10 w-10 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center">
                   <Icon className="h-5 w-5 text-[var(--text-secondary)]" />
                 </div>
-                <span className="text-2xl font-bold text-[var(--text-primary)]">
-                  {count}
-                </span>
+                <div className="text-right">
+                  <span className="text-2xl font-bold text-[var(--text-primary)] block">
+                    {count}
+                  </span>
+                  {conversionPercentage !== null && (
+                    <span className="text-xs font-medium text-[var(--text-secondary)]">
+                      {conversionPercentage}% conv.
+                    </span>
+                  )}
+                </div>
               </div>
               <p className="text-sm font-medium text-[var(--text-primary)]">
                 {category.label}
@@ -520,11 +623,10 @@ export default function PortalLeadsPage() {
         <CardContent>
           <div className="flex items-center justify-between">
             {(() => {
-              // Include "received" stage at the beginning, then the main stages
-              const receivedStage = TENANT_FUNNEL_STAGES.find(s => s.key === "received");
-              const funnelStages = receivedStage 
-                ? [receivedStage, ...LEAD_CATEGORIES.slice(0, 3)]
-                : LEAD_CATEGORIES.slice(0, 3);
+              // Show only the first 4 stages (received, in_chat, qualified, delivered) for visualization
+              const funnelStages = LEAD_CATEGORIES.filter(cat => 
+                cat.key === "received" || cat.key === "in_chat" || cat.key === "qualified" || cat.key === "delivered"
+              );
               
               return funnelStages.map((category, index) => {
                 const count = stats?.[category.key as keyof TenantLeadStats] || 0;
@@ -615,13 +717,15 @@ export default function PortalLeadsPage() {
               isLoading={isRefreshing}
               renderMobileItem={(l) => {
                 const isDropped = l.category === "not_qualified";
+                const isReceived = l.category === "received";
                 const categoryInfo = LEAD_CATEGORIES.find(c => c.key === l.category);
                 
                 const statusLabels: Record<string, { label: string; variant: "success" | "warning" | "info" | "primary" }> = {
+                  PENDING_MAPPING: { label: "Pendiente de mapeo", variant: "warning" },
+                  TO_BE_CONTACTED: { label: "Por contactar", variant: "warning" },
                   ENGAGED: { label: "Interesado", variant: "primary" },
                   QUALIFYING: { label: "En calificación", variant: "primary" },
                   CONTACTED: { label: "Contactado", variant: "info" },
-                  TO_BE_CONTACTED: { label: "Por contactar", variant: "warning" },
                   SCORED: { label: "Calificado", variant: "info" },
                   LEAD_READY: { label: "Listo", variant: "success" },
                   SENT_TO_DEVELOPER: { label: "Entregado", variant: "success" },
@@ -635,13 +739,19 @@ export default function PortalLeadsPage() {
                         <MobileCardAvatar variant="default" icon={Users} />
                       ) : (
                         <MobileCardAvatar 
-                          variant={l.category === "delivered" ? "success" : l.category === "in_chat" ? "info" : l.category === "qualified" ? "default" : "warning"} 
+                          variant={
+                            l.category === "delivered" ? "success" : 
+                            l.category === "in_chat" ? "info" : 
+                            l.category === "qualified" ? "default" : 
+                            l.category === "received" ? "warning" : 
+                            "warning"
+                          } 
                           fallback={l.firstName || "L"}
                         />
                       )
                     }
                     title={isDropped ? "Lead anónimo" : (l.firstName || "Lead")}
-                    subtitle={l.offerName || undefined}
+                    subtitle={isReceived ? (l.offerName ? `Proyecto: ${l.offerName}` : "Sin proyecto asignado") : (l.offerName || undefined)}
                     badges={
                       isDropped ? (
                         <span className="text-xs text-muted-foreground">{l.dropReason || "Sin especificar"}</span>
@@ -649,10 +759,10 @@ export default function PortalLeadsPage() {
                         <Badge variant={statusConfig.variant} size="sm" dot>{statusConfig.label}</Badge>
                       )
                     }
-                    stats={l.score !== null && !isDropped ? [
+                    stats={l.score !== null && !isDropped && !isReceived ? [
                       { icon: Star, value: l.score, label: "Score" },
                     ] : undefined}
-                    metadata={formatRelativeTime(l.updatedAt)}
+                    metadata={isReceived ? formatRelativeTime(l.createdAt) : formatRelativeTime(l.updatedAt)}
                     showChevron={false}
                     variant={isDropped ? "muted" : "default"}
                   />
