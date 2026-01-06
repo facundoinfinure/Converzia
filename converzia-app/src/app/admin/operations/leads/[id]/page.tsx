@@ -171,7 +171,7 @@ export default function LeadDetailPage({ params }: Props) {
             updated_at,
             lead:leads(id, phone, email, first_name, last_name, full_name, country_code, opted_out, first_contact_at, last_contact_at),
             tenant:tenants(id, name, slug),
-            offer:offers(id, name, city, zone)
+            offer:offers!lead_offers_offer_id_fkey(id, name, city, zone)
           `)
           .eq("id", id)
           .single(),

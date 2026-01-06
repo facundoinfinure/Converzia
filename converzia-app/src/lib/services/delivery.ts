@@ -36,7 +36,7 @@ export async function processDelivery(deliveryId: string): Promise<DeliveryResul
         *,
         lead:leads(*),
         tenant:tenants(*),
-        offer:offers(*)
+        offer:offers!deliveries_offer_id_fkey(*)
       `)
       .eq("id", deliveryId)
       .single(),
@@ -718,7 +718,7 @@ export async function getDeadLetterQueue(tenantId?: string): Promise<Delivery[]>
     .select(`
       *,
       lead:leads(id, phone, full_name),
-      offer:offers(id, name)
+      offer:offers!deliveries_offer_id_fkey(id, name)
     `)
     .eq("status", "DEAD_LETTER")
     .order("dead_letter_at", { ascending: false });

@@ -136,7 +136,7 @@ export function useAdMappings(options: UseAdMappingsOptions = {}): UseAdMappings
         .select(`
           *,
           tenant:tenants(id, name),
-          offer:offers(id, name)
+          offer:offers!ad_offer_map_offer_id_fkey(id, name)
         `, { count: "exact" });
 
       if (tenantId) {

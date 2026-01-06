@@ -197,6 +197,7 @@ export default function PortalLeadsPage() {
       
       // Optimized query: filter by tenant_id first (uses index), then status, then order
       // This order matches the composite index idx_lead_offers_tenant_status_updated
+      // Specify foreign key explicitly to avoid ambiguity (offer_id vs recommended_offer_id)
       let query = supabase
         .from("lead_offers")
         .select(`
@@ -207,7 +208,7 @@ export default function PortalLeadsPage() {
           created_at,
           updated_at,
           lead:leads(first_name),
-          offer:offers(name)
+          offer:offers!lead_offers_offer_id_fkey(name)
         `)
         .eq("tenant_id", activeTenantId)
         .in("status", statuses)

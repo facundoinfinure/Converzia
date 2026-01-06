@@ -313,7 +313,7 @@ export default function OperationsPage() {
               error_message,
               lead:leads(phone, full_name),
               tenant:tenants(name),
-              offer:offers(name)
+              offer:offers!deliveries_offer_id_fkey(name)
             `)
             .order("created_at", { ascending: false })
             .limit(50),

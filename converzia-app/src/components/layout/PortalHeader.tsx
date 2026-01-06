@@ -54,7 +54,7 @@ export function PortalHeader() {
         .select(`
           id,
           lead:leads(full_name, phone, email),
-          offer:offers(name)
+          offer:offers!lead_offers_offer_id_fkey(name)
         `)
         .eq("tenant_id", activeTenantId)
         .or(`lead.full_name.ilike.%${query}%,lead.phone.ilike.%${query}%,lead.email.ilike.%${query}%`)

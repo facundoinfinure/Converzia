@@ -151,7 +151,7 @@ export default function KnowledgePage() {
       .select(`
         *,
         tenant:tenants(id, name),
-        offer:offers(id, name)
+        offer:offers!rag_sources_offer_id_fkey(id, name)
       `)
       .order("created_at", { ascending: false });
 

@@ -95,7 +95,7 @@ export default function PortalLeadDetailPage() {
               first_contact_at,
               last_contact_at
             ),
-            offer:offers(
+            offer:offers!lead_offers_offer_id_fkey(
               id,
               name
             ),
