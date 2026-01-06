@@ -92,10 +92,11 @@ export default function PortalSettingsPage() {
         console.error("Error loading tenant:", tenantError);
         toast.error("Error al cargar datos del tenant");
       } else if (tenant) {
-        setTenantData(tenant as TenantData);
+        const tenantTyped = tenant as TenantData;
+        setTenantData(tenantTyped);
         setFormData({
-          contact_email: tenant.contact_email || "",
-          contact_phone: tenant.contact_phone || "",
+          contact_email: tenantTyped.contact_email || "",
+          contact_phone: tenantTyped.contact_phone || "",
         });
       }
 

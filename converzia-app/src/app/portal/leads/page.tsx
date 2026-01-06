@@ -14,6 +14,7 @@ import {
   Info,
   AlertTriangle,
   Star,
+  TrendingUp,
 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
