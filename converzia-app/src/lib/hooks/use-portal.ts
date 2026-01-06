@@ -151,7 +151,7 @@ export function usePortalDashboard() {
           .select(`
             *,
             lead:leads(phone, full_name, email),
-            offer:offers(name)
+            offer:offers!lead_offers_offer_id_fkey(name)
           `)
           .eq("tenant_id", activeTenantId)
           .order("created_at", { ascending: false })

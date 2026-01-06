@@ -139,7 +139,7 @@ export async function GET(request: NextRequest) {
           id,
           offer_id,
           status,
-          offer:offers(name),
+          offer:offers!lead_offers_offer_id_fkey(name),
           lead:leads(
             id,
             full_name,
