@@ -12,6 +12,8 @@ import {
   Building2,
   X,
   Users,
+  Settings,
+  Plug,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -26,6 +28,8 @@ const navigation = [
   { name: "Mis Leads", href: "/portal/leads", icon: Users },
   { name: "Facturación", href: "/portal/billing", icon: CreditCard },
   { name: "Equipo", href: "/portal/team", icon: UserCog },
+  { name: "Integraciones", href: "/portal/integrations", icon: Plug },
+  { name: "Configuración", href: "/portal/settings", icon: Settings },
 ];
 
 // Mobile bottom navigation

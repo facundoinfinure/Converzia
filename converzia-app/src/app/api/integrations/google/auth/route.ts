@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const tenantId = searchParams.get("tenant_id");
     const integrationId = searchParams.get("integration_id");
+    const returnUrl = searchParams.get("return_url"); // For portal redirects
 
     if (!tenantId) {
       return NextResponse.json(
@@ -44,8 +45,8 @@ export async function GET(request: NextRequest) {
       `${APP_URL}/api/integrations/google/callback`
     );
 
-    // Generate auth URL with state (to pass tenant_id back in callback)
-    const state = JSON.stringify({ tenantId, integrationId });
+    // Generate auth URL with state (to pass tenant_id and return_url back in callback)
+    const state = JSON.stringify({ tenantId, integrationId, returnUrl });
     const encodedState = Buffer.from(state).toString("base64");
 
     const authUrl = oauth2Client.generateAuthUrl({

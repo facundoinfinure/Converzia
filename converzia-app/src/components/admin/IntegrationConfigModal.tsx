@@ -212,10 +212,14 @@ export function IntegrationConfigModal({
 
   const handleGoogleConnect = async () => {
     try {
+      // Detect if we're in portal or admin based on current path
+      const isPortal = typeof window !== "undefined" && window.location.pathname.startsWith("/portal");
+      const returnUrl = isPortal ? "/portal/integrations" : undefined;
+      
       const response = await fetch(
         `/api/integrations/google/auth?tenant_id=${tenantId}${
           existingIntegrationId ? `&integration_id=${existingIntegrationId}` : ""
-        }`
+        }${returnUrl ? `&return_url=${encodeURIComponent(returnUrl)}` : ""}`
       );
       const data = await response.json();
 

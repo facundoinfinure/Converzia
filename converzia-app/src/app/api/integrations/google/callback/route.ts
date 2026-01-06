@@ -34,12 +34,14 @@ export async function GET(request: NextRequest) {
     // Decode state to get tenant info
     let tenantId: string;
     let integrationId: string | null = null;
+    let returnUrl: string | null = null;
     try {
       const decodedState = JSON.parse(
         Buffer.from(state, "base64").toString("utf-8")
       );
       tenantId = decodedState.tenantId;
       integrationId = decodedState.integrationId || null;
+      returnUrl = decodedState.returnUrl || null;
     } catch {
       return NextResponse.redirect(
         `${APP_URL}/admin/tenants?error=google_auth_invalid_state`
@@ -47,9 +49,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Validate environment
-    if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+      if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+      const redirectUrl = returnUrl || `${APP_URL}/admin/tenants/${tenantId}`;
       return NextResponse.redirect(
-        `${APP_URL}/admin/tenants/${tenantId}?error=google_not_configured`
+        `${redirectUrl}?error=google_not_configured`
       );
     }
 
@@ -65,8 +68,9 @@ export async function GET(request: NextRequest) {
 
     if (!tokens.access_token || !tokens.refresh_token) {
       console.error("Missing tokens from Google OAuth");
+      const redirectUrl = returnUrl || `${APP_URL}/admin/tenants/${tenantId}`;
       return NextResponse.redirect(
-        `${APP_URL}/admin/tenants/${tenantId}?error=google_auth_no_tokens`
+        `${redirectUrl}?error=google_auth_no_tokens`
       );
     }
 
@@ -102,8 +106,9 @@ export async function GET(request: NextRequest) {
 
       if (updateError) {
         console.error("Error updating integration:", updateError);
+        const redirectUrl = returnUrl || `${APP_URL}/admin/tenants/${tenantId}`;
         return NextResponse.redirect(
-          `${APP_URL}/admin/tenants/${tenantId}?error=google_auth_save_failed`
+          `${redirectUrl}?error=google_auth_save_failed`
         );
       }
     } else {
@@ -128,8 +133,9 @@ export async function GET(request: NextRequest) {
 
         if (updateError) {
           console.error("Error updating integration:", updateError);
+          const redirectUrl = returnUrl || `${APP_URL}/admin/tenants/${tenantId}`;
           return NextResponse.redirect(
-            `${APP_URL}/admin/tenants/${tenantId}?error=google_auth_save_failed`
+            `${redirectUrl}?error=google_auth_save_failed`
           );
         }
       } else {
@@ -151,16 +157,18 @@ export async function GET(request: NextRequest) {
 
         if (insertError) {
           console.error("Error creating integration:", insertError);
+          const redirectUrl = returnUrl || `${APP_URL}/admin/tenants/${tenantId}`;
           return NextResponse.redirect(
-            `${APP_URL}/admin/tenants/${tenantId}?error=google_auth_save_failed`
+            `${redirectUrl}?error=google_auth_save_failed`
           );
         }
       }
     }
 
-    // Redirect back to tenant page with success
+    // Redirect back with success - use returnUrl if provided, otherwise default to admin
+    const redirectUrl = returnUrl || `${APP_URL}/admin/tenants/${tenantId}`;
     return NextResponse.redirect(
-      `${APP_URL}/admin/tenants/${tenantId}?google_connected=true`
+      `${redirectUrl}?google_connected=true`
     );
   } catch (error) {
     console.error("Google OAuth callback error:", error);
