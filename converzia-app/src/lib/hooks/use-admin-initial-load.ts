@@ -55,11 +55,14 @@ export function useAdminInitialLoad() {
         billingStatsResult,
         billingOrdersResult,
       ] = await Promise.allSettled([
-        // 1. Total leads count
+        // 1. Total leads count - usar tenant_funnel_stats para consistencia con portal
+        // Sumar total_leads de todos los tenants para obtener el total global
         queryWithTimeout(
-          supabase.from("lead_offers").select("id", { count: "exact", head: true }),
+          supabase
+            .from("tenant_funnel_stats")
+            .select("total_leads"),
           10000,
-          "lead_offers count",
+          "all tenant stats for total leads",
           false
         ),
 
@@ -218,7 +221,10 @@ export function useAdminInitialLoad() {
       ]);
 
       // Process results and build stats
-      const totalLeads = totalLeadsResult.status === "fulfilled" ? (totalLeadsResult.value.count || 0) : 0;
+      // Calcular total de leads sumando desde tenant_funnel_stats para consistencia
+      const totalLeads = totalLeadsResult.status === "fulfilled" && Array.isArray(totalLeadsResult.value.data)
+        ? totalLeadsResult.value.data.reduce((sum: number, t: any) => sum + (t.total_leads || 0), 0)
+        : 0;
       const activeTenants = activeTenantsResult.status === "fulfilled" ? (activeTenantsResult.value.count || 0) : 0;
       const pendingApprovalsCount = pendingApprovalsCountResult.status === "fulfilled" ? (pendingApprovalsCountResult.value.count || 0) : 0;
       const unmappedLeads = unmappedLeadsResult.status === "fulfilled" ? (Array.isArray(unmappedLeadsResult.value.data) ? unmappedLeadsResult.value.data.length : 0) : 0;

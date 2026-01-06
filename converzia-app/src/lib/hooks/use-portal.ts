@@ -128,16 +128,32 @@ export function usePortalLeads(options: UsePortalLeadsOptions = {}) {
 
       if (queryError) throw queryError;
 
-      setLeads(
-        (Array.isArray(data) ? data : []).map((l: any) => ({
-          ...l,
-          lead: Array.isArray(l.lead) ? l.lead[0] : l.lead,
-          offer: Array.isArray(l.offer) ? l.offer[0] : l.offer,
-        }))
-      );
+      // Validar y procesar datos con manejo de joins
+      const processedLeads = (Array.isArray(data) ? data : [])
+        .map((l: any) => {
+          // Validar joins - manejar casos donde las relaciones pueden ser null o arrays vacíos
+          const lead = Array.isArray(l.lead) ? (l.lead.length > 0 ? l.lead[0] : null) : l.lead;
+          const offer = Array.isArray(l.offer) ? (l.offer.length > 0 ? l.offer[0] : null) : l.offer;
+          
+          return {
+            ...l,
+            lead: lead || null,
+            offer: offer || null,
+          };
+        })
+        .filter((l: any) => {
+          // Filtrar leads que no tienen datos mínimos válidos
+          // Para algunos casos, puede ser válido tener lead sin offer
+          return l.lead !== null && l.lead !== undefined;
+        });
+
+      setLeads(processedLeads);
       setTotal(count || 0);
     } catch (err) {
       console.error("Error fetching leads:", err);
+      // Resetear arrays en caso de error
+      setLeads([]);
+      setTotal(0);
       setError(err instanceof Error ? err.message : "Error al cargar leads");
     } finally {
       setIsLoading(false);
@@ -182,56 +198,84 @@ export function usePortalOffers() {
       );
 
       if (offersData && Array.isArray(offersData)) {
-        // Only fetch stats if we have a reasonable number of offers (avoid N+1 problem)
-        if (offersData.length <= 10) {
-          // Fetch stats for each offer in parallel with error handling
-          const offersWithStats = await Promise.allSettled(
-            offersData.map(async (offer: Offer) => {
-              const [leadResult, variantResult] = await Promise.allSettled([
-                queryWithTimeout(
-                  supabase
-                    .from("lead_offers")
-                    .select("id", { count: "exact", head: true })
-                    .eq("offer_id", offer.id),
-                  5000,
-                  `lead count for offer ${offer.id}`,
-                  false // Don't retry
-                ),
-                queryWithTimeout(
-                  supabase
-                    .from("offer_variants")
-                    .select("id", { count: "exact", head: true })
-                    .eq("offer_id", offer.id),
-                  5000,
-                  `variant count for offer ${offer.id}`,
-                  false // Don't retry
-                ),
-              ]);
+        try {
+          // Usar offer_funnel_stats para obtener conteos consistentes con otras vistas
+          // Esto asegura que usemos la misma fuente de datos que el Dashboard y Mis Leads
+          const { data: funnelStatsData } = await queryWithTimeout(
+            supabase
+              .from("offer_funnel_stats")
+              .select("offer_id, total_leads")
+              .in("offer_id", offersData.map(o => o.id))
+              .eq("tenant_id", activeTenantId),
+            10000,
+            "fetch offer funnel stats",
+            false // Don't retry
+          );
 
-              const leadCount = leadResult.status === "fulfilled" ? (leadResult.value.count || 0) : 0;
-              const variantCount = variantResult.status === "fulfilled" ? (variantResult.value.count || 0) : 0;
+          // Crear mapa de stats por offer_id para acceso rápido
+          const statsMap = new Map(
+            (Array.isArray(funnelStatsData) ? funnelStatsData : []).map((s: any) => [
+              s.offer_id,
+              s.total_leads || 0
+            ])
+          );
 
-              return {
+          // Si hay pocos offers (<= 10), también cargar variant_count
+          if (offersData.length <= 10) {
+            const offersWithStats = await Promise.allSettled(
+              offersData.map(async (offer: Offer) => {
+                const variantResult = await Promise.allSettled([
+                  queryWithTimeout(
+                    supabase
+                      .from("offer_variants")
+                      .select("id", { count: "exact", head: true })
+                      .eq("offer_id", offer.id),
+                    5000,
+                    `variant count for offer ${offer.id}`,
+                    false // Don't retry
+                  ),
+                ]);
+
+                const variantCount = variantResult[0].status === "fulfilled" 
+                  ? (variantResult[0].value.count || 0) 
+                  : 0;
+
+                return {
+                  ...offer,
+                  lead_count: statsMap.get(offer.id) || 0,
+                  variant_count: variantCount,
+                };
+              })
+            );
+
+            setOffers(
+              offersWithStats
+                .filter((result) => result.status === "fulfilled")
+                .map((result) => (result as PromiseFulfilledResult<any>).value)
+            );
+          } else {
+            // Para muchos offers, usar solo los stats de funnel (más eficiente)
+            setOffers(
+              offersData.map((offer) => ({
                 ...offer,
-                lead_count: leadCount,
-                variant_count: variantCount,
-              };
-            })
-          );
-
-          setOffers(
-            offersWithStats
-              .filter((result) => result.status === "fulfilled")
-              .map((result) => (result as PromiseFulfilledResult<any>).value)
-          );
-        } else {
-          // Too many offers - skip stats to avoid timeout
+                lead_count: statsMap.get(offer.id) || 0,
+                variant_count: 0, // Puede cargarse después si es necesario
+              }))
+            );
+          }
+        } catch (error) {
+          console.error("Error fetching offer stats:", error);
+          // En caso de error, resetear array y usar valores por defecto
           setOffers(offersData.map((offer) => ({ ...offer, lead_count: 0, variant_count: 0 })));
         }
       } else {
         setOffers([]);
       }
-
+    } catch (error) {
+      console.error("Error fetching offers:", error);
+      // Resetear array en caso de error general
+      setOffers([]);
+    } finally {
       setIsLoading(false);
     }
 

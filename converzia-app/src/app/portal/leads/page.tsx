@@ -223,59 +223,95 @@ export default function PortalLeadsPage() {
       // Increased timeout slightly for queries with joins, but queries should be faster with indexes
       const { data: leadsDataRaw, error } = await queryWithTimeout(query, 20000, "leads list");
       
+      // SIEMPRE resetear el array primero
+      setLeads([]);
+      
       if (error) {
         console.error("Error fetching leads:", error);
+        toast.error("Error al cargar leads");
         return;
       }
       
       const leadsData = Array.isArray(leadsDataRaw) ? leadsDataRaw : [];
       
       if (leadsData.length > 0) {
-        const processedLeads: TenantLeadView[] = leadsData.map((d: any) => {
-          const lead = Array.isArray(d.lead) ? d.lead[0] : d.lead;
-          const offer = Array.isArray(d.offer) ? d.offer[0] : d.offer;
-          const isDropped = selectedCategory === "not_qualified";
-          const isReceived = selectedCategory === "received";
-          
-          // Get drop reason from qualification fields or status
-          let dropReason: string | null = null;
-          if (isDropped) {
-            const qual = d.qualification_fields || {};
-            // Try to determine drop reason
-            if (d.status === "STOPPED") {
-              dropReason = DROP_REASONS.stopped;
-            } else if (d.status === "COOLING") {
-              dropReason = DROP_REASONS.cooling;
-            } else if (qual.disqualification_reason) {
-              dropReason = DROP_REASONS[qual.disqualification_reason] || DROP_REASONS.other;
-            } else {
-              // Try to infer from qualification fields
-              if (qual.budget && qual.price_mismatch) dropReason = DROP_REASONS.price_high;
-              else if (qual.zone_mismatch) dropReason = DROP_REASONS.wrong_zone;
-              else dropReason = DROP_REASONS.other;
+        // Filtrar y validar datos antes de procesarlos
+        const processedLeads: TenantLeadView[] = leadsData
+          .filter((d: any) => {
+            // Validar que tenga los datos mínimos necesarios
+            const lead = Array.isArray(d.lead) ? d.lead[0] : d.lead;
+            const offer = Array.isArray(d.offer) ? d.offer[0] : d.offer;
+            
+            // Para "in_chat" y "received", necesitamos al menos el lead (puede no tener offer asignado aún)
+            if (selectedCategory === "in_chat" || selectedCategory === "received") {
+              return lead !== null && lead !== undefined;
             }
-          }
-          
-          return {
-            id: d.id,
-            status: d.status,
-            category: selectedCategory as TenantLeadView["category"],
-            // Privacy: For received, only show first name (no last name, email, phone)
-            // For dropped leads, hide all personal info
-            firstName: isDropped ? null : (isReceived ? (lead?.first_name || "Lead") : (lead?.first_name || "Lead")),
-            offerName: offer?.name || null,
-            score: d.score_total,
-            createdAt: d.created_at,
-            updatedAt: d.updated_at,
-            dropReason,
-          };
-        });
+            
+            // Para "not_qualified", no necesitamos validar lead (está oculto por privacidad)
+            if (selectedCategory === "not_qualified") {
+              return true; // Todos los leads descalificados son válidos
+            }
+            
+            // Para otras categorías, validar que exista el lead
+            return lead !== null && lead !== undefined;
+          })
+          .map((d: any) => {
+            const lead = Array.isArray(d.lead) ? d.lead[0] : d.lead;
+            const offer = Array.isArray(d.offer) ? d.offer[0] : d.offer;
+            const isDropped = selectedCategory === "not_qualified";
+            const isReceived = selectedCategory === "received";
+            
+            // Get drop reason from qualification fields or status
+            let dropReason: string | null = null;
+            if (isDropped) {
+              const qual = d.qualification_fields || {};
+              // Try to determine drop reason
+              if (d.status === "STOPPED") {
+                dropReason = DROP_REASONS.stopped;
+              } else if (d.status === "COOLING") {
+                dropReason = DROP_REASONS.cooling;
+              } else if (qual.disqualification_reason) {
+                dropReason = DROP_REASONS[qual.disqualification_reason] || DROP_REASONS.other;
+              } else {
+                // Try to infer from qualification fields
+                if (qual.budget && qual.price_mismatch) dropReason = DROP_REASONS.price_high;
+                else if (qual.zone_mismatch) dropReason = DROP_REASONS.wrong_zone;
+                else dropReason = DROP_REASONS.other;
+              }
+            }
+            
+            return {
+              id: d.id,
+              status: d.status,
+              category: selectedCategory as TenantLeadView["category"],
+              // Privacy: For received, only show first name (no last name, email, phone)
+              // For dropped leads, hide all personal info
+              // Manejar caso cuando lead?.first_name es null
+              firstName: isDropped ? null : (lead?.first_name || "Lead"),
+              offerName: offer?.name || null,
+              score: d.score_total,
+              createdAt: d.created_at,
+              updatedAt: d.updated_at,
+              dropReason,
+            };
+          });
         
         setLeads(processedLeads);
+        
+        // Logging para debug de inconsistencias
+        if (processedLeads.length !== leadsData.length) {
+          console.warn(`[Leads] Filtrados ${leadsData.length - processedLeads.length} leads inválidos de ${leadsData.length} totales`);
+        }
+      } else {
+        // Asegurar que el array esté vacío cuando no hay resultados
+        setLeads([]);
       }
       
     } catch (error) {
       console.error("Error loading leads:", error);
+      // Resetear array en caso de error
+      setLeads([]);
+      toast.error("Error al cargar leads");
     } finally {
       setIsRefreshing(false);
     }
