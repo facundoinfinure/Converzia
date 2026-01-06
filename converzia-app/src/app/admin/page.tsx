@@ -33,6 +33,7 @@ import { SimpleChart } from "@/components/ui/SimpleChart";
 import { createClient } from "@/lib/supabase/client";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { formatRelativeTime } from "@/lib/utils";
+import { useAdmin } from "@/lib/contexts/admin-context";
 
 interface DashboardStats {
   totalLeads: number;
@@ -65,218 +66,44 @@ interface PendingApproval {
 
 export default function AdminDashboard() {
   const router = useRouter();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
-  const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Use admin context instead of local state
+  const {
+    stats: contextStats,
+    recentActivity: contextActivity,
+    pendingApprovals: contextApprovals,
+    isInitialLoading,
+    isLoading,
+    errors,
+    refreshAll,
+  } = useAdmin();
 
-  useEffect(() => {
-    async function fetchDashboardData() {
-      const supabase = createClient();
-      setIsLoading(true);
-      setError(null);
+  // For backward compatibility, return isLoading as combined state
+  const isLoadingCombined = isInitialLoading || isLoading.stats || isLoading.activity || isLoading.approvals;
+  const error = errors.stats || errors.activity || errors.approvals || null;
 
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      
-      if (authError || !user) {
-        setError(`Error de autenticación: ${authError?.message || "Usuario no encontrado"}`);
-        setIsLoading(false);
-        return;
-      }
+  // Map context data to component types (context types match, so direct assignment)
+  const stats: DashboardStats | null = contextStats;
+  
+  // Map recent activity - context uses different structure, need to transform
+  const recentActivity: RecentActivity[] = contextActivity.map((a) => ({
+    id: a.id,
+    type: (a.type || "conversation") as "lead_ready" | "unmapped" | "conversation" | "approval",
+    tenant: a.metadata?.tenant || "Sin tenant",
+    message: a.description || "",
+    time: formatRelativeTime(a.timestamp),
+  }));
 
-      try {
-        const [
-          { count: totalLeads },
-          { count: activeTenants },
-          { count: pendingApprovals },
-          { data: unmappedLeads },
-        ] = await Promise.all([
-          queryWithTimeout(
-            supabase.from("lead_offers").select("id", { count: "exact", head: true }),
-            10000,
-            "lead_offers count"
-          ),
-          queryWithTimeout(
-            supabase.from("tenants").select("id", { count: "exact", head: true }).eq("status", "ACTIVE"),
-            10000,
-            "tenants count"
-          ),
-          queryWithTimeout(
-            supabase.from("tenant_members").select("id", { count: "exact", head: true }).eq("status", "PENDING_APPROVAL"),
-            10000,
-            "tenant_members count"
-          ),
-          queryWithTimeout(
-            supabase.from("lead_offers").select("id").eq("status", "PENDING_MAPPING"),
-            10000,
-            "unmapped leads"
-          ),
-        ]);
+  // Map pending approvals - context structure matches what we need
+  const pendingApprovals: PendingApproval[] = contextApprovals.map((a) => ({
+    id: a.id,
+    name: a.user_name || "Usuario",
+    email: a.user_email || "",
+    tenant: a.tenant_name || "Sin tenant",
+    role: "VIEWER", // Default role - could be stored in context if needed
+    requestedAt: formatRelativeTime(a.requested_at),
+  }));
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const { count: leadsToday } = await queryWithTimeout(
-          supabase
-            .from("lead_offers")
-            .select("id", { count: "exact", head: true })
-            .gte("created_at", today.toISOString()),
-          10000,
-          "today's leads"
-        );
-
-        const { count: leadReadyCount } = await queryWithTimeout(
-          supabase
-            .from("lead_offers")
-            .select("id", { count: "exact", head: true })
-            .in("status", ["LEAD_READY", "SENT_TO_DEVELOPER"]),
-          10000,
-          "lead ready count"
-        );
-
-        const { data: creditData } = await queryWithTimeout(
-          supabase
-            .from("tenant_credit_balance")
-            .select("tenant_id, current_balance")
-            .lt("current_balance", 10),
-          10000,
-          "low credit tenants"
-        );
-
-        const { data: responseTimes } = await queryWithTimeout(
-          supabase
-            .from("lead_offers")
-            .select("created_at, first_response_at")
-            .not("first_response_at", "is", null)
-            .gte("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-            .limit(100),
-          10000,
-          "response times"
-        );
-
-        let avgResponseTime = "N/A";
-        if (responseTimes && Array.isArray(responseTimes) && responseTimes.length > 0) {
-          const times = (responseTimes as any[])
-            .map((r: any) => {
-              const created = new Date(r.created_at).getTime();
-              const responded = new Date(r.first_response_at).getTime();
-              return (responded - created) / 1000 / 60;
-            })
-            .filter((t: number) => t > 0 && t < 1440);
-
-          if (times.length > 0) {
-            const avg = times.reduce((a: number, b: number) => a + b, 0) / times.length;
-            avgResponseTime = `${avg.toFixed(1)}min`;
-          }
-        }
-
-        // Get leads trend for last 30 days
-        const daysAgo = 30;
-        const trendData: Array<{ date: string; value: number }> = [];
-        for (let i = daysAgo; i >= 0; i--) {
-          const date = new Date();
-          date.setDate(date.getDate() - i);
-          date.setHours(0, 0, 0, 0);
-          const nextDay = new Date(date);
-          nextDay.setDate(nextDay.getDate() + 1);
-
-          const { count } = await queryWithTimeout(
-            supabase
-              .from("lead_offers")
-              .select("id", { count: "exact", head: true })
-              .gte("created_at", date.toISOString())
-              .lt("created_at", nextDay.toISOString()),
-            5000,
-            `trend data for day ${i}`
-          );
-
-          trendData.push({
-            date: date.toLocaleDateString("es-AR", { month: "short", day: "numeric" }),
-            value: count || 0,
-          });
-        }
-
-        setStats({
-          totalLeads: totalLeads || 0,
-          leadsToday: leadsToday || 0,
-          activeTenants: activeTenants || 0,
-          leadReadyRate: totalLeads ? Math.round((leadReadyCount || 0) / totalLeads * 100) : 0,
-          avgResponseTime,
-          pendingApprovals: pendingApprovals || 0,
-          unmappedAds: Array.isArray(unmappedLeads) ? unmappedLeads.length : 0,
-          lowCreditTenants: Array.isArray(creditData) ? creditData.length : 0,
-          leadsTrend: trendData,
-        });
-
-        // Fetch pending approvals
-        const { data: approvals } = await queryWithTimeout(
-          supabase
-            .from("tenant_members")
-            .select(`
-              id,
-              role,
-              created_at,
-              user:user_profiles!tenant_members_user_id_fkey(full_name, email),
-              tenant:tenants(name)
-            `)
-            .eq("status", "PENDING_APPROVAL")
-            .order("created_at", { ascending: false })
-            .limit(5),
-          10000,
-          "pending approvals"
-        );
-
-        if (approvals && Array.isArray(approvals)) {
-          setPendingApprovals(
-            (approvals as any[]).map((a: any) => ({
-              id: a.id,
-              name: (Array.isArray(a.user) ? a.user[0] : a.user)?.full_name || "Usuario",
-              email: (Array.isArray(a.user) ? a.user[0] : a.user)?.email || "",
-              tenant: (Array.isArray(a.tenant) ? a.tenant[0] : a.tenant)?.name || "Sin tenant",
-              role: a.role,
-              requestedAt: formatRelativeTime(a.created_at),
-            }))
-          );
-        }
-
-        // Fetch recent activity
-        const { data: recentLeads } = await queryWithTimeout(
-          supabase
-            .from("lead_offers")
-            .select(`
-              id,
-              status,
-              created_at,
-              tenants(name)
-            `)
-            .order("created_at", { ascending: false })
-            .limit(5),
-          10000,
-          "recent activity"
-        );
-
-        if (recentLeads && Array.isArray(recentLeads)) {
-          setRecentActivity(
-            (recentLeads as any[]).map((l: any) => ({
-              id: l.id,
-              type: l.status === "LEAD_READY" ? "lead_ready" : l.status === "PENDING_MAPPING" ? "unmapped" : "conversation",
-              tenant: l.tenants?.name || "Sin tenant",
-              message: l.status === "LEAD_READY" ? "Nuevo lead listo" : l.status === "PENDING_MAPPING" ? "Lead sin mapear" : "Conversación activa",
-              time: formatRelativeTime(l.created_at),
-            }))
-          );
-        }
-      } catch (error: any) {
-        setError(error?.message || "Error al cargar los datos");
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    fetchDashboardData();
-  }, []);
-
-  if (isLoading) {
+  if (isLoadingCombined) {
     return (
       <PageContainer>
         <div className="space-y-4 sm:space-y-6 animate-pulse">

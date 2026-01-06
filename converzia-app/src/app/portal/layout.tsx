@@ -1,11 +1,20 @@
 import { PortalSidebar } from "@/components/layout/PortalSidebar";
 import { PortalHeader } from "@/components/layout/PortalHeader";
+import { DashboardInitialLoader } from "@/components/dashboard/DashboardInitialLoader";
+import { useDashboard } from "@/lib/contexts/dashboard-context";
 
 export default function PortalLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const { isInitialLoading } = useDashboard();
+
+  // Show loading screen while initial data is loading
+  if (isInitialLoading) {
+    return <DashboardInitialLoader />;
+  }
+
   return (
     <div className="min-h-screen bg-[var(--bg-secondary)]">
       <PortalSidebar />

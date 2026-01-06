@@ -4,6 +4,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { AuthProvider } from "@/lib/auth/context";
+import { DashboardProvider } from "@/lib/contexts/dashboard-context";
 import { ToastProvider, useToast, setToastHandler } from "@/components/ui/Toast";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { createQueryClient } from "@/lib/react-query/config";
@@ -32,8 +33,11 @@ export function Providers({ children }: ProvidersProps) {
       <TooltipProvider delayDuration={200}>
         <ToastProvider position="bottom-right">
           <AuthProvider>
-            <ToastInitializer />
-            {children}
+            <DashboardProvider>
+              <DashboardInitializer />
+              <ToastInitializer />
+              {children}
+            </DashboardProvider>
           </AuthProvider>
         </ToastProvider>
       </TooltipProvider>
@@ -59,3 +63,13 @@ function ToastInitializer() {
   return null;
 }
 
+// ============================================
+// Dashboard Initializer (triggers initial load)
+// ============================================
+
+function DashboardInitializer() {
+  // This hook will trigger the initial load when activeTenantId is available
+  const { useDashboardInitialLoad } = require("@/lib/hooks/use-dashboard-initial-load");
+  useDashboardInitialLoad();
+  return null;
+}
