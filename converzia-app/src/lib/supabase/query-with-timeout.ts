@@ -57,9 +57,11 @@ export async function queryWithTimeout<T>(
   };
 
   // Apply retry logic if enabled
+  // Note: TIMEOUT errors are NOT retried (handled in retry.ts)
+  // Retrying timeouts just wastes time since they indicate slow queries, not transient errors
   if (enableRetry) {
     return retryQuery(queryWithTimeoutFn, {
-      maxRetries: 2, // Retry up to 2 times (3 total attempts)
+      maxRetries: 1, // Reduced from 2 to 1 - most queries should succeed on first retry if it's a transient error
       retryDelay: 500, // Start with 500ms delay
     });
   }
@@ -117,9 +119,10 @@ export async function rpcWithTimeout<T>(
   };
 
   // Apply retry logic if enabled
+  // Note: TIMEOUT errors are NOT retried (handled in retry.ts)
   if (enableRetry) {
     const result = await retryQuery(rpcWithTimeoutFn, {
-      maxRetries: 2, // Retry up to 2 times (3 total attempts)
+      maxRetries: 1, // Reduced from 2 to 1 - RPC calls should succeed on first retry if transient
       retryDelay: 500, // Start with 500ms delay
     });
     // Return RPC format (without count)

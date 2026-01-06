@@ -19,7 +19,8 @@ const DEFAULT_RETRY_CONFIG: Required<RetryConfig> = {
   maxRetries: 3,
   retryDelay: 1000, // 1 second
   retryableErrors: [
-    "TIMEOUT",
+    // TIMEOUT removed - timeouts indicate slow queries, not transient errors
+    // Retrying timeouts just wastes time and makes the problem worse
     "PGRST301", // Connection error
     "PGRST116", // Not found (sometimes transient)
     "network",
@@ -28,6 +29,9 @@ const DEFAULT_RETRY_CONFIG: Required<RetryConfig> = {
 
 /**
  * Check if an error is retryable
+ * 
+ * IMPORTANT: TIMEOUT errors are NOT retryable - they indicate slow queries,
+ * not transient network issues. Retrying a timeout just wastes time.
  */
 function isRetryableError(error: PostgrestError | null, retryableErrors: string[]): boolean {
   if (!error) return false;
@@ -35,11 +39,15 @@ function isRetryableError(error: PostgrestError | null, retryableErrors: string[
   const errorCode = error.code || "";
   const errorMessage = (error.message || "").toLowerCase();
   
+  // Explicitly exclude TIMEOUT errors - they are not retryable
+  if (errorCode === "TIMEOUT" || errorMessage.includes("timeout")) {
+    return false;
+  }
+  
   return retryableErrors.some(
     (retryable) =>
       errorCode.includes(retryable) ||
       errorMessage.includes(retryable) ||
-      errorMessage.includes("timeout") ||
       errorMessage.includes("network")
   );
 }

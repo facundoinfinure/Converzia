@@ -195,6 +195,8 @@ export default function PortalLeadsPage() {
         ? ["PENDING_MAPPING", "TO_BE_CONTACTED"]
         : category.statuses;
       
+      // Optimized query: filter by tenant_id first (uses index), then status, then order
+      // This order matches the composite index idx_lead_offers_tenant_status_updated
       let query = supabase
         .from("lead_offers")
         .select(`
@@ -210,13 +212,15 @@ export default function PortalLeadsPage() {
         .eq("tenant_id", activeTenantId)
         .in("status", statuses)
         .order("updated_at", { ascending: false })
-        .limit(100);
+        .limit(50); // Reduced from 100 to improve performance
       
       if (offerFilter) {
+        // When filtering by offer, use the idx_lead_offers_tenant_status_offer index
         query = query.eq("offer_id", offerFilter);
       }
       
-      const { data: leadsDataRaw, error } = await queryWithTimeout(query, 15000, "leads list");
+      // Increased timeout slightly for queries with joins, but queries should be faster with indexes
+      const { data: leadsDataRaw, error } = await queryWithTimeout(query, 20000, "leads list");
       
       if (error) {
         console.error("Error fetching leads:", error);

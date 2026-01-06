@@ -75,7 +75,8 @@ export default function PortalLeadDetailPage() {
     setIsLoading(true);
     
     try {
-      // Load lead offer details
+      // Optimized query: filter by id first (primary key), then tenant_id for security
+      // Joins are optimized by selecting only needed fields
       const { data: leadOfferData, error: leadOfferError } = await queryWithTimeout(
         supabase
           .from("lead_offers")
@@ -107,7 +108,7 @@ export default function PortalLeadDetailPage() {
           .eq("id", leadOfferId)
           .eq("tenant_id", activeTenantId)
           .single(),
-        10000,
+        15000, // Increased timeout for multiple joins, but should be faster with indexes
         "load lead details"
       );
 

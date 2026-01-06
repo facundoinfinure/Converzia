@@ -437,6 +437,8 @@ export function usePortalTeam() {
       return;
     }
 
+    // Optimized query: filter by tenant_id and status ACTIVE first (uses composite index)
+    // This order matches idx_tenant_members_tenant_active_created index
     const { data } = await queryWithTimeout(
       supabase
         .from("tenant_members")
@@ -449,8 +451,9 @@ export function usePortalTeam() {
           user:user_profiles!tenant_members_user_id_fkey(id, email, full_name, avatar_url)
         `)
         .eq("tenant_id", activeTenantId)
-        .order("created_at"),
-      10000,
+        .eq("status", "ACTIVE")
+        .order("created_at", { ascending: true }),
+      15000, // Increased timeout slightly for join, but should be faster with index
       "fetch team members"
     );
 
