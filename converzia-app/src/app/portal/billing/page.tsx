@@ -12,6 +12,9 @@ import {
   Download,
   Package,
   RefreshCw,
+  ExternalLink,
+  FileText,
+  User,
 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -31,15 +34,32 @@ import type { CreditPackage } from "@/types";
 interface ConsumptionRecord {
   ledger_id: string;
   tenant_id: string;
-  offer_id: string | null;
+  transaction_type: string;
+  entry_type: string;
   amount: number;
   balance_after: number;
-  entry_type: string;
   description: string | null;
   created_at: string;
-  lead_display_name: string | null;
+  
+  // Purchase-specific fields
+  package_name: string | null;
+  total: number | null;
+  currency: string | null;
+  credits_purchased: number | null;
+  cost_per_credit: number | null;
+  purchaser_name: string | null;
+  purchaser_email: string | null;
+  billing_order_id: string | null;
+  invoice_url: string | null;
+  
+  // Consumption-specific fields
+  offer_id: string | null;
   offer_name: string | null;
+  lead_offer_id: string | null;
+  lead_id: string | null;
+  lead_display_name: string | null;
   lead_status: string | null;
+  delivery_id: string | null;
 }
 
 export default function PortalBillingPage() {
@@ -147,11 +167,11 @@ export default function PortalBillingPage() {
       header: "Tipo",
       cell: (tx) => {
         const config: Record<string, { icon: React.ElementType; color: string; label: string }> = {
-          CREDIT_PURCHASE: { icon: TrendingUp, color: "text-[var(--text-secondary)]", label: "Compra" },
+          CREDIT_PURCHASE: { icon: TrendingUp, color: "text-[var(--success)]", label: "Compra" },
           CREDIT_CONSUMPTION: { icon: TrendingDown, color: "text-[var(--text-secondary)]", label: "Lead entregado" },
-          CREDIT_REFUND: { icon: RefreshCw, color: "text-[var(--text-secondary)]", label: "Reembolso" },
+          CREDIT_REFUND: { icon: RefreshCw, color: "text-[var(--success)]", label: "Reembolso" },
           CREDIT_ADJUSTMENT: { icon: CreditCard, color: "text-[var(--text-secondary)]", label: "Ajuste" },
-          CREDIT_BONUS: { icon: Sparkles, color: "text-[var(--text-secondary)]", label: "Bonus" },
+          CREDIT_BONUS: { icon: Sparkles, color: "text-[var(--success)]", label: "Bonus" },
         };
         const c = config[tx.entry_type] || { icon: CreditCard, color: "text-[var(--text-tertiary)]", label: tx.entry_type };
         const Icon = c.icon;
@@ -169,34 +189,61 @@ export default function PortalBillingPage() {
     {
       key: "details",
       header: "Detalle",
-      cell: (tx) => (
-        <div>
-          {tx.lead_display_name && (
-            <p className="text-sm text-[var(--text-primary)]">{tx.lead_display_name}</p>
-          )}
-          {tx.offer_name && (
-            <p className="text-xs text-[var(--text-tertiary)]">{tx.offer_name}</p>
-          )}
-          {!tx.lead_display_name && tx.description && (
-            <p className="text-sm text-[var(--text-secondary)]">{tx.description}</p>
-          )}
-        </div>
-      ),
+      cell: (tx) => {
+        const isPurchase = tx.transaction_type === "CREDIT_PURCHASE";
+        
+        if (isPurchase) {
+          return (
+            <div>
+              <p className="text-sm font-medium text-[var(--text-primary)]">
+                {tx.package_name || "Compra de créditos"}
+              </p>
+              {tx.purchaser_name && (
+                <p className="text-xs text-[var(--text-tertiary)]">
+                  Por: {tx.purchaser_name}
+                </p>
+              )}
+              {tx.total !== null && tx.currency && (
+                <p className="text-xs text-[var(--text-tertiary)]">
+                  {formatCurrency(tx.total, tx.currency)}
+                </p>
+              )}
+            </div>
+          );
+        }
+        
+        return (
+          <div>
+            {tx.lead_display_name && (
+              <p className="text-sm font-medium text-[var(--text-primary)]">{tx.lead_display_name}</p>
+            )}
+            {tx.offer_name && (
+              <p className="text-xs text-[var(--text-tertiary)]">{tx.offer_name}</p>
+            )}
+            {!tx.lead_display_name && tx.description && (
+              <p className="text-sm text-[var(--text-secondary)]">{tx.description}</p>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: "amount",
       header: "Créditos",
-      cell: (tx) => (
-        <span className={tx.amount >= 0 ? "text-[var(--text-primary)] font-semibold" : "text-[var(--text-secondary)] font-semibold"}>
-          {tx.amount >= 0 ? "+" : ""}{tx.amount}
-        </span>
-      ),
+      cell: (tx) => {
+        const isPositive = tx.amount >= 0;
+        return (
+          <span className={`font-semibold ${isPositive ? "text-[var(--success)]" : "text-[var(--text-secondary)]"}`}>
+            {isPositive ? "+" : ""}{tx.amount}
+          </span>
+        );
+      },
     },
     {
       key: "balance",
       header: "Balance",
       cell: (tx) => (
-        <span className="text-[var(--text-tertiary)]">{tx.balance_after}</span>
+        <span className="text-[var(--text-tertiary)] font-medium">{tx.balance_after}</span>
       ),
     },
     {
@@ -205,6 +252,41 @@ export default function PortalBillingPage() {
       cell: (tx) => (
         <span className="text-[var(--text-tertiary)] text-sm">{formatRelativeTime(tx.created_at)}</span>
       ),
+    },
+    {
+      key: "actions",
+      header: "Acción",
+      cell: (tx) => {
+        const isPurchase = tx.transaction_type === "CREDIT_PURCHASE";
+        
+        if (isPurchase && tx.invoice_url) {
+          return (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => window.open(tx.invoice_url!, "_blank")}
+              rightIcon={<ExternalLink className="h-3 w-3" />}
+            >
+              Ver Invoice
+            </Button>
+          );
+        }
+        
+        if (!isPurchase && tx.lead_offer_id) {
+          return (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => window.location.href = `/portal/leads/${tx.lead_offer_id}`}
+              rightIcon={<User className="h-3 w-3" />}
+            >
+              Ver Lead
+            </Button>
+          );
+        }
+        
+        return null;
+      },
     },
   ];
 
@@ -340,7 +422,7 @@ export default function PortalBillingPage() {
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>Historial de consumo</CardTitle>
+            <CardTitle>Historial de facturación</CardTitle>
             <div className="flex items-center gap-3">
               {offers.length > 1 && (
                 <div className="w-48">
@@ -364,7 +446,7 @@ export default function PortalBillingPage() {
             <EmptyState
               icon={<CreditCard />}
               title="Sin movimientos"
-              description="El historial de consumo de créditos aparecerá aquí."
+              description="El historial de compras y consumos de créditos aparecerá aquí."
               size="sm"
             />
           }
