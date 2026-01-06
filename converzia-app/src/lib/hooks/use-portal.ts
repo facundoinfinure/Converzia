@@ -45,29 +45,35 @@ export function usePortalDashboard() {
     setError(null);
 
     try {
-      // Fetch stats in parallel with timeouts
+      // Fetch critical stats in parallel with shorter timeouts and better error handling
+      // Use Promise.allSettled to prevent one failure from blocking all data
       const [
-        { count: totalLeads },
-        { count: leadReadyCount },
-        { count: deliveredCount },
-        { data: creditData },
-        { count: activeOffers },
-        { count: teamMembers },
-      ] = await Promise.all([
+        totalLeadsResult,
+        leadReadyResult,
+        deliveredResult,
+        creditResult,
+        offersResult,
+        membersResult,
+        contactedResult,
+        qualifyingResult,
+      ] = await Promise.allSettled([
         queryWithTimeout(
           supabase.from("lead_offers").select("id", { count: "exact", head: true }).eq("tenant_id", activeTenantId),
-          10000,
-          "total leads"
+          8000, // Reduced from 10000
+          "total leads",
+          false // Disable retry for faster failure
         ),
         queryWithTimeout(
           supabase.from("lead_offers").select("id", { count: "exact", head: true }).eq("tenant_id", activeTenantId).eq("status", "LEAD_READY"),
-          10000,
-          "lead ready count"
+          8000,
+          "lead ready count",
+          false
         ),
         queryWithTimeout(
           supabase.from("deliveries").select("id", { count: "exact", head: true }).eq("tenant_id", activeTenantId).eq("status", "DELIVERED"),
-          10000,
-          "delivered count"
+          8000,
+          "delivered count",
+          false
         ),
         queryWithTimeout(
           supabase.from("tenant_credit_balance").select("current_balance").eq("tenant_id", activeTenantId).maybeSingle(),
@@ -77,32 +83,25 @@ export function usePortalDashboard() {
         ),
         queryWithTimeout(
           supabase.from("offers").select("id", { count: "exact", head: true }).eq("tenant_id", activeTenantId).eq("status", "ACTIVE"),
-          10000,
-          "active offers"
+          8000,
+          "active offers",
+          false
         ),
         queryWithTimeout(
           supabase.from("tenant_members").select("id", { count: "exact", head: true }).eq("tenant_id", activeTenantId).eq("status", "ACTIVE"),
-          10000,
-          "team members"
+          8000,
+          "team members",
+          false
         ),
-      ]);
-
-      const total = totalLeads || 0;
-      const delivered = deliveredCount || 0;
-
-      // Get pipeline stats (real data)
-      const [
-        { count: contactedCount },
-        { count: qualifyingCount },
-      ] = await Promise.all([
         queryWithTimeout(
           supabase
             .from("lead_offers")
             .select("id", { count: "exact", head: true })
             .eq("tenant_id", activeTenantId)
             .in("status", ["CONTACTED", "ENGAGED"]),
-          10000,
-          "contacted count"
+          8000,
+          "contacted count",
+          false
         ),
         queryWithTimeout(
           supabase
@@ -110,10 +109,24 @@ export function usePortalDashboard() {
             .select("id", { count: "exact", head: true })
             .eq("tenant_id", activeTenantId)
             .eq("status", "QUALIFYING"),
-          10000,
-          "qualifying count"
+          8000,
+          "qualifying count",
+          false
         ),
       ]);
+
+      // Extract results with fallback to 0 on error
+      const totalLeads = totalLeadsResult.status === "fulfilled" ? (totalLeadsResult.value.count || 0) : 0;
+      const leadReadyCount = leadReadyResult.status === "fulfilled" ? (leadReadyResult.value.count || 0) : 0;
+      const deliveredCount = deliveredResult.status === "fulfilled" ? (deliveredResult.value.count || 0) : 0;
+      const creditData = creditResult.status === "fulfilled" ? creditResult.value.data : null;
+      const activeOffers = offersResult.status === "fulfilled" ? (offersResult.value.count || 0) : 0;
+      const teamMembers = membersResult.status === "fulfilled" ? (membersResult.value.count || 0) : 0;
+      const contactedCount = contactedResult.status === "fulfilled" ? (contactedResult.value.count || 0) : 0;
+      const qualifyingCount = qualifyingResult.status === "fulfilled" ? (qualifyingResult.value.count || 0) : 0;
+
+      const total = totalLeads || 0;
+      const delivered = deliveredCount || 0;
 
       setStats({
         totalLeads: total,
@@ -131,7 +144,7 @@ export function usePortalDashboard() {
         },
       });
 
-      // Fetch recent leads
+      // Fetch recent leads (non-blocking, can fail silently)
       const { data: leadsData } = await queryWithTimeout(
         supabase
           .from("lead_offers")
@@ -143,8 +156,9 @@ export function usePortalDashboard() {
           .eq("tenant_id", activeTenantId)
           .order("created_at", { ascending: false })
           .limit(10),
-        10000,
-        "recent leads"
+        8000,
+        "recent leads",
+        false // Don't retry - this is non-critical
       );
 
       if (leadsData && Array.isArray(leadsData)) {
@@ -273,52 +287,65 @@ export function usePortalOffers() {
         return;
       }
 
-      // Fetch offers with stats
+      // Fetch offers (stats are optional and can be loaded lazily)
       const { data: offersData } = await queryWithTimeout(
         supabase
           .from("offers")
           .select("*")
           .eq("tenant_id", activeTenantId)
           .order("priority", { ascending: false }),
-        10000,
-        "fetch portal offers"
+        8000, // Reduced timeout
+        "fetch portal offers",
+        false // Don't retry
       );
 
       if (offersData && Array.isArray(offersData)) {
-        // Fetch stats for each offer
-        const offersWithStats = await Promise.all(
-          offersData.map(async (offer: Offer) => {
-            const [
-              { count: leadCount },
-              { count: variantCount },
-            ] = await Promise.all([
-              queryWithTimeout(
-                supabase
-                  .from("lead_offers")
-                  .select("id", { count: "exact", head: true })
-                  .eq("offer_id", offer.id),
-                5000,
-                `lead count for offer ${offer.id}`
-              ),
-              queryWithTimeout(
-                supabase
-                  .from("offer_variants")
-                  .select("id", { count: "exact", head: true })
-                  .eq("offer_id", offer.id),
-                5000,
-                `variant count for offer ${offer.id}`
-              ),
-            ]);
+        // Only fetch stats if we have a reasonable number of offers (avoid N+1 problem)
+        if (offersData.length <= 10) {
+          // Fetch stats for each offer in parallel with error handling
+          const offersWithStats = await Promise.allSettled(
+            offersData.map(async (offer: Offer) => {
+              const [leadResult, variantResult] = await Promise.allSettled([
+                queryWithTimeout(
+                  supabase
+                    .from("lead_offers")
+                    .select("id", { count: "exact", head: true })
+                    .eq("offer_id", offer.id),
+                  5000,
+                  `lead count for offer ${offer.id}`,
+                  false // Don't retry
+                ),
+                queryWithTimeout(
+                  supabase
+                    .from("offer_variants")
+                    .select("id", { count: "exact", head: true })
+                    .eq("offer_id", offer.id),
+                  5000,
+                  `variant count for offer ${offer.id}`,
+                  false // Don't retry
+                ),
+              ]);
 
-            return {
-              ...offer,
-              lead_count: leadCount || 0,
-              variant_count: variantCount || 0,
-            };
-          })
-        );
+              const leadCount = leadResult.status === "fulfilled" ? (leadResult.value.count || 0) : 0;
+              const variantCount = variantResult.status === "fulfilled" ? (variantResult.value.count || 0) : 0;
 
-        setOffers(offersWithStats);
+              return {
+                ...offer,
+                lead_count: leadCount,
+                variant_count: variantCount,
+              };
+            })
+          );
+
+          setOffers(
+            offersWithStats
+              .filter((result) => result.status === "fulfilled")
+              .map((result) => (result as PromiseFulfilledResult<any>).value)
+          );
+        } else {
+          // Too many offers - skip stats to avoid timeout
+          setOffers(offersData.map((offer) => ({ ...offer, lead_count: 0, variant_count: 0 })));
+        }
       } else {
         setOffers([]);
       }

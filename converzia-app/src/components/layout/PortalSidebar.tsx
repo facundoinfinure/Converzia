@@ -105,24 +105,41 @@ export function PortalSidebar() {
 
         {/* Current Tenant - Single tenant view */}
         {memberships.length === 1 && activeTenant && (() => {
-          // Get logo from settings or logo_url field
-          const settings = (activeTenant as any).settings || {};
-          const logoUrl = (activeTenant as any).logo_url || settings.logo_url || null;
-          const initials = activeTenant.name.slice(0, 2).toUpperCase();
+          // Get logo from logo_url field or settings JSONB
+          const tenantData = activeTenant as any;
+          const settings = tenantData.settings || {};
+          const logoUrl = tenantData.logo_url || settings.logo_url || null;
+          const initials = activeTenant.name
+            .split(" ")
+            .map((word) => word[0])
+            .join("")
+            .toUpperCase()
+            .slice(0, 2);
           
           return (
-            <div className="px-4 py-4" style={{ boxSizing: "content-box", borderBottomWidth: "0px", borderBottomColor: "rgba(0, 0, 0, 0)", borderBottomStyle: "none", borderImage: "none" }}>
-              <div className="flex items-center gap-3 p-3 rounded-xl bg-[var(--bg-tertiary)]" style={{ backgroundColor: "unset", background: "unset" }}>
+            <div className="px-4 py-4 border-b border-[var(--sidebar-border)]">
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-[var(--bg-tertiary)]">
                 {logoUrl ? (
-                  <Image
-                    src={logoUrl}
-                    alt={activeTenant.name}
-                    width={44}
-                    height={44}
-                    className="h-11 w-11 rounded-xl object-cover"
-                  />
+                  <div className="relative h-11 w-11 rounded-xl overflow-hidden flex-shrink-0">
+                    <Image
+                      src={logoUrl}
+                      alt={activeTenant.name}
+                      fill
+                      className="object-cover"
+                      sizes="44px"
+                      onError={(e) => {
+                        // Fallback to initials if image fails to load
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = "none";
+                        const parent = target.parentElement;
+                        if (parent) {
+                          parent.innerHTML = `<div class="h-11 w-11 rounded-xl bg-gradient-to-br from-[var(--accent-primary)] to-purple-500 flex items-center justify-center text-white font-bold text-sm shadow-md">${initials}</div>`;
+                        }
+                      }}
+                    />
+                  </div>
                 ) : (
-                  <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-[var(--accent-primary)] to-purple-500 flex items-center justify-center text-white font-bold text-sm shadow-md">
+                  <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-[var(--accent-primary)] to-purple-500 flex items-center justify-center text-white font-bold text-sm shadow-md flex-shrink-0">
                     {initials}
                   </div>
                 )}
@@ -209,24 +226,41 @@ export function PortalSidebar() {
 
         {/* Mobile Tenant Display */}
         {activeTenant && (() => {
-          // Get logo from settings or logo_url field
-          const settings = (activeTenant as any).settings || {};
-          const logoUrl = (activeTenant as any).logo_url || settings.logo_url || null;
-          const initials = activeTenant.name.slice(0, 2).toUpperCase();
+          // Get logo from logo_url field or settings JSONB
+          const tenantData = activeTenant as any;
+          const settings = tenantData.settings || {};
+          const logoUrl = tenantData.logo_url || settings.logo_url || null;
+          const initials = activeTenant.name
+            .split(" ")
+            .map((word) => word[0])
+            .join("")
+            .toUpperCase()
+            .slice(0, 2);
           
           return (
             <div className="px-4 py-4 border-b border-[var(--sidebar-border)]">
               <div className="flex items-center gap-3 p-3 rounded-xl bg-[var(--bg-tertiary)]">
                 {logoUrl ? (
-                  <Image
-                    src={logoUrl}
-                    alt={activeTenant.name}
-                    width={40}
-                    height={40}
-                    className="h-10 w-10 rounded-xl object-cover"
-                  />
+                  <div className="relative h-10 w-10 rounded-xl overflow-hidden flex-shrink-0">
+                    <Image
+                      src={logoUrl}
+                      alt={activeTenant.name}
+                      fill
+                      className="object-cover"
+                      sizes="40px"
+                      onError={(e) => {
+                        // Fallback to initials if image fails to load
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = "none";
+                        const parent = target.parentElement;
+                        if (parent) {
+                          parent.innerHTML = `<div class="h-10 w-10 rounded-xl bg-gradient-to-br from-[var(--accent-primary)] to-purple-500 flex items-center justify-center text-white font-bold text-sm">${initials}</div>`;
+                        }
+                      }}
+                    />
+                  </div>
                 ) : (
-                  <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[var(--accent-primary)] to-purple-500 flex items-center justify-center text-white font-bold text-sm">
+                  <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[var(--accent-primary)] to-purple-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
                     {initials}
                   </div>
                 )}

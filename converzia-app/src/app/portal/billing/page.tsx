@@ -93,10 +93,19 @@ export default function PortalBillingPage() {
         const response = await fetch(`/api/portal/billing/consumption?${params}`);
         const result = await response.json();
         
+        if (!response.ok) {
+          console.error("Billing API error:", result);
+          toast.error(result.error || "Error al cargar datos de facturación");
+          return;
+        }
+        
         if (result.success) {
-          setBalance(result.data.balance);
-          setSummary(result.data.summary);
-          setTransactions(result.data.transactions);
+          setBalance(result.data.balance || 0);
+          setSummary(result.data.summary || { totalPurchased: 0, totalConsumed: 0, totalRefunded: 0 });
+          setTransactions(result.data.transactions || []);
+        } else {
+          console.error("Billing API returned success=false:", result);
+          toast.error(result.error || "Error al cargar datos de facturación");
         }
 
         // Fetch packages

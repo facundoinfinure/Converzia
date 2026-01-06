@@ -13,7 +13,7 @@ type SupabaseResponse<T> = {
  */
 export async function queryWithTimeout<T>(
   queryPromise: Promise<SupabaseResponse<T>>,
-  timeoutMs: number = 20000,
+  timeoutMs: number = 15000, // Reduced default from 20000 to 15000
   queryName: string = "query",
   enableRetry: boolean = true
 ): Promise<SupabaseResponse<T>> {
@@ -35,9 +35,16 @@ export async function queryWithTimeout<T>(
   const queryWithTimeoutFn = async (): Promise<SupabaseResponse<T>> => {
     try {
       const result = await Promise.race([queryPromise, timeoutPromise]);
+      // Only log errors if they're not timeouts (timeouts are expected sometimes)
+      if (result.error && result.error.code !== "TIMEOUT") {
+        console.warn(`⚠️ Query error in ${queryName}:`, result.error.message);
+      }
       return result;
     } catch (error: any) {
-      console.error(`❌ Error in ${queryName}:`, error);
+      // Only log non-timeout errors
+      if (!error?.message?.includes("Timeout") && !error?.code?.includes("TIMEOUT")) {
+        console.error(`❌ Error in ${queryName}:`, error);
+      }
       return {
         data: null,
         count: null,

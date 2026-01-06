@@ -102,6 +102,7 @@ export async function GET(request: NextRequest) {
     const offset = (page - 1) * limit;
     
     // Query credit_ledger for all transactions (purchases and consumptions)
+    // Optimized: Limit joins and use more efficient query structure
     let ledgerQuery = supabase
       .from("credit_ledger")
       .select(`
@@ -123,8 +124,7 @@ export async function GET(request: NextRequest) {
           currency,
           invoice_url,
           stripe_invoice_id,
-          stripe_checkout_session_id,
-          created_at
+          stripe_checkout_session_id
         ),
         purchaser:user_profiles!credit_ledger_created_by_fkey(
           full_name,
@@ -133,15 +133,12 @@ export async function GET(request: NextRequest) {
         delivery:deliveries(
           id,
           lead_offer_id,
-          status,
-          delivered_at
+          status
         ),
         lead_offer:lead_offers(
           id,
           offer_id,
           status,
-          score_total,
-          qualification_fields,
           offer:offers(name),
           lead:leads(
             id,
@@ -153,7 +150,8 @@ export async function GET(request: NextRequest) {
       `)
       .eq("tenant_id", tenantId)
       .in("transaction_type", ["CREDIT_PURCHASE", "CREDIT_CONSUMPTION", "CREDIT_REFUND"])
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(100); // Limit to prevent huge queries
     
     if (fromDate) {
       ledgerQuery = ledgerQuery.gte("created_at", fromDate);
@@ -165,8 +163,9 @@ export async function GET(request: NextRequest) {
     
     const { data: ledgerData, error: ledgerError, count } = await queryWithTimeout(
       ledgerQuery,
-      15000,
-      "get credit ledger"
+      12000, // Reduced from 15000
+      "get credit ledger",
+      false // Don't retry - billing queries should fail fast
     );
     
     if (ledgerError) {
@@ -183,6 +182,12 @@ export async function GET(request: NextRequest) {
       }, { status: 500 });
     }
     
+    console.log("[Billing Consumption] Ledger query result:", {
+      tenantId,
+      transactionCount: Array.isArray(ledgerData) ? ledgerData.length : 0,
+      hasData: !!ledgerData,
+    });
+    
     // Transform and filter transactions
     const allTransactions = (Array.isArray(ledgerData) ? ledgerData : []).map((tx: any) => {
       const isPurchase = tx.transaction_type === "CREDIT_PURCHASE";
@@ -193,13 +198,13 @@ export async function GET(request: NextRequest) {
       const offer = leadOffer?.offer ? (Array.isArray(leadOffer.offer) ? leadOffer.offer[0] : leadOffer.offer) : null;
       const lead = leadOffer?.lead ? (Array.isArray(leadOffer.lead) ? leadOffer.lead[0] : leadOffer.lead) : null;
       
-      if (isPurchase && billingOrder) {
+      if (isPurchase) {
         // Purchase transaction
-        const invoiceUrl = generateInvoiceUrl(
+        const invoiceUrl = billingOrder ? generateInvoiceUrl(
           billingOrder.invoice_url,
           billingOrder.stripe_invoice_id,
           billingOrder.stripe_checkout_session_id
-        );
+        ) : null;
         
         return {
           ledger_id: tx.id,
@@ -209,19 +214,19 @@ export async function GET(request: NextRequest) {
           amount: tx.amount,
           balance_after: tx.balance_after,
           created_at: tx.created_at,
-          description: tx.description || billingOrder.package_name || "Compra de créditos",
+          description: tx.description || billingOrder?.package_name || "Compra de créditos",
           
           // Purchase-specific fields
-          package_name: billingOrder.package_name,
-          total: billingOrder.total,
-          currency: billingOrder.currency || "USD",
-          credits_purchased: billingOrder.credits_purchased,
-          cost_per_credit: billingOrder.credits_purchased > 0 
+          package_name: billingOrder?.package_name || null,
+          total: billingOrder?.total || null,
+          currency: billingOrder?.currency || "USD",
+          credits_purchased: billingOrder?.credits_purchased || tx.amount,
+          cost_per_credit: billingOrder && billingOrder.credits_purchased > 0 
             ? Number(billingOrder.total) / billingOrder.credits_purchased 
-            : 0,
+            : null,
           purchaser_name: purchaser?.full_name || null,
           purchaser_email: purchaser?.email || null,
-          billing_order_id: billingOrder.id,
+          billing_order_id: billingOrder?.id || tx.billing_order_id || null,
           invoice_url: invoiceUrl,
           
           // Null for purchases
@@ -291,7 +296,7 @@ export async function GET(request: NextRequest) {
         .from("tenant_credit_balance")
         .select("current_balance")
         .eq("tenant_id", tenantId)
-        .single(),
+        .maybeSingle(),
       5000,
       "get balance"
     );
@@ -305,14 +310,15 @@ export async function GET(request: NextRequest) {
     
     const balance = balanceData as { current_balance: number } | null;
     
-    // Get summary stats
+    // Get summary stats (optimized - only fetch what we need)
     const { data: summaryData } = await queryWithTimeout(
       supabase
         .from("credit_ledger")
         .select("transaction_type, amount")
         .eq("tenant_id", tenantId),
-      10000,
-      "get summary"
+      8000, // Reduced timeout
+      "get summary",
+      false // Don't retry
     );
     
     const summary = Array.isArray(summaryData) ? summaryData as Array<{ transaction_type: string; amount: number }> : [];

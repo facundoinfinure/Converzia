@@ -9,6 +9,7 @@ import {
   FileSpreadsheet,
   Building2,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -44,6 +45,8 @@ function IntegrationCard({
   integration,
   isLoading,
   onConfigure,
+  integrationType,
+  googleConnected,
 }: {
   title: string;
   description: string;
@@ -51,18 +54,43 @@ function IntegrationCard({
   integration?: TenantIntegration;
   isLoading: boolean;
   onConfigure: () => void;
+  integrationType: IntegrationType;
+  googleConnected?: boolean;
 }) {
-  const isConfigured = !!integration;
+  // For Google Sheets, check both integration entry and OAuth connection
+  const isConfigured = integrationType === "GOOGLE_SHEETS" 
+    ? (!!integration || googleConnected === true)
+    : !!integration;
+  
   const isActive = integration?.is_active;
   const hasError = integration?.status === "ERROR";
+  
+  // Determine visual state
+  const isFullyConfigured = isConfigured && (isActive || (integrationType === "GOOGLE_SHEETS" && googleConnected));
+  const statusVariant = hasError ? "danger" : isActive ? "success" : isConfigured ? "secondary" : undefined;
 
   return (
-    <Card>
+    <Card className={cn(
+      "transition-all duration-200",
+      isConfigured && "border-[var(--accent-primary)]/30 shadow-md",
+      isActive && "border-[var(--success)]/50 shadow-lg shadow-[var(--success)]/10",
+      hasError && "border-[var(--error)]/50"
+    )}>
       <CardHeader>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center">
-              <Icon className="h-5 w-5 text-[var(--text-secondary)]" />
+            <div className={cn(
+              "h-10 w-10 rounded-lg flex items-center justify-center transition-colors",
+              isConfigured 
+                ? "bg-[var(--accent-primary)]/10" 
+                : "bg-[var(--bg-tertiary)]"
+            )}>
+              <Icon className={cn(
+                "h-5 w-5 transition-colors",
+                isConfigured 
+                  ? "text-[var(--accent-primary)]" 
+                  : "text-[var(--text-secondary)]"
+              )} />
             </div>
             <CardTitle>{title}</CardTitle>
           </div>
@@ -73,8 +101,10 @@ function IntegrationCard({
               <Badge variant="danger" dot>Error</Badge>
             ) : isActive ? (
               <Badge variant="success" dot>Activo</Badge>
+            ) : integrationType === "GOOGLE_SHEETS" && googleConnected ? (
+              <Badge variant="secondary" dot>Conectado</Badge>
             ) : (
-              <Badge variant="secondary" dot>Inactivo</Badge>
+              <Badge variant="secondary" dot>Configurado</Badge>
             )
           ) : null}
         </div>
@@ -84,18 +114,32 @@ function IntegrationCard({
         
         {isConfigured ? (
           <div className="space-y-3">
-            {integration.last_sync_at && (
+            {integrationType === "GOOGLE_SHEETS" && googleConnected && !integration && (
+              <div className="p-3 rounded-lg bg-[var(--accent-primary)]/5 border border-[var(--accent-primary)]/20">
+                <p className="text-xs text-[var(--text-secondary)] font-medium">
+                  ✓ Cuenta de Google conectada
+                </p>
+                <p className="text-xs text-[var(--text-tertiary)] mt-1">
+                  Configurá el spreadsheet para activar la integración
+                </p>
+              </div>
+            )}
+            {integration?.last_sync_at && (
               <p className="text-xs text-[var(--text-tertiary)]">
                 Última sync: {formatDate(integration.last_sync_at)}
               </p>
             )}
-            {integration.last_error && (
+            {integration?.last_error && (
               <Alert variant="error" className="text-xs">
                 {integration.last_error}
               </Alert>
             )}
-            <Button variant="secondary" fullWidth onClick={onConfigure}>
-              Editar configuración
+            <Button 
+              variant={isActive ? "primary" : "secondary"} 
+              fullWidth 
+              onClick={onConfigure}
+            >
+              {isActive ? "Editar configuración" : "Completar configuración"}
             </Button>
           </div>
         ) : (
@@ -120,6 +164,7 @@ export default function PortalIntegrationsPage() {
 
   const [integrations, setIntegrations] = useState<TenantIntegration[]>([]);
   const [integrationsLoading, setIntegrationsLoading] = useState(true);
+  const [googleConnected, setGoogleConnected] = useState<boolean | undefined>(undefined);
   const [integrationModal, setIntegrationModal] = useState<{
     type: IntegrationType;
     existingConfig?: Record<string, unknown>;
@@ -132,13 +177,15 @@ export default function PortalIntegrationsPage() {
     setIntegrationsLoading(true);
     
     try {
+      // Fetch tenant integrations
       const { data, error } = await queryWithTimeout(
         supabase
           .from("tenant_integrations")
           .select("*")
           .eq("tenant_id", activeTenantId),
-        10000,
-        "fetch integrations"
+        8000,
+        "fetch integrations",
+        false
       );
       
       if (error) {
@@ -146,6 +193,22 @@ export default function PortalIntegrationsPage() {
         toast.error("Error al cargar integraciones");
       } else {
         setIntegrations(Array.isArray(data) ? data : []);
+      }
+
+      // Check Google OAuth connection status
+      try {
+        const googleResponse = await fetch(
+          `/api/integrations/google/spreadsheets?tenant_id=${activeTenantId}`
+        );
+        if (googleResponse.ok) {
+          const googleData = await googleResponse.json();
+          setGoogleConnected(googleData.connected === true);
+        } else {
+          setGoogleConnected(false);
+        }
+      } catch (googleError) {
+        // Silently fail - Google connection check is optional
+        setGoogleConnected(false);
       }
     } catch (error) {
       console.error("Error fetching integrations:", error);
@@ -231,6 +294,8 @@ export default function PortalIntegrationsPage() {
           integration={getIntegration("GOOGLE_SHEETS")}
           isLoading={integrationsLoading}
           onConfigure={() => openIntegrationModal("GOOGLE_SHEETS")}
+          integrationType="GOOGLE_SHEETS"
+          googleConnected={googleConnected}
         />
 
         <IntegrationCard
@@ -240,6 +305,7 @@ export default function PortalIntegrationsPage() {
           integration={getIntegration("TOKKO")}
           isLoading={integrationsLoading}
           onConfigure={() => openIntegrationModal("TOKKO")}
+          integrationType="TOKKO"
         />
       </div>
 

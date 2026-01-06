@@ -22,27 +22,71 @@ interface UseThemeReturn {
  * Hook for managing theme (dark/light mode)
  * Persists to localStorage and applies to document element
  */
+// Helper function to apply theme to DOM (defined outside component to avoid dependency issues)
+function applyTheme(newTheme: Theme) {
+  if (typeof document === "undefined") return;
+  
+  const root = document.documentElement;
+  
+  // Remove existing theme classes
+  root.classList.remove("light", "dark");
+  
+  // Add new theme class (shadcn approach)
+  root.classList.add(newTheme);
+  
+  // Also set data-theme attribute for CSS custom properties
+  root.setAttribute("data-theme", newTheme);
+  
+  // Update meta theme-color for mobile browsers
+  const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+  if (metaThemeColor) {
+    metaThemeColor.setAttribute(
+      "content",
+      newTheme === "dark" ? "#0a0a0f" : "#ffffff"
+    );
+  }
+}
+
 export function useTheme(): UseThemeReturn {
-  const [theme, setThemeState] = useState<Theme>("dark");
+  // Initialize with a safe default that matches SSR
+  const [theme, setThemeState] = useState<Theme>(() => {
+    // Only access localStorage on client side
+    if (typeof window === "undefined") {
+      return "dark";
+    }
+    
+    const savedTheme = localStorage.getItem(THEME_KEY) as Theme | null;
+    if (savedTheme && (savedTheme === "dark" || savedTheme === "light")) {
+      return savedTheme;
+    }
+    
+    // Fall back to system preference
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    return prefersDark ? "dark" : "light";
+  });
+  
   const [mounted, setMounted] = useState(false);
 
-  // Initialize theme from localStorage or system preference
+  // Apply theme immediately on mount
   useEffect(() => {
     setMounted(true);
     
     // Check localStorage first
     const savedTheme = localStorage.getItem(THEME_KEY) as Theme | null;
     
+    let initialTheme: Theme;
     if (savedTheme && (savedTheme === "dark" || savedTheme === "light")) {
-      setThemeState(savedTheme);
-      applyTheme(savedTheme);
+      initialTheme = savedTheme;
     } else {
       // Fall back to system preference
       const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      const systemTheme: Theme = prefersDark ? "dark" : "light";
-      setThemeState(systemTheme);
-      applyTheme(systemTheme);
+      initialTheme = prefersDark ? "dark" : "light";
     }
+    
+    // Update state and apply theme
+    setThemeState(initialTheme);
+    applyTheme(initialTheme);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Listen for system theme changes (only if no saved preference)
@@ -63,19 +107,6 @@ export function useTheme(): UseThemeReturn {
     mediaQuery.addEventListener("change", handleChange);
     return () => mediaQuery.removeEventListener("change", handleChange);
   }, [mounted]);
-
-  const applyTheme = (newTheme: Theme) => {
-    document.documentElement.setAttribute("data-theme", newTheme);
-    
-    // Also update meta theme-color for mobile browsers
-    const metaThemeColor = document.querySelector('meta[name="theme-color"]');
-    if (metaThemeColor) {
-      metaThemeColor.setAttribute(
-        "content",
-        newTheme === "dark" ? "#0a0a0f" : "#ffffff"
-      );
-    }
-  };
 
   const setTheme = useCallback((newTheme: Theme) => {
     setThemeState(newTheme);
