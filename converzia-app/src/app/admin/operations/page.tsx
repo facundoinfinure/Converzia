@@ -430,6 +430,32 @@ export default function OperationsPage() {
       if (selectedStage) {
         const stage = FUNNEL_STAGES.find(s => s.key === selectedStage);
         if (stage) {
+          console.log(`🔍 Fetching leads for stage: ${selectedStage}, statuses:`, stage.statuses);
+          
+          // First, let's verify the count matches
+          let countQuery = supabase
+            .from("lead_offers")
+            .select("id", { count: "exact", head: true })
+            .in("status", stage.statuses);
+          
+          if (tenantFilter) {
+            countQuery = countQuery.eq("tenant_id", tenantFilter);
+          }
+          
+          const { count: expectedCount, error: countError } = await queryWithTimeout(
+            countQuery,
+            10000,
+            "verify count"
+          );
+          
+          if (countError) {
+            console.error("Error verifying count:", countError);
+          } else {
+            console.log(`📊 Expected count for stage ${selectedStage}:`, expectedCount);
+          }
+          
+          // Now fetch the actual leads
+          // Try with relationships first
           let query = supabase
             .from("lead_offers")
             .select(`
@@ -457,16 +483,86 @@ export default function OperationsPage() {
           const { data, error } = await queryWithTimeout<any[]>(query, 15000, "pipeline leads");
           
           if (error) {
-            console.error("Error fetching pipeline leads:", error);
+            console.error("❌ Error fetching pipeline leads:", error);
+            console.error("Error details:", JSON.stringify(error, null, 2));
+            
+            // If the error is related to relationships, try a simpler query
+            if (error.message?.includes("permission") || error.message?.includes("policy") || error.code === "PGRST116") {
+              console.log("🔄 Trying fallback query without relationships due to RLS issue...");
+              
+              // Fallback: get lead_offers first, then fetch related data separately
+              let fallbackQuery = supabase
+                .from("lead_offers")
+                .select("id, lead_id, tenant_id, offer_id, status, score_total, qualification_fields, contact_attempts, created_at, updated_at, first_response_at")
+                .in("status", stage.statuses)
+                .order("updated_at", { ascending: false })
+                .limit(100);
+              
+              if (tenantFilter) {
+                fallbackQuery = fallbackQuery.eq("tenant_id", tenantFilter);
+              }
+              
+              const { data: fallbackData, error: fallbackError } = await queryWithTimeout<any[]>(
+                fallbackQuery,
+                15000,
+                "pipeline leads fallback"
+              );
+              
+              if (fallbackError) {
+                console.error("❌ Fallback query also failed:", fallbackError);
+                toast.error(`Error al cargar leads: ${fallbackError.message}`);
+                setPipelineLeads([]);
+              } else if (fallbackData && Array.isArray(fallbackData) && fallbackData.length > 0) {
+                console.log(`✅ Fallback query returned ${fallbackData.length} lead_offers`);
+                
+                // Fetch related data in parallel
+                const leadIds = [...new Set(fallbackData.map((d: any) => d.lead_id).filter(Boolean))];
+                const tenantIds = [...new Set(fallbackData.map((d: any) => d.tenant_id).filter(Boolean))];
+                const offerIds = [...new Set(fallbackData.map((d: any) => d.offer_id).filter(Boolean))];
+                
+                const [leadsResult, tenantsResult, offersResult] = await Promise.all([
+                  leadIds.length > 0 ? supabase.from("leads").select("id, phone, full_name, email, first_name, last_name").in("id", leadIds) : Promise.resolve({ data: [], error: null }),
+                  tenantIds.length > 0 ? supabase.from("tenants").select("id, name").in("id", tenantIds) : Promise.resolve({ data: [], error: null }),
+                  offerIds.length > 0 ? supabase.from("offers").select("id, name").in("id", offerIds.filter(Boolean)) : Promise.resolve({ data: [], error: null }),
+                ]);
+                
+                const leadsMap = new Map((leadsResult.data || []).map((l: any) => [l.id, l]));
+                const tenantsMap = new Map((tenantsResult.data || []).map((t: any) => [t.id, t]));
+                const offersMap = new Map((offersResult.data || []).map((o: any) => [o.id, o]));
+                
+                const processedLeads = fallbackData.map((d: any) => ({
+                  ...d,
+                  lead: leadsMap.get(d.lead_id) || null,
+                  tenant: tenantsMap.get(d.tenant_id) || null,
+                  offer: d.offer_id ? (offersMap.get(d.offer_id) || null) : null,
+                }));
+                
+                console.log("Processed leads (fallback):", processedLeads);
+                setPipelineLeads(processedLeads);
+              } else {
+                setPipelineLeads([]);
+              }
+            } else {
+              toast.error(`Error al cargar leads: ${error.message}`);
+              setPipelineLeads([]);
+            }
           } else if (data && Array.isArray(data)) {
-            setPipelineLeads(
-              data.map((d: any) => ({
-                ...d,
-                lead: Array.isArray(d.lead) ? d.lead[0] : d.lead,
-                tenant: Array.isArray(d.tenant) ? d.tenant[0] : d.tenant,
-                offer: Array.isArray(d.offer) ? d.offer[0] : d.offer,
-              }))
-            );
+            console.log(`✅ Fetched ${data.length} leads for stage ${selectedStage} with statuses:`, stage.statuses);
+            if (data.length === 0 && expectedCount && expectedCount > 0) {
+              console.warn(`⚠️ Warning: Count shows ${expectedCount} leads but query returned 0. This might indicate a problem with the query or relationships.`);
+              toast.warning(`Se encontraron ${expectedCount} leads pero no se pudieron cargar. Verificá las políticas de seguridad.`);
+            }
+            const processedLeads = data.map((d: any) => ({
+              ...d,
+              lead: Array.isArray(d.lead) ? d.lead[0] : d.lead,
+              tenant: Array.isArray(d.tenant) ? d.tenant[0] : d.tenant,
+              offer: Array.isArray(d.offer) ? d.offer[0] : d.offer,
+            }));
+            console.log("Processed leads:", processedLeads);
+            setPipelineLeads(processedLeads);
+          } else {
+            console.warn("⚠️ No data returned or data is not an array:", data);
+            setPipelineLeads([]);
           }
         }
       } else {
@@ -478,7 +574,7 @@ export default function OperationsPage() {
     } finally {
       setPipelineLoading(false);
     }
-  }, [selectedStage, tenantFilter, supabase]);
+  }, [selectedStage, tenantFilter, supabase, toast]);
 
   // Trigger pipeline fetch when dependencies change
   useEffect(() => {
