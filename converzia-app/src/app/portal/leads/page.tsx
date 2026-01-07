@@ -106,7 +106,8 @@ export default function PortalLeadsPage() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [offerFilter, setOfferFilter] = useState<string>("");
   const [offerOptions, setOfferOptions] = useState<Array<{value: string; label: string}>>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingStats, setIsLoadingStats] = useState(true);
+  const [isLoadingLeads, setIsLoadingLeads] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const supabase = createClient();
@@ -114,7 +115,7 @@ export default function PortalLeadsPage() {
   const loadData = useCallback(async () => {
     if (!activeTenantId) return;
     
-    setIsLoading(true);
+    setIsLoadingStats(true);
     
     try {
       // Use tenant_funnel_stats view for consistent stats (same source as dashboard)
@@ -173,17 +174,18 @@ export default function PortalLeadsPage() {
         ]);
       }
       
-    } catch (error) {
-      console.error("Error loading data:", error);
-      toast.error("Error al cargar datos");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [activeTenantId, supabase, toast]);
+      } catch (error) {
+        console.error("Error loading data:", error);
+        toast.error("Error al cargar datos");
+      } finally {
+        setIsLoadingStats(false);
+      }
+    }, [activeTenantId, supabase, toast]);
 
   const loadLeads = useCallback(async () => {
     if (!activeTenantId || !selectedCategory) return;
     
+    setIsLoadingLeads(true);
     setIsRefreshing(true);
     
     try {
@@ -313,6 +315,7 @@ export default function PortalLeadsPage() {
       setLeads([]);
       toast.error("Error al cargar leads");
     } finally {
+      setIsLoadingLeads(false);
       setIsRefreshing(false);
     }
   }, [activeTenantId, selectedCategory, offerFilter, supabase, toast]);
@@ -529,18 +532,7 @@ export default function PortalLeadsPage() {
     ];
   };
 
-  if (isLoading) {
-    return (
-      <PageContainer>
-        <div className="space-y-6">
-          <Skeleton className="h-10 w-48" />
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-32" />)}
-          </div>
-        </div>
-      </PageContainer>
-    );
-  }
+  // No bloqueo completo - siempre mostrar estructura
 
   return (
     <PageContainer>
@@ -565,53 +557,73 @@ export default function PortalLeadsPage() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-        {LEAD_CATEGORIES.map((category, index) => {
-          const count = stats?.[category.key as keyof TenantLeadStats] || 0;
-          const Icon = category.icon;
-          const isSelected = selectedCategory === category.key;
-          
-          // Calculate percentage based on "received" (initial stage)
-          let percentage: number | null = null;
-          if (stats && stats.received > 0) {
-            const currentCount = stats[category.key as keyof TenantLeadStats] || 0;
-            percentage = Math.round((currentCount / stats.received) * 100);
-          }
-          
-          return (
-            <button
+        {isLoadingStats ? (
+          // Skeletons for stats cards
+          LEAD_CATEGORIES.map((category) => (
+            <div
               key={category.key}
-              onClick={() => setSelectedCategory(isSelected ? null : category.key)}
-              className={cn(
-                "relative p-4 rounded-lg border transition-all duration-200 text-left",
-                isSelected 
-                  ? "border-[var(--border-primary)] bg-[var(--bg-secondary)]" 
-                  : "border-[var(--border-primary)] bg-[var(--bg-primary)] hover:bg-[var(--bg-secondary)]",
-              )}
+              className="relative p-4 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)]"
             >
               <div className="flex items-center justify-between mb-3">
-                <div className="h-10 w-10 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center">
-                  <Icon className="h-5 w-5 text-[var(--text-secondary)]" />
-                </div>
-                <div className="text-right">
-                  <span className="text-2xl font-bold text-[var(--text-primary)] block">
-                    {count}
-                  </span>
-                  {percentage !== null && category.key !== "received" && (
-                    <span className="text-xs font-medium text-[var(--text-secondary)]">
-                      {percentage}%
-                    </span>
-                  )}
+                <Skeleton className="h-10 w-10 rounded-lg" />
+                <div className="text-right space-y-1">
+                  <Skeleton className="h-7 w-12" />
+                  <Skeleton className="h-3 w-8" />
                 </div>
               </div>
-              <p className="text-sm font-medium text-[var(--text-primary)]">
-                {category.label}
-              </p>
-              <p className="text-xs text-[var(--text-tertiary)] mt-0.5 line-clamp-2">
-                {category.description}
-              </p>
-            </button>
-          );
-        })}
+              <Skeleton className="h-4 w-24 mb-1" />
+              <Skeleton className="h-3 w-full" />
+            </div>
+          ))
+        ) : (
+          LEAD_CATEGORIES.map((category, index) => {
+            const count = stats?.[category.key as keyof TenantLeadStats] || 0;
+            const Icon = category.icon;
+            const isSelected = selectedCategory === category.key;
+            
+            // Calculate percentage based on "received" (initial stage)
+            let percentage: number | null = null;
+            if (stats && stats.received > 0) {
+              const currentCount = stats[category.key as keyof TenantLeadStats] || 0;
+              percentage = Math.round((currentCount / stats.received) * 100);
+            }
+            
+            return (
+              <button
+                key={category.key}
+                onClick={() => setSelectedCategory(isSelected ? null : category.key)}
+                className={cn(
+                  "relative p-4 rounded-lg border transition-all duration-200 text-left",
+                  isSelected 
+                    ? "border-[var(--border-primary)] bg-[var(--bg-secondary)]" 
+                    : "border-[var(--border-primary)] bg-[var(--bg-primary)] hover:bg-[var(--bg-secondary)]",
+                )}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="h-10 w-10 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center">
+                    <Icon className="h-5 w-5 text-[var(--text-secondary)]" />
+                  </div>
+                  <div className="text-right">
+                    <span className="text-2xl font-bold text-[var(--text-primary)] block">
+                      {count}
+                    </span>
+                    {percentage !== null && category.key !== "received" && (
+                      <span className="text-xs font-medium text-[var(--text-secondary)]">
+                        {percentage}%
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <p className="text-sm font-medium text-[var(--text-primary)]">
+                  {category.label}
+                </p>
+                <p className="text-xs text-[var(--text-tertiary)] mt-0.5 line-clamp-2">
+                  {category.description}
+                </p>
+              </button>
+            );
+          })
+        )}
       </div>
 
       {/* Lead List */}
@@ -660,7 +672,7 @@ export default function PortalLeadsPage() {
               data={leads}
               columns={getColumns()}
               keyExtractor={(l) => l.id}
-              isLoading={isRefreshing}
+              isLoading={isLoadingLeads || isRefreshing}
               renderMobileItem={(l) => {
                 const isDropped = l.category === "not_qualified";
                 const isReceived = l.category === "received";

@@ -208,6 +208,7 @@ export interface HeroMetricProps {
   icon?: ReactNode;
   accentColor?: "primary" | "success" | "warning" | "danger";
   className?: string;
+  loading?: boolean;
 }
 
 export function HeroMetric({
@@ -220,6 +221,7 @@ export function HeroMetric({
   icon,
   accentColor = "primary",
   className,
+  loading = false,
 }: HeroMetricProps) {
   const accentColors = {
     primary: {
@@ -251,6 +253,69 @@ export function HeroMetric({
     down: "text-[var(--error)]",
     neutral: "text-[var(--text-tertiary)]",
   };
+
+  if (loading) {
+    return (
+      <Card className={cn(
+        "relative overflow-hidden",
+        colors.border,
+        className
+      )}
+      role="status"
+      aria-live="polite"
+      aria-label="Cargando métrica"
+      >
+        {/* Gradient background */}
+        <div className={cn(
+          "absolute inset-0 bg-gradient-to-br pointer-events-none",
+          colors.gradient
+        )} />
+        
+        <CardContent className="relative p-4 sm:p-6">
+          {/* Mobile: Stack layout, Desktop: Row layout */}
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4">
+            <div className="flex items-center gap-3 sm:gap-4">
+              {icon && (
+                <div className={cn(
+                  "h-12 w-12 sm:h-14 sm:w-14 rounded-2xl border border-[var(--border-primary)]",
+                  "flex items-center justify-center shadow-sm",
+                  colors.icon
+                )}>
+                  <div className="h-6 w-6 sm:h-7 sm:w-7 rounded-lg bg-[var(--bg-tertiary)] animate-pulse" />
+                </div>
+              )}
+              <div className="space-y-2">
+                <div className="h-4 w-24 rounded bg-[var(--bg-tertiary)] animate-pulse" />
+                <div className="flex items-baseline gap-2">
+                  <div className="h-8 sm:h-10 w-32 rounded bg-[var(--bg-tertiary)] animate-pulse" />
+                  {subtitle && (
+                    <div className="h-4 w-16 rounded bg-[var(--bg-tertiary)] animate-pulse" />
+                  )}
+                </div>
+              </div>
+            </div>
+            {trend && (
+              <div className="h-8 w-24 rounded-full bg-[var(--bg-tertiary)] animate-pulse" />
+            )}
+          </div>
+
+          {/* Chart area skeleton */}
+          {chart && (
+            <div className="mt-4">
+              <div className="h-20 w-full rounded bg-[var(--bg-tertiary)] animate-pulse" />
+            </div>
+          )}
+
+          {/* Action skeleton */}
+          {action && (
+            <div className="mt-4 pt-4 border-t border-[var(--border-primary)]">
+              <div className="h-10 w-full sm:w-40 rounded bg-[var(--bg-tertiary)] animate-pulse" />
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className={cn(

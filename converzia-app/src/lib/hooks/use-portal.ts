@@ -62,6 +62,8 @@ export function usePortalDashboard() {
     stats,
     recentLeads,
     isLoading: isLoadingCombined,
+    isLoadingStats: isLoading.stats,
+    isLoadingLeads: isLoading.leads,
     error,
     refetch: refreshAll,
   };

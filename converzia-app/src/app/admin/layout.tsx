@@ -6,9 +6,8 @@ import { PendingApprovalsProvider } from "@/contexts/PendingApprovalsContext";
 import { AdminProvider } from "@/lib/contexts/admin-context";
 import { useAdminInitialLoad } from "@/lib/hooks/use-admin-initial-load";
 import { useAdminPolling } from "@/lib/hooks/use-admin-polling";
-import { AdminInitialLoader } from "@/components/admin/AdminInitialLoader";
 import { SidebarInset } from "@/components/ui/sidebar";
-import { useAdmin } from "@/lib/contexts/admin-context";
+import { SuspenseBoundary } from "@/components/ui/loading/SuspenseBoundary";
 
 function AdminInitializer() {
   useAdminInitialLoad();
@@ -17,12 +16,8 @@ function AdminInitializer() {
 }
 
 function AdminContent({ children }: { children: React.ReactNode }) {
-  const { isInitialLoading } = useAdmin();
-
-  if (isInitialLoading) {
-    return <AdminInitialLoader />;
-  }
-
+  // Always show content immediately - no blocking
+  // Individual components will show their own skeletons
   return <>{children}</>;
 }
 
@@ -42,7 +37,9 @@ export default function AdminLayout({
               <AdminHeader />
               {/* Main content with padding for mobile bottom nav */}
               <main className="flex-1 pb-[calc(72px+env(safe-area-inset-bottom,0px))] lg:pb-0">
-                <AdminContent>{children}</AdminContent>
+                <SuspenseBoundary>
+                  <AdminContent>{children}</AdminContent>
+                </SuspenseBoundary>
               </main>
             </SidebarInset>
           </div>

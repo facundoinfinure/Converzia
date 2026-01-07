@@ -49,18 +49,7 @@ export default function PortalOffersPage() {
   
   const canManageOffers = hasPermission?.('offers:manage') ?? false;
 
-  if (isLoading) {
-    return (
-      <PageContainer>
-        <PageHeader title="Mis Proyectos" />
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[...Array(3)].map((_, i) => (
-            <Skeleton key={i} className="h-64 rounded-xl" />
-          ))}
-        </div>
-      </PageContainer>
-    );
-  }
+  // No bloqueo completo - siempre mostrar estructura
 
   return (
     <PageContainer>
@@ -79,7 +68,24 @@ export default function PortalOffersPage() {
         }
       />
 
-      {offers.length === 0 ? (
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] overflow-hidden">
+              <Skeleton className="h-36 w-full rounded-none" variant="rectangular" />
+              <div className="p-4 space-y-3">
+                <Skeleton className="h-6 w-3/4" />
+                <Skeleton className="h-4 w-1/2" />
+                <Skeleton className="h-5 w-24" />
+                <div className="pt-3 border-t border-[var(--border-primary)] flex items-center gap-4">
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-4 w-20" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : offers.length === 0 ? (
         <NoOffersEmptyState 
           action={canManageOffers ? {
             label: "Crear primer proyecto",

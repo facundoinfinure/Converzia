@@ -16,6 +16,8 @@ export * from "./Dropdown";
 export * from "./Tabs";
 export * from "./Avatar";
 export * from "./Skeleton";
+export * from "./skeletons";
+export * from "./loading";
 export * from "./EmptyState";
 export * from "./Alert";
 export * from "./Toast";

@@ -36,14 +36,16 @@ import { createClient } from "@/lib/supabase/client";
 export default function PortalDashboard() {
   const router = useRouter();
   const { activeTenant, activeTenantId } = useAuth();
-  const { stats, recentLeads, isLoading, error } = usePortalDashboard();
+  const { stats, recentLeads, isLoadingStats, isLoadingLeads, error } = usePortalDashboard();
   const [leadsTrend, setLeadsTrend] = useState<Array<{ date: string; value: number }>>([]);
+  const [isLoadingTrend, setIsLoadingTrend] = useState(false);
 
   // Fetch leads trend
   useEffect(() => {
     async function fetchTrend() {
       if (!activeTenantId) return;
 
+      setIsLoadingTrend(true);
       const supabase = createClient();
       const daysAgo = 30;
       const trendData: Array<{ date: string; value: number }> = [];
@@ -69,30 +71,11 @@ export default function PortalDashboard() {
       }
 
       setLeadsTrend(trendData);
+      setIsLoadingTrend(false);
     }
 
     fetchTrend();
   }, [activeTenantId]);
-
-  if (isLoading) {
-    return (
-      <PageContainer>
-        <div className="space-y-4 sm:space-y-6 animate-pulse">
-          <Skeleton className="h-10 w-48 sm:w-64" />
-          <Skeleton className="h-36 sm:h-40 rounded-2xl" />
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            {[...Array(4)].map((_, i) => (
-              <Skeleton key={i} className="h-28 sm:h-32 rounded-2xl" />
-            ))}
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-            <Skeleton className="h-56 sm:h-64 rounded-2xl" />
-            <Skeleton className="h-56 sm:h-64 rounded-2xl" />
-          </div>
-        </div>
-      </PageContainer>
-    );
-  }
 
   const hasData = (stats?.totalLeads || 0) > 0 || (stats?.activeOffers || 0) > 0;
 
@@ -130,8 +113,9 @@ export default function PortalDashboard() {
         subtitle="créditos"
         icon={<Zap className="h-6 w-6" />}
         accentColor="primary"
+        loading={isLoadingStats}
         chart={
-          leadsTrend.length > 0 && (
+          !isLoadingTrend && leadsTrend.length > 0 ? (
             <div className="mt-2">
               <p className="text-xs sm:text-sm text-[var(--text-tertiary)] mb-2">
                 Tendencia de leads (30 días)
@@ -144,7 +128,7 @@ export default function PortalDashboard() {
                 showAxis={false}
               />
             </div>
-          )
+          ) : null
         }
         action={{
           label: "Recargar créditos",
@@ -161,6 +145,7 @@ export default function PortalDashboard() {
           icon={<Users className="h-5 w-5" />}
           iconColor="info"
           size="sm"
+          loading={isLoadingStats}
         />
         <DashboardCard
           title="Calificados"
@@ -168,6 +153,7 @@ export default function PortalDashboard() {
           icon={<CheckCircle2 className="h-5 w-5" />}
           iconColor="success"
           size="sm"
+          loading={isLoadingStats}
         />
         <DashboardCard
           title="Conversión"
@@ -175,6 +161,7 @@ export default function PortalDashboard() {
           icon={<TrendingUp className="h-5 w-5" />}
           iconColor="primary"
           size="sm"
+          loading={isLoadingStats}
         />
         <DashboardCard
           title="Proyectos"
@@ -182,6 +169,7 @@ export default function PortalDashboard() {
           icon={<Package className="h-5 w-5" />}
           iconColor="warning"
           size="sm"
+          loading={isLoadingStats}
         />
       </div>
 
@@ -205,7 +193,20 @@ export default function PortalDashboard() {
             </div>
           </CardHeader>
           <CardContent noPadding>
-            {recentLeads.length > 0 ? (
+            {isLoadingLeads ? (
+              <div className="divide-y divide-[var(--border-primary)]">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="flex items-center gap-3 sm:gap-4 p-4 min-h-[64px]">
+                    <Skeleton className="h-10 w-10 rounded-xl" variant="circular" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-4 w-48" />
+                      <Skeleton className="h-3 w-32" />
+                    </div>
+                    <Skeleton className="h-3 w-16" />
+                  </div>
+                ))}
+              </div>
+            ) : recentLeads.length > 0 ? (
               <div className="divide-y divide-[var(--border-primary)]">
                 {recentLeads.slice(0, 5).map((lead) => (
                   <ActivityItem
@@ -241,62 +242,82 @@ export default function PortalDashboard() {
             <CardTitle size="sm">Pipeline de leads</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {[
-                { 
-                  label: "En Chat", 
-                  count: stats?.pipelineStats?.contacted || 0, 
-                  color: "bg-[var(--info)]",
-                },
-                { 
-                  label: "Calificados", 
-                  count: stats?.pipelineStats?.leadReady || 0, 
-                  color: "bg-[var(--accent-primary)]",
-                },
-                { 
-                  label: "Entregados", 
-                  count: stats?.pipelineStats?.delivered || 0, 
-                  color: "bg-[var(--success)]",
-                },
-              ].map((stage, index) => {
-                const total = (stats?.totalLeads || 1);
-                const percentage = total > 0 ? Math.round((stage.count / total) * 100) : 0;
-                
-                return (
-                  <div 
-                    key={stage.label} 
-                    className="space-y-2 animate-fadeInUp"
-                    style={{ animationDelay: `${(index + 1) * 100}ms` }}
-                  >
+            {isLoadingStats ? (
+              <div className="space-y-4">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 sm:gap-3">
-                        <div className={`h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full ${stage.color}`} />
-                        <span className="text-xs sm:text-sm text-[var(--text-secondary)]">
-                          {stage.label}
-                        </span>
+                        <Skeleton className="h-3 w-3 rounded-full" variant="circular" />
+                        <Skeleton className="h-4 w-20" />
                       </div>
-                      <div className="flex items-center gap-1.5 sm:gap-2">
-                        <span className="text-sm font-bold text-[var(--text-primary)]">
-                          {stage.count}
-                        </span>
-                        <span className="text-[10px] sm:text-xs text-[var(--text-tertiary)]">
-                          ({percentage}%)
-                        </span>
+                      <div className="flex items-center gap-2">
+                        <Skeleton className="h-4 w-8" />
+                        <Skeleton className="h-3 w-12" />
                       </div>
                     </div>
-                    <div className="h-2 rounded-full bg-[var(--bg-tertiary)] overflow-hidden">
-                      <div 
-                        className={`h-full rounded-full transition-all duration-700 ease-out ${stage.color}`}
-                        style={{ 
-                          width: `${percentage}%`,
-                          transitionDelay: `${(index + 1) * 100}ms`
-                        }}
-                      />
-                    </div>
+                    <Skeleton className="h-2 w-full rounded-full" />
                   </div>
-                );
-              })}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {[
+                  { 
+                    label: "En Chat", 
+                    count: stats?.pipelineStats?.contacted || 0, 
+                    color: "bg-[var(--info)]",
+                  },
+                  { 
+                    label: "Calificados", 
+                    count: stats?.pipelineStats?.leadReady || 0, 
+                    color: "bg-[var(--accent-primary)]",
+                  },
+                  { 
+                    label: "Entregados", 
+                    count: stats?.pipelineStats?.delivered || 0, 
+                    color: "bg-[var(--success)]",
+                  },
+                ].map((stage, index) => {
+                  const total = (stats?.totalLeads || 1);
+                  const percentage = total > 0 ? Math.round((stage.count / total) * 100) : 0;
+                  
+                  return (
+                    <div 
+                      key={stage.label} 
+                      className="space-y-2 animate-fadeInUp"
+                      style={{ animationDelay: `${(index + 1) * 100}ms` }}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 sm:gap-3">
+                          <div className={`h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full ${stage.color}`} />
+                          <span className="text-xs sm:text-sm text-[var(--text-secondary)]">
+                            {stage.label}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 sm:gap-2">
+                          <span className="text-sm font-bold text-[var(--text-primary)]">
+                            {stage.count}
+                          </span>
+                          <span className="text-[10px] sm:text-xs text-[var(--text-tertiary)]">
+                            ({percentage}%)
+                          </span>
+                        </div>
+                      </div>
+                      <div className="h-2 rounded-full bg-[var(--bg-tertiary)] overflow-hidden">
+                        <div 
+                          className={`h-full rounded-full transition-all duration-700 ease-out ${stage.color}`}
+                          style={{ 
+                            width: `${percentage}%`,
+                            transitionDelay: `${(index + 1) * 100}ms`
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             <div className="mt-6 pt-4 border-t border-[var(--border-primary)]">
               <Button

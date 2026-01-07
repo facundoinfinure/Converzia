@@ -41,6 +41,9 @@ export function Skeleton({
         className
       )}
       style={style}
+      role="status"
+      aria-live="polite"
+      aria-label="Cargando contenido"
       {...props}
     />
   );

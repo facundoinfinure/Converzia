@@ -599,21 +599,7 @@ export default function TenantDetailPage({ params }: Props) {
     },
   ];
 
-  if (isLoading) {
-    return (
-      <PageContainer>
-        <div className="space-y-6">
-          <Skeleton className="h-10 w-64" />
-          <div className="grid grid-cols-4 gap-4">
-            {[...Array(4)].map((_, i) => (
-              <Skeleton key={i} className="h-32 rounded-xl" />
-            ))}
-          </div>
-          <Skeleton className="h-96 rounded-xl" />
-        </div>
-      </PageContainer>
-    );
-  }
+  // No bloqueo completo - siempre mostrar estructura
 
   if (error || !tenant) {
     return (
@@ -698,12 +684,14 @@ export default function TenantDetailPage({ params }: Props) {
           iconColor="from-blue-500 to-cyan-500"
           change={12}
           trend="up"
+          loading={isLoading}
         />
         <StatCard
           title="Ofertas Activas"
           value={tenant._count?.offers || 0}
           icon={<Package />}
           iconColor="from-emerald-500 to-teal-500"
+          loading={isLoading}
         />
         <StatCard
           title="Créditos"
@@ -711,12 +699,14 @@ export default function TenantDetailPage({ params }: Props) {
           icon={<CreditCard />}
           iconColor={tenant.credit_balance && tenant.credit_balance < 10 ? "from-amber-500 to-orange-500" : "from-purple-500 to-pink-500"}
           trend={tenant.credit_balance && tenant.credit_balance < 10 ? "down" : "neutral"}
+          loading={isLoading}
         />
         <StatCard
           title="Miembros"
           value={tenant._count?.members || 0}
           icon={<Users />}
           iconColor="from-slate-500 to-slate-600"
+          loading={isLoading}
         />
       </StatsGrid>
 

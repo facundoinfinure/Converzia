@@ -225,17 +225,7 @@ export default function PortalSettingsPage() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <PageContainer>
-        <div className="space-y-6">
-          <Skeleton className="h-10 w-48" />
-          <Skeleton className="h-64 rounded-xl" />
-          <Skeleton className="h-64 rounded-xl" />
-        </div>
-      </PageContainer>
-    );
-  }
+  // No bloqueo completo - siempre mostrar estructura
 
   const chargeModelLabel = pricingData?.charge_model === "PER_LEAD" ? "Por Lead" : "Por Venta";
 
@@ -260,14 +250,37 @@ export default function PortalSettingsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Logo Upload Section */}
-            <div className="pb-4 border-b border-[var(--border-primary)]">
-              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-3">
-                Logo de la empresa
-              </label>
-              <div className="flex items-center gap-4">
-                <div className="relative">
-                  {logoPreview ? (
+            {isLoading ? (
+              <div className="space-y-4">
+                <div className="pb-4 border-b border-[var(--border-primary)]">
+                  <Skeleton className="h-4 w-32 mb-3" />
+                  <div className="flex items-center gap-4">
+                    <Skeleton className="h-24 w-24 rounded-lg" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-9 w-32" variant="rectangular" />
+                      <Skeleton className="h-3 w-48" />
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[...Array(4)].map((_, i) => (
+                    <div key={i} className="space-y-2">
+                      <Skeleton className="h-4 w-24" />
+                      <Skeleton className="h-10 w-full" variant="rectangular" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Logo Upload Section */}
+                <div className="pb-4 border-b border-[var(--border-primary)]">
+                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-3">
+                    Logo de la empresa
+                  </label>
+                  <div className="flex items-center gap-4">
+                    <div className="relative">
+                      {logoPreview ? (
                     <div className="relative group">
                       <Image
                         src={logoPreview}
@@ -393,6 +406,8 @@ export default function PortalSettingsPage() {
                 </Button>
               </div>
             )}
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -405,6 +420,18 @@ export default function PortalSettingsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {isLoading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="space-y-2">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-10 w-full" variant="rectangular" />
+                    <Skeleton className="h-3 w-48" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
@@ -500,6 +527,8 @@ export default function PortalSettingsPage() {
                 </p>
               </div>
             </div>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>

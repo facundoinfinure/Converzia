@@ -277,19 +277,7 @@ export default function LeadDetailPage({ params }: Props) {
     }
   }, [messages]);
   
-  if (isLoading) {
-    return (
-      <PageContainer>
-        <div className="space-y-6">
-          <Skeleton className="h-10 w-48" />
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <Skeleton className="h-64 col-span-2" />
-            <Skeleton className="h-64" />
-          </div>
-        </div>
-      </PageContainer>
-    );
-  }
+  // No bloqueo completo - siempre mostrar estructura
   
   if (!leadOffer) {
     return (
@@ -344,6 +332,33 @@ export default function LeadDetailPage({ params }: Props) {
             </CardTitle>
           </CardHeader>
           <CardContent>
+            {isLoading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <Skeleton className="h-4 w-24" />
+                  <div className="space-y-3">
+                    {[...Array(4)].map((_, i) => (
+                      <div key={i} className="flex items-center gap-3">
+                        <Skeleton className="h-10 w-10 rounded-lg" />
+                        <div className="space-y-2 flex-1">
+                          <Skeleton className="h-3 w-16" />
+                          <Skeleton className="h-4 w-32" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  <Skeleton className="h-4 w-24" />
+                  <div className="space-y-3">
+                    {[...Array(3)].map((_, i) => (
+                      <Skeleton key={i} className="h-12 w-full rounded-lg" />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Contact Info */}
               <div className="space-y-4">
@@ -457,11 +472,27 @@ export default function LeadDetailPage({ params }: Props) {
                 </div>
               </div>
             </div>
+              </>
+            )}
           </CardContent>
         </Card>
         
         {/* Qualification Fields */}
         <Card>
+          {isLoading ? (
+            <CardContent className="p-6">
+              <Skeleton className="h-6 w-32 mb-4" />
+              <div className="space-y-3">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="flex items-center justify-between">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-4 w-32" />
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          ) : (
+            <>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Zap className="h-5 w-5 text-amber-400" />
@@ -556,6 +587,8 @@ export default function LeadDetailPage({ params }: Props) {
               </p>
             )}
           </CardContent>
+            </>
+          )}
         </Card>
       </div>
       

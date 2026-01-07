@@ -359,18 +359,7 @@ export default function SettingsPage() {
     return null;
   };
 
-  if (isLoading) {
-    return (
-      <PageContainer>
-        <Skeleton className="h-10 w-48 mb-6" />
-        <div className="space-y-6">
-          {[...Array(4)].map((_, i) => (
-            <Skeleton key={i} className="h-64 rounded-xl" />
-          ))}
-        </div>
-      </PageContainer>
-    );
-  }
+  // No bloqueo completo - siempre mostrar estructura
 
   return (
     <PageContainer>

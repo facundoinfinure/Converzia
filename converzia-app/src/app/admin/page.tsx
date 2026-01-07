@@ -77,8 +77,10 @@ export default function AdminDashboard() {
     refreshAll,
   } = useAdmin();
 
-  // For backward compatibility, return isLoading as combined state
-  const isLoadingCombined = isInitialLoading || isLoading.stats || isLoading.activity || isLoading.approvals;
+  // Use granular loading states
+  const isLoadingStats = isLoading.stats;
+  const isLoadingActivity = isLoading.activity;
+  const isLoadingApprovals = isLoading.approvals;
   const error = errors.stats || errors.activity || errors.approvals || null;
 
   // Map context data to component types (context types match, so direct assignment)
@@ -102,26 +104,6 @@ export default function AdminDashboard() {
     role: "VIEWER", // Default role - could be stored in context if needed
     requestedAt: formatRelativeTime(a.requested_at),
   }));
-
-  if (isLoadingCombined) {
-    return (
-      <PageContainer>
-        <div className="space-y-4 sm:space-y-6 animate-pulse">
-          <Skeleton className="h-10 w-48 sm:w-64" />
-          <Skeleton className="h-36 sm:h-40 rounded-2xl" />
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            {[...Array(4)].map((_, i) => (
-              <Skeleton key={i} className="h-28 sm:h-32 rounded-2xl" />
-            ))}
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-            <Skeleton className="h-56 sm:h-64 rounded-2xl" />
-            <Skeleton className="h-56 sm:h-64 rounded-2xl" />
-          </div>
-        </div>
-      </PageContainer>
-    );
-  }
 
   const activityIcons = {
     lead_ready: { icon: CheckCircle2, color: "success" as const },
@@ -216,13 +198,14 @@ export default function AdminDashboard() {
             subtitle="leads"
             icon={<Zap className="h-6 w-6" />}
             accentColor="primary"
+            loading={isLoadingStats}
             trend={
               stats?.leadsToday && stats.leadsToday > 0
                 ? { value: stats.leadsToday, label: "hoy", direction: "up" }
                 : undefined
             }
             chart={
-              stats?.leadsTrend && stats.leadsTrend.length > 0 && (
+              !isLoadingStats && stats?.leadsTrend && stats.leadsTrend.length > 0 ? (
                 <SimpleChart
                   data={stats.leadsTrend}
                   color="var(--accent-primary)"
@@ -230,7 +213,7 @@ export default function AdminDashboard() {
                   showGrid={false}
                   showAxis={false}
                 />
-              )
+              ) : null
             }
           />
 
@@ -242,6 +225,7 @@ export default function AdminDashboard() {
               icon={<Building2 className="h-5 w-5" />}
               iconColor="primary"
               size="sm"
+              loading={isLoadingStats}
               action={{
                 label: "Ver",
                 onClick: () => router.push("/admin/tenants"),
@@ -253,6 +237,7 @@ export default function AdminDashboard() {
               icon={<TrendingUp className="h-5 w-5" />}
               iconColor="success"
               size="sm"
+              loading={isLoadingStats}
             />
             <DashboardCard
               title="T. Respuesta"
@@ -260,6 +245,7 @@ export default function AdminDashboard() {
               icon={<Clock className="h-5 w-5" />}
               iconColor="info"
               size="sm"
+              loading={isLoadingStats}
             />
             <DashboardCard
               title="Leads Hoy"
@@ -267,6 +253,7 @@ export default function AdminDashboard() {
               icon={<Users className="h-5 w-5" />}
               iconColor="warning"
               size="sm"
+              loading={isLoadingStats}
             />
           </div>
 
@@ -326,7 +313,25 @@ export default function AdminDashboard() {
                 </div>
               </CardHeader>
               <CardContent noPadding>
-                {pendingApprovals.length > 0 ? (
+                {isLoadingApprovals ? (
+                  <div className="divide-y divide-[var(--border-primary)]">
+                    {[...Array(3)].map((_, i) => (
+                      <div key={i} className="flex flex-col sm:flex-row sm:items-center gap-3 p-4">
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <Skeleton className="h-10 w-10 rounded-xl" variant="circular" />
+                          <div className="flex-1 space-y-2">
+                            <Skeleton className="h-4 w-32" />
+                            <Skeleton className="h-3 w-24" />
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 ml-auto sm:ml-0">
+                          <Skeleton className="h-5 w-16 rounded-full" />
+                          <Skeleton className="h-8 w-20 rounded" variant="rectangular" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : pendingApprovals.length > 0 ? (
                   <div className="divide-y divide-[var(--border-primary)]">
                     {pendingApprovals.map((approval) => (
                       <div

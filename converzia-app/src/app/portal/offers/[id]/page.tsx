@@ -504,19 +504,7 @@ export default function PortalOfferDetailPage() {
     }
   }
 
-  if (isLoading) {
-    return (
-      <PageContainer>
-        <Skeleton className="h-10 w-64 mb-6" />
-        <div className="grid grid-cols-4 gap-4 mb-6">
-          {[...Array(4)].map((_, i) => (
-            <Skeleton key={i} className="h-24 rounded-xl" />
-          ))}
-        </div>
-        <Skeleton className="h-64 rounded-xl" />
-      </PageContainer>
-    );
-  }
+  // No bloqueo completo - siempre mostrar estructura
 
   if (!offer) {
     return null;
@@ -697,7 +685,33 @@ export default function PortalOfferDetailPage() {
       )}
 
       {/* Funnel Stats */}
-      {funnel && funnel.total_leads > 0 && (
+      {isLoading ? (
+        <div className="relative mb-6 rounded-xl overflow-hidden min-h-[450px] bg-[var(--bg-primary)]">
+          <div className="relative z-20 p-6 max-w-2xl">
+            <Card className="bg-[var(--bg-primary)]/98 backdrop-blur-md border-[var(--border-primary)] shadow-lg">
+              <CardHeader>
+                <Skeleton className="h-6 w-32" />
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-end justify-between gap-4 h-48">
+                  {[...Array(4)].map((_, i) => (
+                    <div key={i} className="flex-1 flex flex-col items-center space-y-2">
+                      <Skeleton className="h-8 w-12" />
+                      <Skeleton className="h-3 w-8" />
+                      <Skeleton className="w-full h-24 rounded-t-lg" />
+                      <Skeleton className="h-4 w-16" />
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-6 pt-4 border-t border-[var(--border-primary)] flex items-center justify-between">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-8 w-16" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      ) : funnel && funnel.total_leads > 0 ? (
         <>
           {/* Funnel Visualization with Background Image */}
           <div className="relative mb-6 rounded-xl overflow-hidden min-h-[450px] bg-[var(--bg-primary)]">
@@ -799,10 +813,10 @@ export default function PortalOfferDetailPage() {
             </Card>
           )}
         </>
-      )}
+      ) : null}
 
       {/* Empty state for no leads */}
-      {(!funnel || funnel.total_leads === 0) && (
+      {!isLoading && (!funnel || funnel.total_leads === 0) && (
         <Card className="mb-6">
           <CardContent className="py-12 text-center">
             <Users className="h-12 w-12 text-slate-600 mx-auto mb-4" />
@@ -817,7 +831,29 @@ export default function PortalOfferDetailPage() {
       )}
 
       {/* Delivered Leads Table */}
-      {deliveredLeads.length > 0 && (
+      {isLoading ? (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <Skeleton className="h-6 w-32" />
+              <Skeleton className="h-5 w-16 rounded-full" />
+            </div>
+          </CardHeader>
+          <div className="divide-y divide-[var(--border-primary)]">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="flex items-center gap-4 px-6 py-4">
+                <Skeleton className="h-10 w-10 rounded-full" variant="circular" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-3 w-24" />
+                </div>
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="h-4 w-16" />
+              </div>
+            ))}
+          </div>
+        </Card>
+      ) : deliveredLeads.length > 0 ? (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -831,7 +867,7 @@ export default function PortalOfferDetailPage() {
             keyExtractor={(lead) => lead.id}
           />
         </Card>
-      )}
+      ) : null}
 
       {/* Integrations Section */}
       {canManageOffers && (

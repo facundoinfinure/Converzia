@@ -851,27 +851,7 @@ export default function OperationsPage() {
     },
   ];
 
-  // Show loading overlay while initial data is loading
-  if (isLoading && !stats) {
-    return (
-      <PageContainer>
-        <PageHeader
-          title="Operaciones"
-          description="Monitoreo de entregas, reembolsos y estado del sistema"
-          breadcrumbs={[
-            { label: "Admin", href: "/admin" },
-            { label: "Operaciones" },
-          ]}
-        />
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="flex flex-col items-center gap-4">
-            <Spinner size="lg" />
-            <p className="text-[var(--text-secondary)]">Cargando datos de operaciones...</p>
-          </div>
-        </div>
-      </PageContainer>
-    );
-  }
+  // No bloqueo completo - siempre mostrar estructura
 
   return (
     <PageContainer>
@@ -894,6 +874,7 @@ export default function OperationsPage() {
           change={stats ? Math.round((stats.successfulDeliveries / (stats.totalDeliveries || 1)) * 100) : 0}
           trend="up"
           changeLabel="tasa de éxito"
+          loading={isLoading && !stats}
         />
         <StatCard
           title="Entregas fallidas"
@@ -901,18 +882,21 @@ export default function OperationsPage() {
           icon={<XCircle />}
           iconColor="from-red-500 to-rose-500"
           trend={stats?.failedDeliveries ? "down" : "neutral"}
+          loading={isLoading && !stats}
         />
         <StatCard
           title="Conversaciones activas"
           value={stats?.activeConversations || 0}
           icon={<MessageSquare />}
           iconColor="from-blue-500 to-cyan-500"
+          loading={isLoading && !stats}
         />
         <StatCard
           title="Reembolsos"
           value={stats?.totalRefunds || 0}
           icon={<DollarSign />}
           iconColor="from-amber-500 to-orange-500"
+          loading={isLoading && !stats}
         />
       </StatsGrid>
 

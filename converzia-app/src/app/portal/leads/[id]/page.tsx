@@ -187,17 +187,7 @@ export default function PortalLeadDetailPage() {
   const isDelivered = leadDetails?.status === "SENT_TO_DEVELOPER" || leadDetails?.delivery?.status === "DELIVERED";
   const showLeadInfo = isDelivered && leadDetails?.lead;
 
-  if (isLoading) {
-    return (
-      <PageContainer>
-        <Skeleton className="h-10 w-48 mb-6" />
-        <div className="space-y-6">
-          <Skeleton className="h-64 rounded-xl" />
-          <Skeleton className="h-64 rounded-xl" />
-        </div>
-      </PageContainer>
-    );
-  }
+  // No bloqueo completo - siempre mostrar estructura
 
   if (!leadDetails) {
     return (
@@ -238,17 +228,31 @@ export default function PortalLeadDetailPage() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>Información del Lead</CardTitle>
-              <Badge
-                variant={statusInfo?.color === "green" ? "success" : statusInfo?.color === "red" ? "danger" : "secondary"}
-                dot
-              >
-                <StatusIcon className="h-3 w-3 mr-1" />
-                {statusInfo?.label}
-              </Badge>
+              {isLoading ? (
+                <Skeleton className="h-6 w-24 rounded-full" />
+              ) : (
+                <Badge
+                  variant={statusInfo?.color === "green" ? "success" : statusInfo?.color === "red" ? "danger" : "secondary"}
+                  dot
+                >
+                  <StatusIcon className="h-3 w-3 mr-1" />
+                  {statusInfo?.label}
+                </Badge>
+              )}
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {isLoading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="space-y-2">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-6 w-32" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {leadDetails.offer && (
                 <div>
                   <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
@@ -304,11 +308,28 @@ export default function PortalLeadDetailPage() {
                 </div>
               </div>
             </div>
+              )}
           </CardContent>
         </Card>
 
         {/* Lead Contact Information - Only if delivered */}
-        {showLeadInfo && leadDetails.lead && (
+        {isLoading ? (
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-6 w-48" />
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="space-y-2">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-6 w-32" />
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        ) : showLeadInfo && leadDetails.lead ? (
           <Card>
             <CardHeader>
               <CardTitle>Información de contacto</CardTitle>
@@ -377,10 +398,26 @@ export default function PortalLeadDetailPage() {
               </div>
             </CardContent>
           </Card>
-        )}
+        ) : null}
 
         {/* Qualification Fields */}
-        {leadDetails.qualification_fields && typeof leadDetails.qualification_fields === 'object' && (
+        {isLoading ? (
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-6 w-48" />
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="flex items-center justify-between">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-4 w-32" />
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        ) : leadDetails.qualification_fields && typeof leadDetails.qualification_fields === 'object' ? (
           <Card>
             <CardHeader>
               <CardTitle>Información de calificación</CardTitle>
@@ -400,10 +437,10 @@ export default function PortalLeadDetailPage() {
               </div>
             </CardContent>
           </Card>
-        )}
+        ) : null}
 
         {/* Delivery Status */}
-        {leadDetails.delivery && (
+        {!isLoading && leadDetails.delivery && (
           <Card>
             <CardHeader>
               <CardTitle>Estado de entrega</CardTitle>
@@ -437,7 +474,7 @@ export default function PortalLeadDetailPage() {
         )}
 
         {/* Privacy Notice for non-delivered leads */}
-        {!isDelivered && (
+        {!isLoading && !isDelivered && (
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-start gap-3 p-4 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)]">

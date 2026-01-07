@@ -152,21 +152,7 @@ export default function OfferDetailPage({ params }: Props) {
     }
   };
 
-  if (isLoading) {
-    return (
-      <PageContainer>
-        <div className="space-y-6">
-          <Skeleton className="h-10 w-64" />
-          <div className="grid grid-cols-4 gap-4">
-            {[...Array(4)].map((_, i) => (
-              <Skeleton key={i} className="h-32 rounded-xl" />
-            ))}
-          </div>
-          <Skeleton className="h-96 rounded-xl" />
-        </div>
-      </PageContainer>
-    );
-  }
+  // No bloqueo completo - siempre mostrar estructura
 
   if (error || !offer) {
     return (
@@ -342,24 +328,28 @@ export default function OfferDetailPage({ params }: Props) {
           value={offer._count?.variants || 0}
           icon={<Layers />}
           iconColor="from-blue-500 to-cyan-500"
+          loading={isLoading}
         />
         <StatCard
           title="Unidades"
           value={offer._count?.units || 0}
           icon={<Package />}
           iconColor="from-emerald-500 to-teal-500"
+          loading={isLoading}
         />
         <StatCard
           title="Leads"
           value={offer._count?.leads || 0}
           icon={<Users />}
           iconColor="from-purple-500 to-pink-500"
+          loading={isLoading}
         />
         <StatCard
           title="Ads Mapeados"
           value={offer._count?.ads || 0}
           icon={<Megaphone />}
           iconColor="from-amber-500 to-orange-500"
+          loading={isLoading}
         />
       </StatsGrid>
 

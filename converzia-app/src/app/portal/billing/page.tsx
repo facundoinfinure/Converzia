@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/Badge";
 import { DataTable, Column } from "@/components/ui/Table";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SelectDropdown } from "@/components/ui/Dropdown";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/lib/auth/context";
 import { usePortalOffers } from "@/lib/hooks/use-portal";
@@ -71,7 +72,8 @@ export default function PortalBillingPage() {
   const [summary, setSummary] = useState({ totalPurchased: 0, totalConsumed: 0, totalRefunded: 0 });
   const [transactions, setTransactions] = useState<ConsumptionRecord[]>([]);
   const [packages, setPackages] = useState<CreditPackage[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingBalance, setIsLoadingBalance] = useState(true);
+  const [isLoadingTransactions, setIsLoadingTransactions] = useState(true);
   const [loadingCheckout, setLoadingCheckout] = useState<string | null>(null);
   
   // Filters
@@ -83,7 +85,8 @@ export default function PortalBillingPage() {
   useEffect(() => {
     async function fetchBillingData() {
       if (!activeTenantId) return;
-      setIsLoading(true);
+      setIsLoadingBalance(true);
+      setIsLoadingTransactions(true);
 
       try {
         // Fetch consumption data from API
@@ -126,7 +129,8 @@ export default function PortalBillingPage() {
         console.error("Error loading billing:", error);
         toast.error("Error al cargar datos de facturación");
       } finally {
-        setIsLoading(false);
+        setIsLoadingBalance(false);
+        setIsLoadingTransactions(false);
       }
     }
 
@@ -319,53 +323,86 @@ export default function PortalBillingPage() {
         {/* Current Balance - Featured */}
         <Card className="md:col-span-2">
           <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[var(--text-secondary)] mb-1">Balance actual</p>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold text-[var(--text-primary)]">{balance}</span>
-                  <span className="text-[var(--text-secondary)]">créditos</span>
+            {isLoadingBalance ? (
+              <div className="flex items-center justify-between">
+                <div className="space-y-3 flex-1">
+                  <Skeleton className="h-4 w-24" />
+                  <div className="flex items-baseline gap-2">
+                    <Skeleton className="h-10 w-24" />
+                    <Skeleton className="h-5 w-16" />
+                  </div>
                 </div>
-                {balance < 10 && balance >= 0 && (
-                  <p className="text-[var(--text-secondary)] text-sm mt-2 flex items-center gap-1">
-                    <Clock className="h-4 w-4" />
-                    Créditos bajos - recargá para seguir recibiendo leads
-                  </p>
-                )}
+                <Skeleton className="h-16 w-16 rounded-lg" />
               </div>
-              <div className="h-16 w-16 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center">
-                <CreditCard className="h-8 w-8 text-[var(--text-secondary)]" />
+            ) : (
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[var(--text-secondary)] mb-1">Balance actual</p>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-4xl font-bold text-[var(--text-primary)]">{balance}</span>
+                    <span className="text-[var(--text-secondary)]">créditos</span>
+                  </div>
+                  {balance < 10 && balance >= 0 && (
+                    <p className="text-[var(--text-secondary)] text-sm mt-2 flex items-center gap-1">
+                      <Clock className="h-4 w-4" />
+                      Créditos bajos - recargá para seguir recibiendo leads
+                    </p>
+                  )}
+                </div>
+                <div className="h-16 w-16 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center">
+                  <CreditCard className="h-8 w-8 text-[var(--text-secondary)]" />
+                </div>
               </div>
-            </div>
+            )}
           </CardContent>
         </Card>
 
         {/* Summary Stats */}
         <Card>
           <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center">
-                <TrendingUp className="h-5 w-5 text-[var(--text-secondary)]" />
+            {isLoadingBalance ? (
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-10 w-10 rounded-lg" />
+                <div className="space-y-2 flex-1">
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="h-6 w-16" />
+                </div>
               </div>
-              <div>
-                <p className="text-xs text-[var(--text-tertiary)]">Total comprado</p>
-                <p className="text-xl font-semibold text-[var(--text-primary)]">{summary.totalPurchased}</p>
+            ) : (
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center">
+                  <TrendingUp className="h-5 w-5 text-[var(--text-secondary)]" />
+                </div>
+                <div>
+                  <p className="text-xs text-[var(--text-tertiary)]">Total comprado</p>
+                  <p className="text-xl font-semibold text-[var(--text-primary)]">{summary.totalPurchased}</p>
+                </div>
               </div>
-            </div>
+            )}
           </CardContent>
         </Card>
 
         <Card>
           <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center">
-                <TrendingDown className="h-5 w-5 text-[var(--text-secondary)]" />
+            {isLoadingBalance ? (
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-10 w-10 rounded-lg" />
+                <div className="space-y-2 flex-1">
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="h-6 w-16" />
+                </div>
               </div>
-              <div>
-                <p className="text-xs text-[var(--text-tertiary)]">Total consumido</p>
-                <p className="text-xl font-semibold text-[var(--text-primary)]">{summary.totalConsumed}</p>
+            ) : (
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center">
+                  <TrendingDown className="h-5 w-5 text-[var(--text-secondary)]" />
+                </div>
+                <div>
+                  <p className="text-xs text-[var(--text-tertiary)]">Total consumido</p>
+                  <p className="text-xl font-semibold text-[var(--text-primary)]">{summary.totalConsumed}</p>
+                </div>
               </div>
-            </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -450,7 +487,7 @@ export default function PortalBillingPage() {
           data={transactions}
           columns={txColumns}
           keyExtractor={(tx) => tx.ledger_id}
-          isLoading={isLoading}
+          isLoading={isLoadingTransactions}
           emptyState={
             <EmptyState
               icon={<CreditCard />}
