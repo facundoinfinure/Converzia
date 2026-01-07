@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { logger } from "@/lib/utils/logger";
 
 // ============================================
 // Cron Job Authentication Helper
@@ -27,7 +28,9 @@ export function validateCronAuth(request: NextRequest): CronAuthResult {
 
   // SECURITY: CRON_SECRET must be configured in production
   if (!cronSecret) {
-    console.error("SECURITY: CRON_SECRET not configured - cron job rejected");
+    logger.security("CRON_SECRET not configured - cron job rejected", {
+      path: request.nextUrl.pathname,
+    });
     return {
       authorized: false,
       response: NextResponse.json(
@@ -39,7 +42,7 @@ export function validateCronAuth(request: NextRequest): CronAuthResult {
 
   // Validate the Bearer token
   if (authHeader !== `Bearer ${cronSecret}`) {
-    console.error("SECURITY: Unauthorized cron job access attempt", {
+    logger.security("Unauthorized cron job access attempt", {
       hasAuthHeader: !!authHeader,
       path: request.nextUrl.pathname,
     });

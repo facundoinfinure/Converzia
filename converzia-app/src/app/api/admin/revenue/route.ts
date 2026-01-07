@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { logger } from "@/lib/utils/logger";
+import { rpcWithTimeout } from "@/lib/supabase/query-with-timeout";
+import { unsafeRpc } from "@/lib/supabase/unsafe-rpc";
+import { handleApiError, handleUnauthorized, handleForbidden, handleValidationError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/database";
 
 // ============================================
 // GET /api/admin/revenue
@@ -61,7 +66,7 @@ export async function GET(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return handleUnauthorized("Debes iniciar sesión para ver revenue");
     }
 
     // Check if user is admin
@@ -72,7 +77,7 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (!profile?.is_converzia_admin) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return handleForbidden("Solo administradores pueden ver revenue");
     }
 
     // Parse query params
@@ -107,15 +112,34 @@ export async function GET(request: NextRequest) {
     }
 
     // Call the get_revenue_summary function
-    const { data: tenantData, error: summaryError } = await admin
-      .rpc("get_revenue_summary", {
+    interface RevenueSummaryRow {
+      tenant_id: string;
+      tenant_name: string;
+      payments_received: number;
+      leads_ready_count: number;
+      leads_ready_value: number;
+      leads_delivered_count: number;
+      leads_delivered_value: number;
+      attributed_spend: number;
+      platform_spend: number;
+      leads_raw_count: number;
+      profit: number;
+      margin_pct: number;
+    }
+
+    const { data: tenantData, error: summaryError } = await rpcWithTimeout<RevenueSummaryRow[]>(
+      unsafeRpc<RevenueSummaryRow[]>(admin, "get_revenue_summary", {
         p_date_start: dateStartStr,
         p_date_end: dateEndStr,
         p_tenant_id: tenantId || null,
-      } as any) as { data: any[] | null; error: any };
+      }),
+      30000,
+      "get_revenue_summary",
+      true
+    );
 
     if (summaryError) {
-      console.error("Error fetching revenue summary:", summaryError);
+      logger.error("Error fetching revenue summary", summaryError, { dateStartStr, dateEndStr, tenantId });
       
       // Fallback to direct calculation if function doesn't exist yet
       return await fallbackCalculation(admin, dateStartStr, dateEndStr, tenantId);
@@ -136,7 +160,7 @@ export async function GET(request: NextRequest) {
       pending_credits: 0,
     };
 
-    const byTenant: TenantRevenue[] = (tenantData || []).map((row: any) => {
+    const byTenant: TenantRevenue[] = (tenantData || []).map((row) => {
       // Accumulate totals
       summary.payments_received += Number(row.payments_received) || 0;
       summary.leads_ready_count += Number(row.leads_ready_count) || 0;
@@ -181,7 +205,14 @@ export async function GET(request: NextRequest) {
 
     // Get latest balance per tenant
     const latestBalances = new Map<string, number>();
-    (creditData || []).forEach((row: any) => {
+    interface CreditLedgerRow {
+      tenant_id: string;
+      balance_after: number | null;
+      amount: number;
+      transaction_type: string;
+    }
+
+    (creditData || []).forEach((row: CreditLedgerRow) => {
       if (!latestBalances.has(row.tenant_id)) {
         latestBalances.set(row.tenant_id, Number(row.balance_after) || 0);
       }
@@ -195,8 +226,12 @@ export async function GET(request: NextRequest) {
       .select("tenant_id, cost_per_lead");
 
     const pricingDataArray = Array.isArray(pricingDataRaw) ? pricingDataRaw : [];
+    interface PricingRow {
+      tenant_id: string;
+      cost_per_lead: number | null;
+    }
     const pricingMap = new Map<string, number>(
-      pricingDataArray.map((p: any) => [p.tenant_id, Number(p.cost_per_lead) || 0])
+      pricingDataArray.map((p: PricingRow) => [p.tenant_id, Number(p.cost_per_lead) || 0])
     );
 
     byTenant.forEach(t => {
@@ -221,12 +256,21 @@ export async function GET(request: NextRequest) {
 
     // Aggregate by offer
     const offerMap = new Map<string, OfferRevenue>();
-    offerDataArray.forEach((row: any) => {
+    interface OfferRow {
+      tenant_id: string;
+      offer_id: string | null;
+      offers?: { name: string } | Array<{ name: string }> | null;
+      tenants?: { name: string } | Array<{ name: string }> | null;
+      lead_sources?: { attributed_cost: number | null } | Array<{ attributed_cost: number | null }> | null;
+    }
+
+    offerDataArray.forEach((row: OfferRow) => {
       if (!row.offer_id) return;
       
       const existing = offerMap.get(row.offer_id);
       const cpl: number = pricingMap.get(row.tenant_id) || 0;
-      const attrCost: number = Number(row.lead_sources?.attributed_cost) || 0;
+      const leadSource = Array.isArray(row.lead_sources) ? row.lead_sources[0] : row.lead_sources;
+      const attrCost: number = Number(leadSource?.attributed_cost) || 0;
       
       if (existing) {
         existing.leads_ready_count += 1;
@@ -237,11 +281,13 @@ export async function GET(request: NextRequest) {
           ? ((existing.profit / existing.leads_ready_value) * 100)
           : 0;
       } else {
+        const offer = Array.isArray(row.offers) ? row.offers[0] : row.offers;
+        const tenant = Array.isArray(row.tenants) ? row.tenants[0] : row.tenants;
         offerMap.set(row.offer_id, {
           offer_id: row.offer_id,
-          offer_name: row.offers?.name || "Unknown",
+          offer_name: offer?.name || "Unknown",
           tenant_id: row.tenant_id,
-          tenant_name: row.tenants?.name || "Unknown",
+          tenant_name: tenant?.name || "Unknown",
           leads_ready_count: 1,
           leads_ready_value: cpl,
           attributed_spend: attrCost,
@@ -253,8 +299,7 @@ export async function GET(request: NextRequest) {
 
     const byOffer = Array.from(offerMap.values()).sort((a, b) => b.leads_ready_value - a.leads_ready_value);
 
-    return NextResponse.json({
-      success: true,
+    return apiSuccess({
       date_range: {
         start: dateStartStr,
         end: dateEndStr,
@@ -263,18 +308,19 @@ export async function GET(request: NextRequest) {
       by_tenant: byTenant,
       by_offer: byOffer,
     });
-  } catch (error: any) {
-    console.error("Error in revenue API:", error);
-    return NextResponse.json(
-      { error: error.message || "Internal server error" },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      status: 500,
+      message: "Ocurrió un error al obtener revenue",
+      context: { operation: "get_revenue" },
+    });
   }
 }
 
 // Fallback calculation when the RPC function doesn't exist yet
 async function fallbackCalculation(
-  supabase: any,
+  supabase: ReturnType<typeof createAdminClient>,
   dateStart: string,
   dateEnd: string,
   tenantId: string | null
@@ -320,8 +366,11 @@ async function fallbackCalculation(
         .gte("paid_at", dateStart)
         .lte("paid_at", dateEnd + "T23:59:59");
 
+      interface BillingOrderRow {
+        total: number | null;
+      }
       const paymentsReceived = (payments || []).reduce(
-        (sum: number, p: any) => sum + Number(p.total),
+        (sum: number, p: BillingOrderRow) => sum + Number(p.total || 0),
         0
       );
 
@@ -336,8 +385,14 @@ async function fallbackCalculation(
 
       const leadCount = leadsReadyCount || 0;
       const leadsValue = leadCount * cpl;
+      interface LeadOfferWithSource {
+        lead_sources?: { attributed_cost: number | null } | Array<{ attributed_cost: number | null }> | null;
+      }
       const attrSpend = (leadsReady || []).reduce(
-        (sum: number, l: any) => sum + (Number(l.lead_sources?.attributed_cost) || 0),
+        (sum: number, l: LeadOfferWithSource) => {
+          const source = Array.isArray(l.lead_sources) ? l.lead_sources[0] : l.lead_sources;
+          return sum + (Number(source?.attributed_cost) || 0);
+        },
         0
       );
 
@@ -349,12 +404,16 @@ async function fallbackCalculation(
         .gte("date_start", dateStart)
         .lte("date_end", dateEnd);
 
+      interface PlatformCostRow {
+        spend: number | null;
+        leads_raw: number | null;
+      }
       const platformSpend = (platformCosts || []).reduce(
-        (sum: number, c: any) => sum + Number(c.spend),
+        (sum: number, c: PlatformCostRow) => sum + Number(c.spend || 0),
         0
       );
       const leadsRaw = (platformCosts || []).reduce(
-        (sum: number, c: any) => sum + Number(c.leads_raw),
+        (sum: number, c: PlatformCostRow) => sum + Number(c.leads_raw || 0),
         0
       );
 
@@ -394,7 +453,7 @@ async function fallbackCalculation(
       ? (summary.profit / summary.leads_ready_value) * 100
       : 0;
 
-    return NextResponse.json({
+    return apiSuccess({
       success: true,
       date_range: {
         start: dateStart,
@@ -404,12 +463,8 @@ async function fallbackCalculation(
       by_tenant: byTenant,
       by_offer: [],
     });
-  } catch (error: any) {
-    console.error("Fallback calculation error:", error);
-    return NextResponse.json(
-      { error: error.message || "Failed to calculate revenue" },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    throw error; // Let outer handler catch it
   }
 }
 

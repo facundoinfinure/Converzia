@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { sendTenantApprovalEmail } from "@/lib/services/email";
 import { withRateLimit, RATE_LIMITS } from "@/lib/security/rate-limit";
+import { handleApiError, handleValidationError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
+import { logger } from "@/lib/utils/logger";
+import { validateBody, tenantNotifyApprovalBodySchema } from "@/lib/validation/schemas";
 
 // ============================================
 // Tenant Approval Notification API
@@ -15,15 +18,16 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json();
-    const { tenant_id, tenant_name, emails } = body;
-
-    if (!tenant_id || !tenant_name || !Array.isArray(emails)) {
-      return NextResponse.json(
-        { error: "Invalid request body" },
-        { status: 400 }
-      );
+    // Validate request body
+    const bodyValidation = await validateBody(request, tenantNotifyApprovalBodySchema);
+    
+    if (!bodyValidation.success) {
+      return handleValidationError(new Error(bodyValidation.error), {
+        validationError: bodyValidation.error,
+      });
     }
+    
+    const { tenant_id, tenant_name, emails, action, message } = bodyValidation.data;
 
     // Send emails
     const results = await Promise.allSettled(
@@ -33,7 +37,12 @@ export async function POST(request: NextRequest) {
     const successCount = results.filter((r) => r.status === "fulfilled" && r.value.success).length;
     const errors = results
       .filter((r) => r.status === "rejected" || (r.status === "fulfilled" && !r.value.success))
-      .map((r) => r.status === "rejected" ? r.reason : (r as any).value.error);
+      .map((r) => {
+        if (r.status === "rejected") {
+          return r.reason instanceof Error ? r.reason.message : String(r.reason);
+        }
+        return r.value.error || "Unknown error";
+      });
 
     // Create in-app notification event
     const supabase = createAdminClient();
@@ -49,20 +58,21 @@ export async function POST(request: NextRequest) {
         actor_type: "SYSTEM",
       });
     } catch (eventError) {
-      console.error("Error creating notification event:", eventError);
+      logger.error("Error creating notification event", eventError, { tenant_id, tenant_name });
     }
 
-    return NextResponse.json({
-      success: true,
+    return apiSuccess({
       emails_sent: successCount,
       total: emails.length,
       errors: errors.length > 0 ? errors : undefined,
-    });
+    }, `${successCount} emails enviados correctamente`);
   } catch (error) {
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      status: 500,
+      message: "Error al enviar notificaciones de aprobación",
+      context: { operation: "notify_tenant_approval" },
+    });
   }
 }
 

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { google } from "googleapis";
 import { createClient } from "@/lib/supabase/server";
+import { handleApiError, handleUnauthorized, handleValidationError, ErrorCode } from "@/lib/utils/api-error-handler";
+import { logger } from "@/lib/utils/logger";
 
 // ============================================
 // Google OAuth - Initiate Auth Flow
@@ -20,14 +22,12 @@ export async function GET(request: NextRequest) {
   try {
     // Validate environment variables
     if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
-      console.error("[Google OAuth] Missing environment variables:", {
-        hasClientId: !!GOOGLE_CLIENT_ID,
-        hasClientSecret: !!GOOGLE_CLIENT_SECRET,
+      return handleApiError(new Error("Google OAuth not configured"), {
+        code: ErrorCode.INTERNAL_ERROR,
+        status: 503,
+        message: "Google OAuth no está configurado en el servidor",
+        context: { operation: "google_auth" },
       });
-      return NextResponse.json(
-        { error: "Google OAuth no está configurado en el servidor" },
-        { status: 503 } // Service Unavailable - más apropiado que 500
-      );
     }
 
     // Get tenant_id from query params (passed from frontend)
@@ -37,11 +37,9 @@ export async function GET(request: NextRequest) {
     const returnUrl = searchParams.get("return_url"); // For portal redirects
 
     if (!tenantId) {
-      console.error("[Google OAuth] Missing tenant_id in request");
-      return NextResponse.json(
-        { error: "tenant_id es requerido" },
-        { status: 400 }
-      );
+      return handleValidationError(new Error("tenant_id es requerido"), {
+        field: "tenant_id",
+      });
     }
 
     // Authenticate user
@@ -49,16 +47,10 @@ export async function GET(request: NextRequest) {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     
     if (authError || !user) {
-      console.error("[Google OAuth] Auth error:", {
-        error: authError,
-        hasUser: !!user,
-        endpoint: request.url,
-        tenantId,
-      });
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+      return handleUnauthorized("Debes iniciar sesión para conectar Google");
     }
     
-    console.log("[Google OAuth] User authenticated:", {
+    logger.info("[Google OAuth] User authenticated", {
       userId: user.id,
       email: user.email,
       tenantId,
@@ -75,10 +67,9 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (membershipError || !membership) {
-      console.error("[Google OAuth] Membership check failed:", {
+      logger.error("[Google OAuth] Membership check failed", membershipError, {
         userId: user.id,
         tenantId,
-        error: membershipError,
         hasMembership: !!membership,
       });
       return NextResponse.json({ 
@@ -86,7 +77,7 @@ export async function GET(request: NextRequest) {
       }, { status: 403 });
     }
 
-    console.log("[Google OAuth] Membership verified:", {
+    logger.info("[Google OAuth] Membership verified", {
       userId: user.id,
       tenantId,
       role: membership.role,
@@ -110,7 +101,7 @@ export async function GET(request: NextRequest) {
       state: encodedState,
     });
 
-    console.log("[Google OAuth] Generating auth URL:", {
+    logger.info("[Google OAuth] Generating auth URL", {
       tenantId,
       integrationId,
       returnUrl,
@@ -120,14 +111,12 @@ export async function GET(request: NextRequest) {
     // Return the auth URL for frontend to redirect
     return NextResponse.json({ authUrl });
   } catch (error) {
-    console.error("[Google OAuth] Unexpected error:", {
-      error: error instanceof Error ? error.message : error,
-      stack: error instanceof Error ? error.stack : undefined,
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      status: 500,
+      message: "Error al iniciar autenticación con Google",
+      context: { operation: "google_auth" },
     });
-    return NextResponse.json(
-      { error: "Error al iniciar autenticación con Google" },
-      { status: 500 }
-    );
   }
 }
 

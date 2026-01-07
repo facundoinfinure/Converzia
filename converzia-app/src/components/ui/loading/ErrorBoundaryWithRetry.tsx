@@ -49,7 +49,31 @@ export class ErrorBoundaryWithRetry extends Component<
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error("ErrorBoundary caught an error:", error, errorInfo);
+    // Log to Sentry with full context
+    if (typeof window !== "undefined") {
+      import('@sentry/nextjs').then((Sentry) => {
+        Sentry.captureException(error, {
+          contexts: {
+            react: {
+              componentStack: errorInfo.componentStack,
+            },
+          },
+          tags: {
+            errorBoundary: true,
+            errorBoundaryType: 'withRetry',
+            retryCount: this.state.retryCount,
+          },
+          level: 'error',
+        });
+      }).catch((importError) => {
+        // Fallback if Sentry import fails
+        console.error("ErrorBoundaryWithRetry caught an error:", error, errorInfo);
+      });
+    } else {
+      // Server-side logging
+      console.error("ErrorBoundaryWithRetry caught an error:", error, errorInfo);
+    }
+    
     this.attemptRetry();
   }
 

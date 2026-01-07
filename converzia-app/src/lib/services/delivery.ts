@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/server";
 import { queryWithTimeout, rpcWithTimeout } from "@/lib/supabase/query-with-timeout";
+import { unsafeRpc } from "@/lib/supabase/unsafe-rpc";
 import type { Delivery, TenantIntegration } from "@/types";
 import { createTokkoLead, TokkoConfig } from "./tokko";
 import { appendToGoogleSheets, GoogleSheetsConfig } from "./google-sheets";
@@ -239,16 +240,13 @@ export async function processDelivery(deliveryId: string): Promise<DeliveryResul
     try {
       // Use atomic function for delivery completion + credit consumption
       // This ensures both operations succeed or neither does
-      const { data: atomicResult, error: atomicError } = await rpcWithTimeout(
-        (supabase.rpc as any)(
-          "complete_delivery_and_consume_credit",
-          {
-            p_delivery_id: deliveryId,
-            p_integrations_succeeded: integrationsSucceeded,
-            p_integrations_failed: integrationsFailed,
-            p_final_status: finalStatus,
-          }
-        ),
+      const { data: atomicResult, error: atomicError } = await rpcWithTimeout<{ success: boolean }>(
+        unsafeRpc<{ success: boolean }>(supabase, "complete_delivery_and_consume_credit", {
+          p_delivery_id: deliveryId,
+          p_integrations_succeeded: integrationsSucceeded,
+          p_integrations_failed: integrationsFailed,
+          p_final_status: finalStatus,
+        }),
         30000, // 30 second timeout for critical delivery operation
         "complete_delivery_and_consume_credit",
         true // Enable retry
@@ -354,8 +352,9 @@ async function moveToDeadLetter(
 ): Promise<void> {
   const supabase = createAdminClient();
 
-  await rpcWithTimeout(
-    (supabase.rpc as any)("move_to_dead_letter", {
+  // Type assertion needed because RPC function types are not fully generated
+  await rpcWithTimeout<void>(
+    unsafeRpc<void>(supabase, "move_to_dead_letter", {
       p_delivery_id: deliveryId,
       p_reason: reason,
     }),
@@ -422,8 +421,9 @@ async function consumeCredit(
   }
 
   // Atomic credit consumption (locks per-tenant)
-  const { data, error } = await rpcWithTimeout(
-    (supabase.rpc as any)("consume_credit", {
+  // Type assertion needed because RPC function types are not fully generated
+  const { data, error } = await rpcWithTimeout<{ new_balance: number }>(
+    unsafeRpc<{ new_balance: number }>(supabase, "consume_credit", {
       p_tenant_id: tenantId,
       p_delivery_id: deliveryId,
       p_lead_offer_id: leadOfferId,
@@ -622,11 +622,16 @@ async function deliverToWebhook(
     headers["X-API-Key"] = config.auth_value;
   }
 
-  const response = await fetch(config.url, {
-    method: config.method || "POST",
-    headers,
-    body: JSON.stringify(delivery.payload),
-  });
+  const { fetchWithTimeout } = await import("@/lib/utils/fetch-with-timeout");
+  const response = await fetchWithTimeout(
+    config.url,
+    {
+      method: config.method || "POST",
+      headers,
+      body: JSON.stringify(delivery.payload),
+    },
+    30000 // 30 second timeout for webhook delivery
+  );
 
   if (!response.ok) {
     throw new Error(`Webhook returned ${response.status}: ${await response.text()}`);
@@ -672,8 +677,8 @@ export async function refundCredit(
   }
 
   // Atomic refund via DB function
-  const { error: refundError } = await rpcWithTimeout(
-    (supabase.rpc as any)("refund_credit", {
+  const { error: refundError } = await rpcWithTimeout<void>(
+    unsafeRpc<void>(supabase, "refund_credit", {
       p_tenant_id: typedDelivery.tenant_id,
       p_delivery_id: deliveryId,
       p_lead_offer_id: typedDelivery.lead_offer_id,

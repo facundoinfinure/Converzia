@@ -63,7 +63,12 @@ export async function GET() {
   // Check database
   try {
     const supabase = createAdminClient();
-    const { error } = await supabase.from("tenants").select("id").limit(1);
+    const { queryWithTimeout } = await import("@/lib/supabase/query-with-timeout");
+    const { error } = await queryWithTimeout(
+      supabase.from("tenants").select("id").limit(1),
+      5000,
+      "health check database"
+    );
     
     if (error) {
       health.services.database = "error";

@@ -3,6 +3,12 @@ import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { withRateLimit, RATE_LIMITS } from "@/lib/security/rate-limit";
 import Stripe from "stripe";
+import { logger } from "@/lib/utils/logger";
+import { handleApiError, handleUnauthorized, handleForbidden, handleValidationError, handleNotFound, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
+import { logCreditPurchase } from "@/lib/monitoring/audit";
+import type { MembershipWithRole } from "@/types/supabase-helpers";
+import type { Tenant } from "@/types/database";
+import { billingCheckoutSessionBodySchema, validateBody } from "@/lib/validation/schemas";
 
 // ============================================
 // Billing Checkout - Create Stripe Session
@@ -41,17 +47,19 @@ export async function POST(request: NextRequest) {
     // Verify user is authenticated
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return handleUnauthorized("Debes iniciar sesión para realizar una compra");
     }
 
-    const body = await request.json();
-    const { tenant_id, package_id } = body;
-
-    // SECURITY: Only accept tenant_id and package_id from client
-    // Price and credits are determined server-side
-    if (!tenant_id || !package_id) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    // Validate request body
+    const bodyValidation = await validateBody(request, billingCheckoutSessionBodySchema);
+    
+    if (!bodyValidation.success) {
+      return handleValidationError(new Error(bodyValidation.error), {
+        validationError: bodyValidation.error,
+      });
     }
+    
+    const { tenant_id, package_id } = bodyValidation.data;
 
     // Verify user has billing access to this tenant
     const { data: membership } = await queryWithTimeout(
@@ -66,8 +74,9 @@ export async function POST(request: NextRequest) {
       "check billing access"
     );
 
-    if (!membership || !["OWNER", "ADMIN", "BILLING"].includes((membership as any).role)) {
-      return NextResponse.json({ error: "No billing access" }, { status: 403 });
+    const typedMembership = membership as MembershipWithRole | null;
+    if (!typedMembership || !["OWNER", "ADMIN", "BILLING"].includes(typedMembership.role)) {
+      return handleForbidden("No tienes permisos de facturación para este tenant");
     }
 
     // Get tenant details
@@ -82,33 +91,50 @@ export async function POST(request: NextRequest) {
     );
 
     if (!tenant) {
-      return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
+      return handleNotFound("Tenant", { tenant_id });
     }
 
     // SECURITY: Get pricing from server-side data, NOT from client
+    interface TenantPricingRow {
+      packages: Array<{ id: string; name: string; credits: number; price: number }>;
+    }
+    
     const { data: tenantPricing } = await queryWithTimeout(
-      (admin as any)
+      admin
         .from("tenant_pricing")
         .select("packages")
         .eq("tenant_id", tenant_id)
         .maybeSingle(),
       10000,
       "get tenant pricing"
-    );
+    ) as { data: TenantPricingRow | null; error: unknown };
 
     // Use tenant-specific packages or fallback to defaults
-    const packages = (tenantPricing as any)?.packages || DEFAULT_PACKAGES;
+    const packages = tenantPricing?.packages || DEFAULT_PACKAGES;
     
     // Find the requested package from SERVER data
-    const selectedPackage = packages.find((p: any) => p.id === package_id);
+    interface CreditPackage {
+      id: string;
+      name: string;
+      credits: number;
+      price: number;
+    }
+    
+    const selectedPackage = packages.find((p: CreditPackage) => p.id === package_id);
     
     if (!selectedPackage) {
-      console.warn("SECURITY: Invalid package_id requested", {
+      logger.warn("SECURITY: Invalid package_id requested", {
         tenant_id,
         package_id,
         user_id: user.id,
       });
-      return NextResponse.json({ error: "Invalid package" }, { status: 400 });
+      return handleApiError(new Error("Invalid package_id"), {
+        code: ErrorCode.INVALID_INPUT,
+        status: 400,
+        message: "El paquete solicitado no existe o no está disponible",
+        context: { tenant_id, package_id },
+        sendToSentry: true, // Security issue - log to Sentry
+      });
     }
 
     // Use SERVER-SIDE values, not client-provided values
@@ -118,32 +144,37 @@ export async function POST(request: NextRequest) {
     // Create or get Stripe customer (stored in stripe_customers table)
     let customerId: string | null = null;
 
+    interface StripeCustomerRow {
+      stripe_customer_id: string;
+    }
+    
     const { data: existingCustomer } = await queryWithTimeout(
-      (admin as any)
+      admin
         .from("stripe_customers")
         .select("stripe_customer_id")
         .eq("tenant_id", tenant_id)
         .maybeSingle(),
       10000,
       "get existing Stripe customer"
-    );
+    ) as { data: StripeCustomerRow | null; error: unknown };
 
-    if ((existingCustomer as any)?.stripe_customer_id) {
-      customerId = (existingCustomer as any).stripe_customer_id;
+    if (existingCustomer?.stripe_customer_id) {
+      customerId = existingCustomer.stripe_customer_id;
     } else {
+      const typedTenant = tenant as Tenant;
       const customer = await stripe.customers.create({
-        name: (tenant as any).name,
+        name: typedTenant.name,
         metadata: { tenant_id },
       });
 
       customerId = customer.id;
 
       await queryWithTimeout(
-        (admin as any).from("stripe_customers").insert({
+        admin.from("stripe_customers").insert({
           tenant_id,
           stripe_customer_id: customerId,
           billing_email: user.email,
-          billing_name: (tenant as any).name,
+          billing_name: typedTenant.name,
           metadata: { created_by_user_id: user.id },
         }),
         10000,
@@ -152,8 +183,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Create billing order (pending) with SERVER-SIDE prices
+    interface BillingOrderRow {
+      id: string;
+      order_number: string;
+    }
+    
     const { data: billingOrder, error: orderError } = await queryWithTimeout(
-      (supabase as any)
+      supabase
         .from("billing_orders")
         .insert({
           tenant_id,
@@ -170,11 +206,15 @@ export async function POST(request: NextRequest) {
         .single(),
       30000,
       "create billing order"
-    );
+    ) as { data: BillingOrderRow | null; error: unknown };
 
     if (orderError || !billingOrder) {
-      console.error("Failed to create billing order:", orderError);
-      return NextResponse.json({ error: "Failed to create billing order" }, { status: 500 });
+      return handleApiError(orderError || new Error("Failed to create billing order"), {
+        code: ErrorCode.DATABASE_ERROR,
+        status: 500,
+        message: "No se pudo crear la orden de facturación",
+        context: { tenant_id, package_id },
+      });
     }
 
     // Create checkout session with SERVER-SIDE prices
@@ -199,7 +239,7 @@ export async function POST(request: NextRequest) {
         package_id,
         credits: String(serverCredits), // Server value
         user_id: user.id,
-        billing_order_id: (billingOrder as any).id,
+        billing_order_id: billingOrder.id,
       },
       success_url: `${process.env.NEXT_PUBLIC_APP_URL}/portal/billing?success=true&credits=${serverCredits}`,
       cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/portal/billing?canceled=true`,
@@ -207,22 +247,34 @@ export async function POST(request: NextRequest) {
 
     // Attach checkout session to billing order for reconciliation
     await queryWithTimeout(
-      (supabase as any)
+      supabase
         .from("billing_orders")
         .update({
           stripe_checkout_session_id: session.id,
         })
-        .eq("id", (billingOrder as any).id),
+        .eq("id", billingOrder.id),
       10000,
       "update billing order with session"
     );
 
+    // Log audit event (note: actual credit addition happens in webhook)
+    await logCreditPurchase(
+      user.id,
+      tenant_id,
+      billingOrder.id,
+      serverPrice,
+      serverCredits,
+      package_id,
+      request
+    );
+
     return NextResponse.json({ url: session.url });
   } catch (error) {
-    console.error("Checkout error:", error);
-    return NextResponse.json(
-      { error: "Failed to create checkout session" },
-      { status: 500 }
-    );
+    return handleApiError(error, {
+      code: ErrorCode.EXTERNAL_API_ERROR,
+      status: 500,
+      message: "No se pudo crear la sesión de pago",
+      context: { operation: "stripe_checkout" },
+    });
   }
 }

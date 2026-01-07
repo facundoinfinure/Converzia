@@ -4,6 +4,9 @@ import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { processDelivery } from "@/lib/services/delivery";
 import { retryContact, sendReactivation } from "@/lib/services/conversation";
 import { withCronAuth } from "@/lib/security/cron-auth";
+import { handleApiError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
+import type { DeliveryWithRelations, LeadOfferWithRelations } from "@/types/supabase-helpers";
+import { logger } from "@/lib/utils/logger";
 
 // ============================================
 // Cron Job: Daily Tasks (Combined)
@@ -46,9 +49,9 @@ export async function GET(request: NextRequest) {
       "fetch pending deliveries for daily tasks"
     );
 
-    const deliveries = (pendingDeliveries as any) || [];
+    const deliveries = (pendingDeliveries as DeliveryWithRelations[]) || [];
     if (deliveries.length > 0) {
-      console.log(`Processing ${deliveries.length} pending deliveries`);
+      logger.info(`Processing ${deliveries.length} pending deliveries`);
       results.deliveries.processed = deliveries.length;
 
       for (const delivery of deliveries) {
@@ -56,7 +59,7 @@ export async function GET(request: NextRequest) {
           await processDelivery(delivery.id);
           results.deliveries.success++;
         } catch (err) {
-          console.error(`Error processing delivery ${delivery.id}:`, err);
+          logger.error(`Error processing delivery ${delivery.id}`, err);
           results.deliveries.errors++;
 
           await queryWithTimeout(
@@ -91,9 +94,9 @@ export async function GET(request: NextRequest) {
       "fetch contacts to retry for daily tasks"
     );
 
-    const contacts = (contactsToRetry as any) || [];
+    const contacts = (contactsToRetry as LeadOfferWithRelations[]) || [];
     if (contacts.length > 0) {
-      console.log(`Retrying ${contacts.length} contacts`);
+      logger.info(`Retrying ${contacts.length} contacts`);
       results.retries.processed = contacts.length;
 
       for (const leadOffer of contacts) {
@@ -101,7 +104,7 @@ export async function GET(request: NextRequest) {
           await retryContact(leadOffer.id);
           results.retries.success++;
         } catch (err) {
-          console.error(`Error retrying contact ${leadOffer.id}:`, err);
+          logger.error(`Error retrying contact ${leadOffer.id}`, err);
           results.retries.errors++;
         }
       }
@@ -127,9 +130,9 @@ export async function GET(request: NextRequest) {
       "fetch leads to reactivate for daily tasks"
     );
 
-    const reactivations = (leadsToReactivate as any) || [];
+    const reactivations = (leadsToReactivate as LeadOfferWithRelations[]) || [];
     if (reactivations.length > 0) {
-      console.log(`Reactivating ${reactivations.length} leads`);
+      logger.info(`Reactivating ${reactivations.length} leads`);
       results.reactivations.processed = reactivations.length;
 
       for (const leadOffer of reactivations) {
@@ -137,7 +140,7 @@ export async function GET(request: NextRequest) {
           await sendReactivation(leadOffer.id);
           results.reactivations.success++;
         } catch (err) {
-          console.error(`Error reactivating ${leadOffer.id}:`, err);
+          logger.error(`Error reactivating ${leadOffer.id}`, err);
           results.reactivations.errors++;
         }
       }
@@ -167,7 +170,7 @@ export async function GET(request: NextRequest) {
       "move stale leads to COOLING for daily tasks"
     );
 
-    results.movedToCooling = ((staleLeads as any) || []).length;
+    results.movedToCooling = Array.isArray(staleLeads) ? staleLeads.length : 0;
 
     // ==========================================
     // 5. Credit Alerts (runs daily at 2 AM UTC)
@@ -192,12 +195,23 @@ export async function GET(request: NextRequest) {
         "fetch tenants with low credits for daily tasks"
       );
 
-      const tenants = (lowCreditTenants as any) || [];
+      interface LowCreditTenant {
+        tenant_id: string;
+        current_balance: number;
+        tenants: {
+          id: string;
+          name: string;
+          contact_email: string | null;
+          min_credits?: number;
+        } | null;
+      }
+      
+      const tenants = (lowCreditTenants as LowCreditTenant[]) || [];
       if (tenants.length > 0) {
-        console.log(`Sending credit alerts to ${tenants.length} tenants`);
+        logger.info(`Sending credit alerts to ${tenants.length} tenants`);
         
         for (const item of tenants) {
-          const tenant = item.tenants as any;
+          const tenant = item.tenants;
           if (!tenant) continue;
           
           try {
@@ -227,29 +241,27 @@ export async function GET(request: NextRequest) {
                   tenant.name,
                   item.current_balance
                 );
-                console.log(`Low credits alert sent to ${tenant.name}: ${item.current_balance} credits`);
+                logger.info(`Low credits alert sent to ${tenant.name}`, { tenantId: item.tenant_id, balance: item.current_balance });
               }
             } catch (emailError) {
-              console.error(`Failed to send low credits email to ${tenant.name}:`, emailError);
+              logger.error(`Failed to send low credits email to ${tenant.name}`, emailError, { tenantId: item.tenant_id });
             }
             creditAlerts.sent++;
           } catch (err) {
-            console.error(`Error sending credit alert to tenant ${item.tenant_id}:`, err);
+            logger.error(`Error sending credit alert to tenant ${item.tenant_id}`, err);
             creditAlerts.errors++;
           }
         }
       }
 
-    console.log("Daily tasks completed:", { ...results, creditAlerts });
-    return NextResponse.json({ ...results, creditAlerts });
+    logger.info("Daily tasks completed", { ...results, creditAlerts });
+    return apiSuccess({ ...results, creditAlerts }, "Tareas diarias completadas");
   } catch (error) {
-    console.error("Cron daily-tasks error:", error);
-    return NextResponse.json(
-      { 
-        error: error instanceof Error ? error.message : "Unknown error",
-        partialResults: results 
-      },
-      { status: 500 }
-    );
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      status: 500,
+      message: "Error en el cron de tareas diarias",
+      context: { operation: "daily_tasks_cron", partialResults: results },
+    });
   }
 }

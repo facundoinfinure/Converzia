@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { MetaOAuthTokens } from "@/lib/services/meta-ads";
+import { handleApiError, handleUnauthorized, handleValidationError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
+import { logger } from "@/lib/utils/logger";
+import { fetchWithTimeout } from "@/lib/utils/fetch-with-timeout";
 
 const META_API_VERSION = "v18.0";
 const META_API_BASE = `https://graph.facebook.com/${META_API_VERSION}`;
@@ -18,14 +21,26 @@ export async function GET(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return handleUnauthorized("Debes iniciar sesión para ver estados de anuncios");
     }
 
-    const searchParams = request.nextUrl.searchParams;
-    const adIds = searchParams.get("ad_ids")?.split(",").filter(Boolean) || [];
+    // Validate query params (ad_ids is a comma-separated string, handled manually)
+    const { searchParams } = new URL(request.url);
+    const adIdsParam = searchParams.get("ad_ids");
+    const adIds = adIdsParam?.split(",").filter(Boolean).filter(id => id.length > 0) || [];
 
     if (adIds.length === 0) {
-      return NextResponse.json({ statuses: {} });
+      return apiSuccess({ statuses: {} });
+    }
+    
+    // Validate each ad ID format (Meta ad IDs are typically numeric strings)
+    for (const adId of adIds) {
+      if (!/^\d+$/.test(adId)) {
+        return handleValidationError(new Error(`Invalid ad_id format: ${adId}`), {
+          field: "ad_ids",
+          invalidValue: adId,
+        });
+      }
     }
 
     // Get Meta integration
@@ -79,7 +94,7 @@ export async function GET(request: NextRequest) {
         batch.map(async (adId) => {
           try {
             const url = `${META_API_BASE}/${adId}?fields=id,status,effective_status&access_token=${tokens.access_token}`;
-            const response = await fetch(url);
+            const response = await fetchWithTimeout(url, {}, 15000);
             const data = await response.json();
 
             if (data.id) {
@@ -90,19 +105,20 @@ export async function GET(request: NextRequest) {
             }
           } catch (err) {
             // If individual ad query fails, skip it
-            console.warn(`Failed to get status for ad ${adId}:`, err);
+            logger.warn(`Failed to get status for ad ${adId}`, { error: err });
           }
         })
       );
     }
 
-    return NextResponse.json({ statuses });
-  } catch (error: any) {
-    console.error("Error fetching Meta ad statuses:", error);
-    return NextResponse.json(
-      { error: error.message || "Failed to fetch ad statuses", statuses: {} },
-      { status: 500 }
-    );
+    return apiSuccess({ statuses });
+  } catch (error) {
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      status: 500,
+      message: "Error al obtener estados de anuncios de Meta",
+      context: { operation: "get_ad_statuses" },
+    });
   }
 }
 

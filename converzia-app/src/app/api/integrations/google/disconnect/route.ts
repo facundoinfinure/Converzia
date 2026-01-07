@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { validateBody, googleDisconnectBodySchema } from "@/lib/validation/schemas";
+import { logIntegrationChange } from "@/lib/monitoring/audit";
+import { handleApiError, handleValidationError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
+import { logger } from "@/lib/utils/logger";
 
 // ============================================
 // Google OAuth - Disconnect Account
@@ -7,15 +11,16 @@ import { createClient } from "@/lib/supabase/server";
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { tenant_id } = body;
-
-    if (!tenant_id) {
-      return NextResponse.json(
-        { error: "tenant_id es requerido" },
-        { status: 400 }
-      );
+    // Validate request body
+    const bodyValidation = await validateBody(request, googleDisconnectBodySchema);
+    
+    if (!bodyValidation.success) {
+      return handleValidationError(new Error(bodyValidation.error), {
+        validationError: bodyValidation.error,
+      });
     }
+    
+    const { tenant_id } = bodyValidation.data;
 
     const supabase = await createClient();
 
@@ -32,20 +37,35 @@ export async function POST(request: NextRequest) {
       .eq("integration_type", "GOOGLE_SHEETS");
 
     if (error) {
-      console.error("Error disconnecting Google:", error);
-      return NextResponse.json(
-        { error: "Error al desconectar cuenta" },
-        { status: 500 }
+      return handleApiError(error, {
+        code: ErrorCode.DATABASE_ERROR,
+        status: 500,
+        message: "Error al desconectar cuenta de Google",
+        context: { tenant_id },
+      });
+    }
+
+    // Get user for audit log
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await logIntegrationChange(
+        user.id,
+        tenant_id,
+        "GOOGLE_SHEETS",
+        "integration_disconnected",
+        { integration_type: "GOOGLE_SHEETS" },
+        request
       );
     }
 
-    return NextResponse.json({ success: true });
+    return apiSuccess(null, "Cuenta de Google desconectada correctamente");
   } catch (error) {
-    console.error("Error disconnecting Google account:", error);
-    return NextResponse.json(
-      { error: "Error al desconectar cuenta" },
-      { status: 500 }
-    );
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      status: 500,
+      message: "Error al desconectar cuenta de Google",
+      context: { operation: "google_disconnect" },
+    });
   }
 }
 

@@ -31,6 +31,7 @@ import { Pagination } from "@/components/ui/Pagination";
 import { useToast } from "@/components/ui/Toast";
 import { Input } from "@/components/ui/Input";
 import { useUnmappedAds, useAdMappings, useAdMappingMutations, useOffersForMapping } from "@/lib/hooks/use-ads";
+import { usePagination } from "@/lib/hooks/use-pagination";
 import { formatRelativeTime, formatDate, formatCurrency } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { PlatformSelector, platforms, type PlatformType } from "@/components/admin/PlatformButton";
@@ -56,7 +57,7 @@ export default function AdsMappingPage() {
   const supabase = createClient();
 
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  const { page, setPage, pageSize, setPageSize } = usePagination({ initialPage: 1, initialPageSize: 20 });
   const [mappingAd, setMappingAd] = useState<UnmappedAd | null>(null);
   const [selectedTenantId, setSelectedTenantId] = useState("");
   const [selectedOfferId, setSelectedOfferId] = useState("");
@@ -87,7 +88,7 @@ export default function AdsMappingPage() {
   const { mappings, total: mappingsTotal, isLoading: loadingMappings, error: mappingsError, refetch: refetchMappings } = useAdMappings({
     search,
     page,
-    pageSize: 20,
+    pageSize,
   });
   const { createMapping, updateMapping, deleteMapping, reprocessLeads, isLoading: isMutating } = useAdMappingMutations();
   const { tenantsWithOffers, isLoading: loadingOffers } = useOffersForMapping();
@@ -686,14 +687,15 @@ export default function AdsMappingPage() {
                 />
               }
             />
-            {mappingsTotal > 20 && (
+            {mappingsTotal > pageSize && (
               <div className="p-4 border-t border-card-border">
                 <Pagination
                   currentPage={page}
-                  totalPages={Math.ceil(mappingsTotal / 20)}
+                  totalPages={Math.ceil(mappingsTotal / pageSize)}
                   totalItems={mappingsTotal}
-                  pageSize={20}
+                  pageSize={pageSize}
                   onPageChange={setPage}
+                  onPageSizeChange={setPageSize}
                 />
               </div>
             )}

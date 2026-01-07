@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/server";
+import { logger } from "@/lib/utils/logger";
 
 // ============================================
 // Supabase Storage Service
@@ -19,7 +20,7 @@ export async function ensureRagBucketExists(): Promise<{ success: boolean; error
     const { data: buckets, error: listError } = await supabase.storage.listBuckets();
 
     if (listError) {
-      console.error("Error listing buckets:", listError);
+      logger.error("Error listing buckets", listError);
       return { success: false, error: listError.message };
     }
 
@@ -36,19 +37,19 @@ export async function ensureRagBucketExists(): Promise<{ success: boolean; error
       if (createError) {
         // Bucket might have been created by another request (race condition)
         if (createError.message?.includes("already exists")) {
-          console.log("Bucket already exists (race condition handled)");
+          logger.info("Bucket already exists (race condition handled)", { bucket: RAG_BUCKET });
           return { success: true };
         }
-        console.error("Error creating bucket:", createError);
+        logger.error("Error creating bucket", createError, { bucket: RAG_BUCKET });
         return { success: false, error: createError.message };
       }
 
-      console.log(`Created storage bucket: ${RAG_BUCKET}`);
+      logger.info(`Created storage bucket`, { bucket: RAG_BUCKET });
     }
 
     return { success: true };
   } catch (error) {
-    console.error("Error ensuring bucket exists:", error);
+    logger.error("Error ensuring bucket exists", error, { bucket: RAG_BUCKET });
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
@@ -88,14 +89,14 @@ export async function initializeTenantStorage(tenantId: string): Promise<{ succe
       });
 
     if (uploadError && !uploadError.message?.includes("already exists")) {
-      console.error("Error creating tenant folder:", uploadError);
+      logger.error("Error creating tenant folder", uploadError, { tenantId });
       return { success: false, error: uploadError.message };
     }
 
-    console.log(`Initialized storage for tenant: ${tenantId}`);
+    logger.info(`Initialized storage for tenant`, { tenantId });
     return { success: true };
   } catch (error) {
-    console.error("Error initializing tenant storage:", error);
+    logger.error("Error initializing tenant storage", error, { tenantId });
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
@@ -136,14 +137,14 @@ export async function initializeOfferStorage(
       });
 
     if (uploadError && !uploadError.message?.includes("already exists")) {
-      console.error("Error creating offer folder:", uploadError);
+      logger.error("Error creating offer folder", uploadError, { tenantId, offerId });
       return { success: false, error: uploadError.message };
     }
 
-    console.log(`Initialized storage for offer: ${offerId} (tenant: ${tenantId})`);
+    logger.info(`Initialized storage for offer`, { tenantId, offerId });
     return { success: true };
   } catch (error) {
-    console.error("Error initializing offer storage:", error);
+    logger.error("Error initializing offer storage", error, { tenantId, offerId });
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
@@ -165,6 +166,38 @@ export function getRagStoragePath(
     return `${tenantId}/${offerId}/${sourceId}/${filename}`;
   }
   return `${tenantId}/${sourceId}/${filename}`;
+}
+
+/**
+ * Deletes a single file from a storage bucket.
+ * @param bucket - The bucket name
+ * @param filePath - The path to the file (e.g., "tenant-id/logo.jpg")
+ */
+export async function deleteFile(
+  bucket: string,
+  filePath: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = createAdminClient();
+
+  try {
+    const { error: deleteError } = await supabase.storage
+      .from(bucket)
+      .remove([filePath]);
+
+    if (deleteError) {
+      logger.error("Error deleting file", deleteError, { bucket, filePath });
+      return { success: false, error: deleteError.message };
+    }
+
+    logger.info("File deleted successfully", { bucket, filePath });
+    return { success: true };
+  } catch (error) {
+    logger.error("Error deleting file", error, { bucket, filePath });
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
 }
 
 /**
@@ -198,10 +231,10 @@ export async function deleteTenantStorage(tenantId: string): Promise<{ success: 
       return { success: false, error: deleteError.message };
     }
 
-    console.log(`Deleted storage for tenant: ${tenantId}`);
+    logger.info(`Deleted storage for tenant`, { tenantId, fileCount: files.length });
     return { success: true };
   } catch (error) {
-    console.error("Error deleting tenant storage:", error);
+    logger.error("Error deleting tenant storage", error, { tenantId });
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",

@@ -12,7 +12,7 @@ type SupabaseResponse<T> = {
  * Prevents queries from hanging indefinitely and retries on failure
  */
 export async function queryWithTimeout<T>(
-  queryPromise: Promise<SupabaseResponse<T>>,
+  queryPromise: PromiseLike<SupabaseResponse<T>>,
   timeoutMs: number = 15000, // Reduced default from 20000 to 15000
   queryName: string = "query",
   enableRetry: boolean = true
@@ -76,7 +76,7 @@ export async function queryWithTimeout<T>(
  * According to AGENTS.md section 7, all external integrations must implement timeouts
  */
 export async function rpcWithTimeout<T>(
-  rpcPromise: Promise<{ data: T | null; error: PostgrestError | null }>,
+  rpcPromise: PromiseLike<{ data: T | null; error: PostgrestError | null }>,
   timeoutMs: number = 20000,
   rpcName: string = "RPC call",
   enableRetry: boolean = true

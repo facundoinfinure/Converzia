@@ -45,8 +45,6 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error("ErrorBoundary caught an error:", error, errorInfo);
-
     this.setState({
       error,
       errorInfo,
@@ -55,7 +53,7 @@ export class ErrorBoundary extends Component<Props, State> {
     // Call optional error handler
     this.props.onError?.(error, errorInfo);
 
-    // Log to Sentry
+    // Log to Sentry with full context
     if (typeof window !== "undefined") {
       import('@sentry/nextjs').then((Sentry) => {
         Sentry.captureException(error, {
@@ -64,8 +62,19 @@ export class ErrorBoundary extends Component<Props, State> {
               componentStack: errorInfo.componentStack,
             },
           },
+          tags: {
+            errorBoundary: true,
+            component: this.constructor.name,
+          },
+          level: 'error',
         });
+      }).catch((importError) => {
+        // Fallback if Sentry import fails
+        console.error("ErrorBoundary caught an error:", error, errorInfo);
       });
+    } else {
+      // Server-side logging
+      console.error("ErrorBoundary caught an error:", error, errorInfo);
     }
   }
 

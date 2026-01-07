@@ -1,8 +1,10 @@
 import { createAdminClient } from "@/lib/supabase/server";
 import { queryWithTimeout, rpcWithTimeout } from "@/lib/supabase/query-with-timeout";
+import { unsafeRpc } from "@/lib/supabase/unsafe-rpc";
 import { fetchWithTimeout } from "@/lib/utils/fetch-with-timeout";
 import { generateEmbedding } from "./openai";
 import { extractTextFromPdf, cleanPdfText } from "./pdf";
+import { logger } from "@/lib/utils/logger";
 
 // ============================================
 // RAG (Retrieval Augmented Generation) Service
@@ -83,7 +85,7 @@ export async function searchKnowledge(
       vector_score?: number;
     }
     const rpcResult = await rpcWithTimeout<RagSearchRow[]>(
-      (supabase.rpc as any)("search_rag_chunks", {
+      unsafeRpc<RagSearchRow[]>(supabase, "search_rag_chunks", {
         p_tenant_id: tenantId,
         p_offer_id: offerId || null,
         p_query_embedding: embedding,
@@ -101,7 +103,7 @@ export async function searchKnowledge(
     const error = rpcResult.error;
 
     if (error) {
-      console.error("RAG search error:", error);
+      logger.error("RAG search error", error, { tenantId, offerId, limit });
       // Fall back to vector-only search
       return await vectorOnlySearch(embedding, tenantId, offerId, limit);
     }
@@ -114,7 +116,7 @@ export async function searchKnowledge(
       similarity: r.combined_score || r.vector_score || 0,
     }));
   } catch (error) {
-    console.error("Error in RAG search:", error);
+    logger.error("Error in RAG search", error, { tenantId, offerId, limit });
     return [];
   }
 }
@@ -138,7 +140,7 @@ async function vectorOnlySearch(
     similarity?: number;
   }
   const rpcResult = await rpcWithTimeout<VectorSearchRow[]>(
-    (supabase.rpc as any)("search_rag_chunks_vector", {
+    unsafeRpc<VectorSearchRow[]>(supabase, "search_rag_chunks_vector", {
       p_tenant_id: tenantId,
       p_offer_id: offerId || null,
       p_query_embedding: embedding,
@@ -153,7 +155,7 @@ async function vectorOnlySearch(
   const error = rpcResult.error;
 
   if (error) {
-    console.error("Vector search error:", error);
+    logger.error("Vector search error", error, { tenantId, offerId, limit });
     return [];
   }
 
@@ -206,6 +208,26 @@ export async function ingestDocument(
   }
 ): Promise<{ success: boolean; chunkCount: number; error?: string }> {
   const supabase = createAdminClient();
+
+  interface RagDocumentRow {
+    id: string;
+    source_id: string;
+    tenant_id: string;
+    offer_id: string | null;
+    title: string;
+    url?: string;
+    raw_content: string;
+    cleaned_content: string;
+    content_hash: string;
+    status: string;
+    doc_type: string;
+    word_count: number;
+    chunk_count?: number;
+    is_current?: boolean;
+    processed_at?: string;
+  }
+
+  let doc: RagDocumentRow | null = null;
 
   try {
     // Get source info
@@ -262,24 +284,7 @@ export async function ingestDocument(
     );
 
     // Create document record
-    interface RagDocumentRow {
-      id: string;
-      source_id: string;
-      tenant_id: string;
-      offer_id: string | null;
-      title: string;
-      url?: string;
-      raw_content: string;
-      cleaned_content: string;
-      content_hash: string;
-      status: string;
-      doc_type: string;
-      word_count: number;
-      chunk_count?: number;
-      is_current?: boolean;
-      processed_at?: string;
-    }
-    const { data: doc, error: docError } = await queryWithTimeout(
+    const { data: docData, error: docError } = await queryWithTimeout(
       supabase
         .from("rag_documents")
         .insert({
@@ -301,6 +306,8 @@ export async function ingestDocument(
       "create RAG document"
     ) as { data: RagDocumentRow | null; error: Error | null };
 
+    doc = docData;
+    
     if (docError || !doc) {
       return { success: false, chunkCount: 0, error: docError?.message || "Failed to create document" };
     }
@@ -340,7 +347,7 @@ export async function ingestDocument(
 
         chunkCount++;
       } catch (error) {
-        console.error(`Error processing chunk ${i}:`, error);
+        logger.exception(`Error processing chunk ${i}`, error, { sourceId, docId: doc?.id || "unknown", chunkIndex: i });
       }
     }
 
@@ -370,7 +377,8 @@ export async function ingestDocument(
 
     return { success: true, chunkCount };
   } catch (error) {
-    console.error("Document ingestion error:", error);
+    const docId = doc?.id || "unknown";
+    logger.exception("Document ingestion error", error, { sourceId, docId });
     return {
       success: false,
       chunkCount: 0,
@@ -618,7 +626,7 @@ export async function deleteRagSource(sourceId: string): Promise<boolean> {
 
     return !error;
   } catch (error) {
-    console.error("Error deleting RAG source:", error);
+    logger.error("Error deleting RAG source", error, { sourceId });
     return false;
   }
 }
@@ -645,12 +653,13 @@ export async function ingestFromPdf(
     }
 
     // Use standard ingestDocument with PDF metadata
-    return await ingestDocument(sourceId, cleanedText, {
+    const result = await ingestDocument(sourceId, cleanedText, {
       title: title || (info.Title as string) || "PDF Document",
       doc_type: "PDF",
     });
+    return result;
   } catch (error) {
-    console.error("PDF ingestion error:", error);
+    logger.error("PDF ingestion error", error, { sourceId, title });
     return {
       success: false,
       chunkCount: 0,

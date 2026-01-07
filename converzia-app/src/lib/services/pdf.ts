@@ -2,6 +2,8 @@
 // PDF Processing Service
 // ============================================
 
+import { logger } from "@/lib/utils/logger";
+
 /**
  * Extract text content from a PDF buffer
  * Uses pdf-parse library
@@ -12,8 +14,25 @@ export async function extractTextFromPdf(buffer: Buffer): Promise<{
   info: Record<string, unknown>;
 }> {
   // Dynamic import to avoid issues with server/client bundling
-  const pdfParseModule = await import("pdf-parse");
-  const pdfParse = (pdfParseModule as any).default || pdfParseModule;
+  type PdfParseResult = { text: string; numpages: number; info?: Record<string, unknown> };
+  type PdfParseFn = (b: Buffer) => Promise<PdfParseResult>;
+
+  const pdfParseModule = (await import("pdf-parse")) as unknown;
+
+  // pdf-parse can be:
+  // - a function export (CJS)
+  // - a module with a `default` function (ESM)
+  const pdfParse: PdfParseFn =
+    typeof pdfParseModule === "function"
+      ? (pdfParseModule as PdfParseFn)
+      : (typeof pdfParseModule === "object" &&
+          pdfParseModule !== null &&
+          "default" in (pdfParseModule as Record<string, unknown>) &&
+          typeof (pdfParseModule as Record<string, unknown>).default === "function")
+        ? ((pdfParseModule as Record<string, unknown>).default as PdfParseFn)
+        : (() => {
+            throw new Error("pdf-parse module did not export a callable function");
+          })();
 
   try {
     const data = await pdfParse(buffer);
@@ -24,7 +43,7 @@ export async function extractTextFromPdf(buffer: Buffer): Promise<{
       info: data.info || {},
     };
   } catch (error) {
-    console.error("PDF parsing error:", error);
+    logger.error("PDF parsing error", error);
     throw new Error(
       error instanceof Error ? error.message : "Failed to parse PDF"
     );
@@ -35,7 +54,7 @@ export async function extractTextFromPdf(buffer: Buffer): Promise<{
  * Extract text from a PDF stored in Supabase Storage
  */
 export async function extractTextFromStoragePdf(
-  supabase: any,
+  supabase: { storage: { from: (bucket: string) => { download: (path: string) => Promise<{ data: Blob | null; error: Error | null }> } } },
   bucket: string,
   path: string
 ): Promise<{
@@ -48,6 +67,9 @@ export async function extractTextFromStoragePdf(
 
   if (error) {
     throw new Error(`Failed to download PDF: ${error.message}`);
+  }
+  if (!data) {
+    throw new Error("Failed to download PDF: empty response");
   }
 
   // Convert blob to buffer

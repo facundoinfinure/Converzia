@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { initializeOfferStorage } from "@/lib/services/storage";
+import { logAuditEvent } from "@/lib/monitoring/audit";
+import { isAdminProfile } from "@/types/supabase-helpers";
+import type { OfferWithRelations } from "@/types/supabase-helpers";
+import { logger } from "@/lib/utils/logger";
+import { handleApiError, handleUnauthorized, handleForbidden, handleValidationError, handleNotFound, handleConflict, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
+import { validateBody, createOfferSchema } from "@/lib/validation/schemas";
 
 // ============================================
 // Offers API
@@ -19,7 +25,7 @@ export async function POST(request: NextRequest) {
     // Verify user is authenticated and is Converzia admin
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+      return handleUnauthorized("Debes iniciar sesión para crear ofertas");
     }
 
     const { data: profile } = await queryWithTimeout(
@@ -32,12 +38,19 @@ export async function POST(request: NextRequest) {
       "verificar perfil de admin"
     );
 
-    if (!(profile as any)?.is_converzia_admin) {
-      return NextResponse.json({ error: "Se requiere acceso de administrador" }, { status: 403 });
+    if (!isAdminProfile(profile as { is_converzia_admin?: boolean } | null)) {
+      return handleForbidden("Solo administradores de Converzia pueden crear ofertas");
     }
 
-    // Parse request body
-    const body = await request.json();
+    // Validate request body
+    const bodyValidation = await validateBody(request, createOfferSchema);
+    
+    if (!bodyValidation.success) {
+      return handleValidationError(new Error(bodyValidation.error), {
+        validationError: bodyValidation.error,
+      });
+    }
+    
     const {
       tenant_id,
       name,
@@ -58,18 +71,7 @@ export async function POST(request: NextRequest) {
       currency = "USD",
       priority = 100,
       settings = {},
-    } = body;
-
-    // Validate required fields
-    if (!tenant_id) {
-      return NextResponse.json({ error: "tenant_id es requerido" }, { status: 400 });
-    }
-    if (!name) {
-      return NextResponse.json({ error: "name es requerido" }, { status: 400 });
-    }
-    if (!slug) {
-      return NextResponse.json({ error: "slug es requerido" }, { status: 400 });
-    }
+    } = bodyValidation.data;
 
     // Verify tenant exists
     const { data: tenant, error: tenantError } = await queryWithTimeout(
@@ -83,7 +85,7 @@ export async function POST(request: NextRequest) {
     );
 
     if (tenantError || !tenant) {
-      return NextResponse.json({ error: "Tenant no encontrado" }, { status: 404 });
+      return handleNotFound("Tenant", { tenant_id });
     }
 
     // Build offer data - only include non-null values
@@ -123,46 +125,64 @@ export async function POST(request: NextRequest) {
     );
 
     if (offerError) {
-      console.error("Error creating offer:", offerError);
       if (offerError.code === "23505") {
-        return NextResponse.json(
-          { error: "Ya existe una oferta con ese slug para este tenant" },
-          { status: 409 }
-        );
+        return handleConflict("Ya existe una oferta con ese slug para este tenant. Por favor elige otro.", {
+          tenant_id,
+          slug,
+        });
       }
-      return NextResponse.json(
-        { error: offerError.message || "Error al crear oferta" },
-        { status: 500 }
-      );
+      return handleApiError(offerError, {
+        code: ErrorCode.DATABASE_ERROR,
+        status: 500,
+        message: "No se pudo crear la oferta",
+        context: { tenant_id, name, slug },
+      });
     }
 
     if (!offer) {
-      return NextResponse.json(
-        { error: "No se recibió respuesta del servidor" },
-        { status: 500 }
-      );
+      return handleApiError(new Error("No response from server"), {
+        code: ErrorCode.INTERNAL_ERROR,
+        status: 500,
+        message: "No se recibió respuesta del servidor",
+        context: { tenant_id, name, slug },
+      });
     }
 
-    const offerId = (offer as any).id;
+    const typedOffer = offer as OfferWithRelations;
+    const offerId = typedOffer.id;
 
     // Initialize storage for offer
     const storageResult = await initializeOfferStorage(tenant_id, offerId);
     if (!storageResult.success) {
-      console.error("Error initializing offer storage:", storageResult.error);
+      logger.error("Error initializing offer storage", new Error(storageResult.error || "Unknown error"), { tenant_id, offerId });
       // Don't fail - storage can be initialized later
     }
 
-    return NextResponse.json({
-      success: true,
-      offer,
-      storage_initialized: storageResult.success,
+    // Log audit event
+    await logAuditEvent({
+      user_id: user.id,
+      tenant_id,
+      action: "offer_created",
+      entity_type: "offer",
+      entity_id: offerId,
+      new_values: { name, slug, offer_type, status },
+      request,
     });
-  } catch (error) {
-    console.error("Error in POST /api/offers:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Error interno" },
-      { status: 500 }
+
+    return apiSuccess(
+      {
+        offer,
+        storage_initialized: storageResult.success,
+      },
+      "Oferta creada correctamente"
     );
+  } catch (error) {
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      status: 500,
+      message: "Ocurrió un error al crear la oferta",
+      context: { operation: "create_offer" },
+    });
   }
 }
 

@@ -3,6 +3,9 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { retryContact, sendReactivation } from "@/lib/services/conversation";
 import { withCronAuth } from "@/lib/security/cron-auth";
+import { handleApiError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
+import type { LeadOfferWithRelations } from "@/types/supabase-helpers";
+import { logger } from "@/lib/utils/logger";
 
 // ============================================
 // Cron Job: Retry Contacts & Reactivations
@@ -41,16 +44,16 @@ export async function GET(request: NextRequest) {
     let retryCount = 0;
     let retryErrors = 0;
 
-    const contacts = (contactsToRetry as any) || [];
+    const contacts = (contactsToRetry as LeadOfferWithRelations[]) || [];
     if (contacts.length > 0) {
-      console.log(`Retrying ${contacts.length} contacts`);
+      logger.info(`Retrying ${contacts.length} contacts`);
 
       for (const leadOffer of contacts) {
         try {
           await retryContact(leadOffer.id);
           retryCount++;
         } catch (err) {
-          console.error(`Error retrying contact ${leadOffer.id}:`, err);
+          logger.error(`Error retrying contact ${leadOffer.id}`, err);
           retryErrors++;
         }
       }
@@ -80,16 +83,16 @@ export async function GET(request: NextRequest) {
     let reactivationCount = 0;
     let reactivationErrors = 0;
 
-    const reactivations = (leadsToReactivate as any) || [];
+    const reactivations = (leadsToReactivate as LeadOfferWithRelations[]) || [];
     if (reactivations.length > 0) {
-      console.log(`Reactivating ${reactivations.length} leads`);
+      logger.info(`Reactivating ${reactivations.length} leads`);
 
       for (const leadOffer of reactivations) {
         try {
           await sendReactivation(leadOffer.id);
           reactivationCount++;
         } catch (err) {
-          console.error(`Error reactivating ${leadOffer.id}:`, err);
+          logger.error(`Error reactivating ${leadOffer.id}`, err);
           reactivationErrors++;
         }
       }
@@ -120,9 +123,9 @@ export async function GET(request: NextRequest) {
       "move stale leads to COOLING"
     );
 
-    const movedToCooling = ((staleLeads as any) || []).length;
+    const movedToCooling = Array.isArray(staleLeads) ? staleLeads.length : 0;
 
-    return NextResponse.json({
+    return apiSuccess({
       retries: {
         processed: contacts.length,
         success: retryCount,
@@ -134,13 +137,14 @@ export async function GET(request: NextRequest) {
         errors: reactivationErrors,
       },
       movedToCooling,
-    });
+    }, `Procesados ${retryCount} reintentos y ${reactivationCount} reactivaciones`);
   } catch (error) {
-    console.error("Cron retry-contacts error:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 }
-    );
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      status: 500,
+      message: "Error en el cron de reintentos de contacto",
+      context: { operation: "retry_contacts_cron" },
+    });
   }
 }
 

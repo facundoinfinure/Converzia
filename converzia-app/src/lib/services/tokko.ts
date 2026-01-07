@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { fetchWithTimeout } from "@/lib/utils/fetch-with-timeout";
 import type { Delivery, TenantIntegration, QualificationFields, ScoreBreakdown } from "@/types";
+import type { Offer } from "@/types/database";
+import { logger } from "@/lib/utils/logger";
 
 // ============================================
 // Tokko CRM Integration Service
@@ -63,7 +65,7 @@ export async function createTokkoLead(
 
     // Tokko returns 200 even on some errors, need to check response body
     const responseText = await response.text();
-    let responseData: any;
+    let responseData: { id?: string; contact_id?: string; raw?: string } | null = null;
 
     try {
       responseData = JSON.parse(responseText);
@@ -83,7 +85,7 @@ export async function createTokkoLead(
 
     return {
       success: true,
-      contact_id: responseData.id || responseData.contact_id,
+      contact_id: responseData?.id || responseData?.contact_id,
       message: "Lead created successfully in Tokko",
     };
   } catch (error) {
@@ -230,10 +232,11 @@ function formatPhoneForTokko(phone: string): string {
 async function logTokkoSync(
   delivery: Delivery,
   requestPayload: TokkoWebContact | null,
-  responsePayload: any,
+  responsePayload: { id?: string; contact_id?: string; raw?: string } | null,
   statusCode: number | null,
   errorMessage: string | null
 ): Promise<void> {
+  let integrationId: string | null = null;
   try {
     const supabase = await createClient();
 
@@ -247,12 +250,14 @@ async function logTokkoSync(
       .single();
 
     if (!integration) return;
+    
+    integrationId = integration.id;
 
     const startedAt = new Date();
     const completedAt = new Date();
 
     await supabase.from("integration_sync_logs").insert({
-      integration_id: integration.id,
+      integration_id: integrationId,
       delivery_id: delivery.id,
       sync_type: "LEAD_DELIVERY",
       status: errorMessage ? "FAILED" : "SUCCESS",
@@ -265,7 +270,10 @@ async function logTokkoSync(
       duration_ms: completedAt.getTime() - startedAt.getTime(),
     });
   } catch (error) {
-    console.error("Error logging Tokko sync:", error);
+    logger.error("Error logging Tokko sync", error, { 
+      integrationId: integrationId || "unknown",
+      errorMessage: errorMessage || "unknown",
+    });
   }
 }
 
@@ -447,8 +455,8 @@ export async function syncTokkoPublications(
       .eq("tenant_id", tenantId);
 
     const existingOffersMap = new Map<string, string>();
-    (existingOffers || []).forEach((offer: any) => {
-      const tokkoId = offer.settings?.tokko_publication_id;
+    (existingOffers || []).forEach((offer: Offer) => {
+      const tokkoId = (offer.settings as { tokko_publication_id?: string })?.tokko_publication_id;
       if (tokkoId) {
         existingOffersMap.set(String(tokkoId), offer.id);
       }
@@ -481,7 +489,23 @@ export async function syncTokkoPublications(
           }
         }
 
-        const offerData: any = {
+        const offerData: {
+          tenant_id: string;
+          name: string;
+          slug: string;
+          offer_type: "PROPERTY";
+          status: "ACTIVE";
+          description: string | null;
+          city: string | null;
+          zone: string | null;
+          address: string | null;
+          price_from: number | null;
+          price_to: number | null;
+          currency: string;
+          image_url: string | null;
+          settings: { tokko_publication_id: string; tokko_synced_at: string };
+          updated_at: string;
+        } = {
           tenant_id: tenantId,
           name: publication.name,
           slug: finalSlug,
@@ -541,7 +565,7 @@ export async function syncTokkoPublications(
 
           // Sync typologies for this publication
           const typologiesResult = await syncTokkoTypologies(
-            (newOffer as any).id,
+            (newOffer as Offer).id,
             publication.id,
             config
           );
@@ -621,8 +645,13 @@ async function syncTokkoTypologies(
       .select("id, code, settings")
       .eq("offer_id", offerId);
 
+    interface OfferVariant {
+      id: string;
+      code: string;
+      settings: { tokko_typology_id?: string } | null;
+    }
     const existingVariantsMap = new Map<string, string>();
-    (existingVariants || []).forEach((variant: any) => {
+    (existingVariants || []).forEach((variant: OfferVariant) => {
       const tokkoId = variant.settings?.tokko_typology_id;
       if (tokkoId) {
         existingVariantsMap.set(String(tokkoId), variant.id);
@@ -639,7 +668,22 @@ async function syncTokkoTypologies(
         // Generate code if not provided
         const code = typology.id ? `T${typology.id}` : `V${i + 1}`;
 
-        const variantData: any = {
+        const variantData: {
+          offer_id: string;
+          name: string;
+          code: string;
+          bedrooms: number | null;
+          bathrooms: number | null;
+          area_m2: number | null;
+          price_from: number | null;
+          price_to: number | null;
+          currency: string;
+          total_units: number | null;
+          available_units: number | null;
+          display_order: number;
+          settings: { tokko_typology_id: string; tokko_synced_at: string };
+          updated_at: string;
+        } = {
           offer_id: offerId,
           name: typology.name,
           code,

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { handleApiError, handleUnauthorized, ErrorCode } from "@/lib/utils/api-error-handler";
+import { logger } from "@/lib/utils/logger";
 
 const META_APP_ID = process.env.META_APP_ID;
 
@@ -39,20 +41,20 @@ export async function GET(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (authError || !user) {
-      console.error("Meta OAuth auth error:", authError);
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return handleUnauthorized("Debes iniciar sesión para conectar Meta");
     }
 
     if (!META_APP_ID) {
-      console.error("META_APP_ID not configured");
-      return NextResponse.json(
-        { error: "Meta App ID not configured. Check environment variables." },
-        { status: 500 }
-      );
+      return handleApiError(new Error("META_APP_ID not configured"), {
+        code: ErrorCode.INTERNAL_ERROR,
+        status: 500,
+        message: "Meta App ID no está configurado",
+        context: { operation: "meta_auth" },
+      });
     }
 
     const redirectUri = getRedirectUri();
-    console.log("Meta OAuth redirect URI:", redirectUri);
+    logger.info("Meta OAuth redirect URI", { redirectUri });
 
     // Create state parameter - Meta integration is global (no tenant_id)
     const state = Buffer.from(
@@ -90,14 +92,15 @@ export async function GET(request: NextRequest) {
     authUrl.searchParams.set("scope", scopes);
     authUrl.searchParams.set("response_type", "code");
 
-    console.log("Meta OAuth URL generated successfully");
+    logger.info("Meta OAuth URL generated successfully", {});
     return NextResponse.json({ url: authUrl.toString() });
   } catch (error) {
-    console.error("Error initiating Meta OAuth:", error);
-    return NextResponse.json(
-      { error: "Internal server error", details: String(error) },
-      { status: 500 }
-    );
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      status: 500,
+      message: "Error al iniciar OAuth de Meta",
+      context: { operation: "meta_auth" },
+    });
   }
 }
 

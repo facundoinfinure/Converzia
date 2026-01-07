@@ -25,6 +25,7 @@ import { ActionDropdown } from "@/components/ui/Dropdown";
 import { QuickFilters, FilterDrawer, FilterSection, FilterChips } from "@/components/ui/FilterDrawer";
 import { useOffers, useOfferMutations, useTenantOptions } from "@/lib/hooks/use-offers";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
+import { usePagination } from "@/lib/hooks/use-pagination";
 import { createClient } from "@/lib/supabase/client";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { formatCurrency, formatRelativeTime } from "@/lib/utils";
@@ -68,7 +69,7 @@ export default function OffersPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [tenantFilter, setTenantFilter] = useState<string>(searchParams.get("tenant") || "");
-  const [page, setPage] = useState(1);
+  const { page, setPage, pageSize, setPageSize } = usePagination({ initialPage: 1, initialPageSize: 20 });
   const [deleteId, setDeleteId] = useState<string | null>(null);
   
   // Approval/Rejection modal
@@ -85,7 +86,7 @@ export default function OffersPage() {
     search,
     status: statusFilter || undefined,
     page,
-    pageSize: 20,
+    pageSize,
   });
 
   const { deleteOffer, updateOffer, isLoading: isMutating } = useOfferMutations();
@@ -583,14 +584,15 @@ export default function OffersPage() {
         </div>
 
         {/* Pagination */}
-        {total > 20 && activeTab === "all" && (
+        {total > pageSize && activeTab === "all" && (
           <div className="p-4 border-t border-[var(--border-primary)]">
             <Pagination
               currentPage={page}
-              totalPages={Math.ceil(total / 20)}
+              totalPages={Math.ceil(total / pageSize)}
               totalItems={total}
-              pageSize={20}
+              pageSize={pageSize}
               onPageChange={setPage}
+              onPageSizeChange={setPageSize}
             />
           </div>
         )}

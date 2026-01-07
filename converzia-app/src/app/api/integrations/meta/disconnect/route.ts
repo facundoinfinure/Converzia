@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { logIntegrationChange } from "@/lib/monitoring/audit";
+import { handleApiError, handleUnauthorized, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
+import { logger } from "@/lib/utils/logger";
 
 // POST /api/integrations/meta/disconnect - Disconnect Meta Ads integration
 export async function POST(request: NextRequest) {
@@ -13,7 +16,7 @@ export async function POST(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return handleUnauthorized("Debes iniciar sesión para desconectar Meta Ads");
     }
 
     // Find and delete the global Meta Ads integration
@@ -24,20 +27,32 @@ export async function POST(request: NextRequest) {
       .is("tenant_id", null);
 
     if (deleteError) {
-      console.error("Error deleting Meta integration:", deleteError);
-      return NextResponse.json(
-        { error: "Failed to disconnect Meta Ads" },
-        { status: 500 }
-      );
+      return handleApiError(deleteError, {
+        code: ErrorCode.DATABASE_ERROR,
+        status: 500,
+        message: "No se pudo desconectar Meta Ads",
+        context: { userId: user.id },
+      });
     }
 
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error("Error disconnecting Meta Ads:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+    // Log audit event
+    await logIntegrationChange(
+      user.id,
+      null, // Global integration
+      "META_ADS",
+      "integration_disconnected",
+      { integration_type: "META_ADS" },
+      request
     );
+
+    return apiSuccess(null, "Meta Ads desconectado correctamente");
+  } catch (error) {
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      status: 500,
+      message: "Error al desconectar Meta Ads",
+      context: { operation: "meta_disconnect" },
+    });
   }
 }
 

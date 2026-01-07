@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { rpcWithTimeout } from "@/lib/supabase/query-with-timeout";
+import { unsafeRpc } from "@/lib/supabase/unsafe-rpc";
+import { logAuditEvent } from "@/lib/monitoring/audit";
+import { isAdminProfile } from "@/types/supabase-helpers";
+import { logger } from "@/lib/utils/logger";
+import { handleApiError, handleUnauthorized, handleForbidden, handleNotFound, handleConflict, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
+import type { Tenant } from "@/types/database";
+import { validateBody, trialCreditsBodySchema } from "@/lib/validation/schemas";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -18,32 +26,29 @@ export async function POST(request: NextRequest, context: RouteContext) {
     } = await supabase.auth.getUser();
 
     if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return handleUnauthorized("Debes iniciar sesión para otorgar créditos de prueba");
     }
 
     // Check if user is a Converzia admin
     const { data: profile, error: profileError } = await supabase
       .from("user_profiles")
-      .select("role")
+      .select("is_converzia_admin")
       .eq("id", user.id)
       .single();
 
-    if (profileError || profile?.role !== "CONVERZIA_ADMIN") {
-      return NextResponse.json(
-        { error: "Only Converzia admins can grant trial credits" },
-        { status: 403 }
-      );
+    if (profileError || !isAdminProfile(profile)) {
+      return handleForbidden("Solo administradores de Converzia pueden otorgar créditos de prueba");
     }
 
-    // Get request body for optional custom amount
+    // Validate request body (optional - defaults to 5 credits)
     let amount = 5; // Default
     try {
-      const body = await request.json();
-      if (body.amount && typeof body.amount === "number" && body.amount > 0) {
-        amount = body.amount;
+      const bodyValidation = await validateBody(request, trialCreditsBodySchema.partial());
+      if (bodyValidation.success && bodyValidation.data.amount) {
+        amount = bodyValidation.data.amount;
       }
     } catch {
-      // Use default amount if no body provided
+      // Use default amount if no body provided or validation fails
     }
 
     // Check if tenant exists and hasn't received trial credits
@@ -54,20 +59,26 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .single();
 
     if (tenantError || !tenant) {
-      return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
+      return handleNotFound("Tenant", { tenant_id: tenantId });
     }
 
     if (tenant.trial_credits_granted) {
-      return NextResponse.json(
-        { error: "Trial credits already granted to this tenant" },
-        { status: 400 }
-      );
+      return handleConflict("Este tenant ya recibió créditos de prueba anteriormente", {
+        tenant_id: tenantId,
+        already_granted: true,
+      });
     }
 
     // Get current balance
-    const { data: currentBalance } = await supabase.rpc("get_tenant_credits", {
-      p_tenant_id: tenantId,
-    } as any);
+    const rpcResult = await rpcWithTimeout<number>(
+      unsafeRpc<number>(supabase, "get_tenant_credits", {
+        p_tenant_id: tenantId,
+      }),
+      10000,
+      "get_tenant_credits",
+      false
+    );
+    const currentBalance = rpcResult.data;
 
     const newBalance = (currentBalance || 0) + amount;
 
@@ -82,11 +93,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
     });
 
     if (ledgerError) {
-      console.error("Error inserting credit ledger:", ledgerError);
-      return NextResponse.json(
-        { error: "Failed to grant trial credits" },
-        { status: 500 }
-      );
+      return handleApiError(ledgerError, {
+        code: ErrorCode.DATABASE_ERROR,
+        status: 500,
+        message: "No se pudo registrar los créditos en el ledger",
+        context: { tenantId, amount },
+      });
     }
 
     // Update tenant with trial info
@@ -102,25 +114,40 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .eq("id", tenantId);
 
     if (updateError) {
-      console.error("Error updating tenant:", updateError);
-      return NextResponse.json(
-        { error: "Failed to update tenant trial status" },
-        { status: 500 }
-      );
+      return handleApiError(updateError, {
+        code: ErrorCode.DATABASE_ERROR,
+        status: 500,
+        message: "No se pudo actualizar el estado del tenant",
+        context: { tenantId, amount },
+      });
     }
 
-    return NextResponse.json({
-      success: true,
-      amount,
-      new_balance: newBalance,
-      message: `${amount} trial credits granted to ${tenant.name}`,
+    // Log audit event
+    await logAuditEvent({
+      user_id: user.id,
+      tenant_id: tenantId,
+      action: "trial_credits_granted",
+      entity_type: "credit_ledger",
+      entity_id: tenantId,
+      new_values: { amount, new_balance: newBalance },
+      metadata: { credits: amount },
+      request,
     });
-  } catch (error) {
-    console.error("Error granting trial credits:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+
+    return apiSuccess(
+      {
+        amount,
+        new_balance: newBalance,
+      },
+      `${amount} créditos de prueba otorgados a ${tenant.name}`
     );
+  } catch (error) {
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      status: 500,
+      message: "Ocurrió un error al otorgar créditos de prueba",
+      context: { operation: "grant_trial_credits" },
+    });
   }
 }
 
@@ -137,7 +164,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     } = await supabase.auth.getUser();
 
     if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return handleUnauthorized("Debes iniciar sesión para consultar créditos de prueba");
     }
 
     // Get tenant trial status
@@ -150,7 +177,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       .single();
 
     if (tenantError || !tenant) {
-      return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
+      return handleNotFound("Tenant", { tenant_id: tenantId });
     }
 
     // Get default trial credits from pricing
@@ -167,11 +194,12 @@ export async function GET(request: NextRequest, context: RouteContext) {
       default_trial_credits: pricing?.default_trial_credits || 5,
     });
   } catch (error) {
-    console.error("Error getting trial credits status:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      status: 500,
+      message: "Ocurrió un error al consultar el estado de créditos de prueba",
+      context: { operation: "get_trial_credits_status" },
+    });
   }
 }
 

@@ -373,6 +373,10 @@ export function Drawer({
 
       {/* Drawer */}
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={title ? "drawer-title" : undefined}
+        aria-describedby={description ? "drawer-description" : undefined}
         className={cn(
           "fixed top-0 bottom-0 bg-[var(--bg-primary)] flex flex-col",
           "border-[var(--border-primary)]",
@@ -387,15 +391,17 @@ export function Drawer({
           <div className="flex items-start justify-between p-6 border-b border-[var(--border-primary)]">
             <div>
               {title && (
-                <h2 className="text-lg font-semibold text-[var(--text-primary)]">{title}</h2>
+                <h2 id="drawer-title" className="text-lg font-semibold text-[var(--text-primary)]">{title}</h2>
               )}
               {description && (
-                <p className="mt-1 text-sm text-[var(--text-secondary)]">{description}</p>
+                <p id="drawer-description" className="mt-1 text-sm text-[var(--text-secondary)]">{description}</p>
               )}
             </div>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors"
+              className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors focus-ring"
+              aria-label="Cerrar panel"
+              type="button"
             >
               <X className="h-5 w-5" />
             </button>

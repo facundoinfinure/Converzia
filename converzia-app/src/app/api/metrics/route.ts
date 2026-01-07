@@ -3,6 +3,9 @@ import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { getCurrentMetrics } from "@/lib/monitoring";
 import { withRateLimit, RATE_LIMITS } from "@/lib/security/rate-limit";
+import { handleApiError, handleUnauthorized, handleForbidden, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
+import type { AdminProfile } from "@/types/supabase-helpers";
+import { isAdminProfile } from "@/types/supabase-helpers";
 
 // ============================================
 // Metrics API
@@ -23,7 +26,7 @@ export async function GET(request: NextRequest) {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return handleUnauthorized("Debes iniciar sesión para ver métricas");
     }
 
     // Verify admin access
@@ -37,8 +40,8 @@ export async function GET(request: NextRequest) {
       "get user profile for metrics"
     );
 
-    if (!(profile as any)?.is_converzia_admin) {
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+    if (!isAdminProfile(profile as { is_converzia_admin?: boolean } | null)) {
+      return handleForbidden("Solo administradores pueden ver métricas del sistema");
     }
 
     // Get in-memory metrics
@@ -93,7 +96,7 @@ export async function GET(request: NextRequest) {
       "get active tenants count"
     );
 
-    return NextResponse.json({
+    return apiSuccess({
       timestamp: new Date().toISOString(),
       in_memory: metrics,
       database: {
@@ -114,10 +117,12 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      status: 500,
+      message: "Ocurrió un error al obtener métricas",
+      context: { operation: "get_metrics" },
+    });
   }
 }
 

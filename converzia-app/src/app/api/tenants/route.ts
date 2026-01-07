@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { initializeTenantStorage } from "@/lib/services/storage";
+import { isAdminProfile } from "@/types/supabase-helpers";
+import type { Tenant } from "@/types/database";
+import { logger } from "@/lib/utils/logger";
+import { validateBody, createTenantRequestSchema } from "@/lib/validation/schemas";
+import { handleApiError, handleUnauthorized, handleForbidden, handleValidationError, handleConflict, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
+import { logTenantCreated } from "@/lib/monitoring/audit";
 
 // ============================================
 // Tenants API
@@ -19,7 +25,7 @@ export async function POST(request: NextRequest) {
     // Verify user is authenticated and is Converzia admin
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+      return handleUnauthorized("Debes iniciar sesión para crear tenants");
     }
 
     const { data: profile } = await queryWithTimeout(
@@ -32,12 +38,19 @@ export async function POST(request: NextRequest) {
       "verificar perfil de admin"
     );
 
-    if (!(profile as any)?.is_converzia_admin) {
-      return NextResponse.json({ error: "Se requiere acceso de administrador" }, { status: 403 });
+    if (!isAdminProfile(profile as { is_converzia_admin?: boolean } | null)) {
+      return handleForbidden("Solo administradores de Converzia pueden crear tenants");
     }
 
-    // Parse request body
-    const body = await request.json();
+    // Validate request body
+    const bodyValidation = await validateBody(request, createTenantRequestSchema);
+    
+    if (!bodyValidation.success) {
+      return handleValidationError(new Error(bodyValidation.error), {
+        validationError: bodyValidation.error,
+      });
+    }
+    
     const {
       name,
       slug,
@@ -46,23 +59,7 @@ export async function POST(request: NextRequest) {
       timezone = "America/Argentina/Buenos_Aires",
       default_score_threshold = 80,
       duplicate_window_days = 90,
-    } = body;
-
-    // Validate required fields
-    if (!name || !slug) {
-      return NextResponse.json(
-        { error: "Nombre y slug son requeridos" },
-        { status: 400 }
-      );
-    }
-
-    // Validate slug format
-    if (!/^[a-z0-9-]+$/.test(slug)) {
-      return NextResponse.json(
-        { error: "El slug solo puede contener letras minúsculas, números y guiones" },
-        { status: 400 }
-      );
-    }
+    } = bodyValidation.data;
 
     // Create tenant
     const { data: tenant, error: tenantError } = await queryWithTimeout(
@@ -84,27 +81,30 @@ export async function POST(request: NextRequest) {
     );
 
     if (tenantError) {
-      console.error("Error creating tenant:", tenantError);
       if (tenantError.code === "23505") {
-        return NextResponse.json(
-          { error: "Ya existe un tenant con ese slug" },
-          { status: 409 }
-        );
+        return handleConflict("Ya existe un tenant con ese slug. Por favor elige otro.", {
+          slug,
+        });
       }
-      return NextResponse.json(
-        { error: tenantError.message || "Error al crear tenant" },
-        { status: 500 }
-      );
+      return handleApiError(tenantError, {
+        code: ErrorCode.DATABASE_ERROR,
+        status: 500,
+        message: "No se pudo crear el tenant",
+        context: { name, slug },
+      });
     }
 
     if (!tenant) {
-      return NextResponse.json(
-        { error: "No se recibió respuesta del servidor" },
-        { status: 500 }
-      );
+      return handleApiError(new Error("No se recibió respuesta del servidor"), {
+        code: ErrorCode.INTERNAL_ERROR,
+        status: 500,
+        message: "No se pudo crear el tenant",
+        context: { name, slug },
+      });
     }
 
-    const tenantId = (tenant as any).id;
+    const typedTenant = tenant as Tenant;
+    const tenantId = typedTenant.id;
 
     // Create default pricing
     const { error: pricingError } = await queryWithTimeout(
@@ -123,28 +123,37 @@ export async function POST(request: NextRequest) {
     );
 
     if (pricingError) {
-      console.error("Error creating default pricing:", pricingError);
+      logger.error("Error creating default pricing", pricingError, { tenantId });
       // Don't fail - pricing can be added later
     }
 
     // Initialize storage for tenant
     const storageResult = await initializeTenantStorage(tenantId);
     if (!storageResult.success) {
-      console.error("Error initializing tenant storage:", storageResult.error);
+      logger.error("Error initializing tenant storage", new Error(storageResult.error || "Unknown error"), { tenantId });
       // Don't fail - storage can be initialized later, but log the warning
     }
 
-    return NextResponse.json({
-      success: true,
-      tenant,
-      storage_initialized: storageResult.success,
-    });
-  } catch (error) {
-    console.error("Error in POST /api/tenants:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Error interno" },
-      { status: 500 }
+    // Log audit event
+    await logTenantCreated(user.id, tenantId, {
+      name: typedTenant.name,
+      slug: typedTenant.slug,
+    }, request);
+
+    return apiSuccess(
+      {
+        tenant,
+        storage_initialized: storageResult.success,
+      },
+      "Tenant creado correctamente"
     );
+  } catch (error) {
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      status: 500,
+      message: "Ocurrió un error al crear el tenant",
+      context: { operation: "create_tenant" },
+    });
   }
 }
 

@@ -17,7 +17,7 @@ interface LogEntry {
   traceId?: string;
 }
 
-// PII fields that should be masked
+// PII fields that should be masked (keeping first 2 and last 2 chars)
 const PII_FIELDS = [
   "phone",
   "phone_number",
@@ -30,6 +30,23 @@ const PII_FIELDS = [
   "ip",
   "ip_address",
   "address",
+];
+
+// Sensitive fields that should be completely redacted
+const SENSITIVE_FIELDS = [
+  "password",
+  "token",
+  "access_token",
+  "refresh_token",
+  "api_key",
+  "secret",
+  "authorization",
+  "cookie",
+  "ssn",
+  "credit_card",
+  "card_number",
+  "cvv",
+  "cuit",
 ];
 
 // Mask PII fields in an object
@@ -54,8 +71,12 @@ function maskPII(obj: unknown, depth = 0): unknown {
     for (const [key, value] of Object.entries(obj)) {
       const lowerKey = key.toLowerCase();
 
-      // Check if this is a PII field
-      if (PII_FIELDS.some((pii) => lowerKey.includes(pii))) {
+      // Check if this is a sensitive field (completely redacted)
+      if (SENSITIVE_FIELDS.some((field) => lowerKey.includes(field))) {
+        masked[key] = "[REDACTED]";
+      } 
+      // Check if this is a PII field (partially masked)
+      else if (PII_FIELDS.some((pii) => lowerKey.includes(pii))) {
         if (typeof value === "string" && value.length > 0) {
           // Mask string values, keeping first 2 and last 2 characters
           if (value.length <= 4) {
@@ -130,9 +151,36 @@ function log(level: LogLevel, message: string, context?: LogContext): void {
 // Public API
 export const logger = {
   debug: (message: string, context?: LogContext) => log("debug", message, context),
-  info: (message: string, context?: LogContext) => log("info", message, context),
-  warn: (message: string, context?: LogContext) => log("warn", message, context),
-  error: (message: string, context?: LogContext) => log("error", message, context),
+  info: (message: string, arg2?: unknown, arg3?: LogContext) => {
+    const { error, context } = normalizeArgs(arg2, arg3);
+    return log("info", message, error !== undefined ? { ...context, error } : context);
+  },
+  warn: (message: string, arg2?: unknown, arg3?: LogContext) => {
+    const { error, context } = normalizeArgs(arg2, arg3);
+    return log("warn", message, error !== undefined ? { ...context, error } : context);
+  },
+  /**
+   * Error logging with optional error object + context.
+   * Supports call-sites like:
+   * - logger.error("msg")
+   * - logger.error("msg", { ctx })
+   * - logger.error("msg", err)
+   * - logger.error("msg", err, { ctx })
+   */
+  error: (message: string, arg2?: unknown, arg3?: LogContext) => {
+    const { error, context } = normalizeArgs(arg2, arg3);
+    if (error instanceof Error) {
+      return log("error", message, {
+        ...context,
+        errorMessage: error.message,
+        errorStack: error.stack?.split("\n").slice(0, 5),
+      });
+    }
+    if (error !== undefined) {
+      return log("error", message, { ...context, errorMessage: String(error) });
+    }
+    return log("error", message, context);
+  },
 
   // Convenience methods for common operations
   webhook: (event: string, context?: LogContext) =>
@@ -162,6 +210,25 @@ export const logger = {
 };
 
 export default logger;
+
+function normalizeArgs(
+  arg2?: unknown,
+  arg3?: LogContext
+): { error?: unknown; context?: LogContext } {
+  // logger.error(message, context)
+  if (arg2 && typeof arg2 === "object" && arg3 === undefined && !(arg2 instanceof Error)) {
+    return { context: arg2 as LogContext };
+  }
+  // logger.error(message, error, context)
+  if (arg3 !== undefined) {
+    return { error: arg2, context: arg3 };
+  }
+  // logger.error(message, error)
+  if (arg2 !== undefined) {
+    return { error: arg2 };
+  }
+  return {};
+}
 
 
 

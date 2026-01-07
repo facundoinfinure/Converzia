@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
-import { syncTokkoPublications, getTokkoConfig } from "@/lib/services/tokko";
+import { syncTokkoPublications, getTokkoConfig, type TokkoConfig } from "@/lib/services/tokko";
 import { withCronAuth } from "@/lib/security/cron-auth";
 import { logger } from "@/lib/monitoring";
+import { handleApiError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
 
 // ============================================
 // Tokko Sync Cron Job
@@ -44,15 +45,12 @@ export async function GET(request: NextRequest) {
 
     if (fetchError) {
       logger.error("Error fetching Tokko integrations", { error: fetchError });
-      return NextResponse.json(
-        { error: "Failed to fetch integrations" },
-        { status: 500 }
-      );
+      throw new Error("Error al obtener integraciones de Tokko");
     }
 
     if (integrations.length === 0) {
       logger.info("No active Tokko integrations found");
-      return NextResponse.json({
+      return apiSuccess({
         message: "No active Tokko integrations to sync",
         results: [],
       });
@@ -63,9 +61,15 @@ export async function GET(request: NextRequest) {
     });
 
     // Sync each integration
+    interface TokkoIntegrationRow {
+      id: string;
+      tenant_id: string;
+      config: TokkoConfig;
+    }
     for (const integration of integrations) {
-      const tenantId = (integration as any).tenant_id;
-      const config = (integration as any).config;
+      const typedIntegration = integration as TokkoIntegrationRow;
+      const tenantId = typedIntegration.tenant_id;
+      const config = typedIntegration.config;
 
       try {
         const result = await syncTokkoPublications(
@@ -110,7 +114,7 @@ export async function GET(request: NextRequest) {
       total_variants_synced: totalVariants,
     });
 
-    return NextResponse.json({
+    return apiSuccess({
       message: "Tokko sync completed",
       summary: {
         tenants_processed: integrations.length,
@@ -121,11 +125,10 @@ export async function GET(request: NextRequest) {
       results,
     });
   } catch (error) {
-    logger.exception("Tokko sync cron error", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      context: { route: "GET /api/cron/tokko-sync" },
+    });
   }
 }
 

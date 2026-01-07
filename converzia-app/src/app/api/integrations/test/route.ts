@@ -4,6 +4,11 @@ import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { fetchWithTimeout } from "@/lib/utils/fetch-with-timeout";
 import { testTokkoConnection, TokkoConfig } from "@/lib/services/tokko";
 import { testGoogleSheetsConnection, GoogleSheetsConfig } from "@/lib/services/google-sheets";
+import { isAdminProfile } from "@/types/supabase-helpers";
+import type { MembershipWithRole, TenantIntegrationWithTokens, GoogleOAuthTokens } from "@/types/supabase-helpers";
+import { logger } from "@/lib/utils/logger";
+import { validateBody, integrationsTestBodySchema } from "@/lib/validation/schemas";
+import { handleApiError, handleUnauthorized, handleForbidden, handleValidationError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
 
 // ============================================
 // Integration Test API
@@ -14,18 +19,17 @@ export async function POST(request: NextRequest) {
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+      return handleUnauthorized("Autenticación requerida");
     }
 
-    const body = await request.json();
-    const { type, config, tenant_id } = body;
-
-    if (!type || !config || !tenant_id) {
-      return NextResponse.json(
-        { success: false, message: "Missing type, config, or tenant_id" },
-        { status: 400 }
-      );
+    // Validate request body
+    const bodyValidation = await validateBody(request, integrationsTestBodySchema);
+    
+    if (!bodyValidation.success) {
+      return handleValidationError(bodyValidation.error);
     }
+    
+    const { type, config, tenant_id } = bodyValidation.data;
 
     // Verify membership or Converzia admin
     const { data: profile } = await queryWithTimeout(
@@ -38,7 +42,7 @@ export async function POST(request: NextRequest) {
       "get user profile for integration test"
     );
 
-    const isAdmin = !!(profile as any)?.is_converzia_admin;
+    const isAdmin = isAdminProfile(profile as { is_converzia_admin?: boolean } | null);
 
     if (!isAdmin) {
       const { data: membership } = await queryWithTimeout(
@@ -53,8 +57,9 @@ export async function POST(request: NextRequest) {
         "get tenant membership for integration test"
       );
 
-      if (!membership || !["OWNER", "ADMIN"].includes((membership as any).role)) {
-        return NextResponse.json({ success: false, message: "No access" }, { status: 403 });
+      const typedMembership = membership as MembershipWithRole | null;
+      if (!typedMembership || !["OWNER", "ADMIN"].includes(typedMembership.role)) {
+        return handleForbidden("No tienes acceso a este tenant");
       }
     }
 
@@ -62,10 +67,16 @@ export async function POST(request: NextRequest) {
 
     switch (type) {
       case "TOKKO":
-        result = await testTokkoConnection(config as TokkoConfig);
+        if (!isTokkoConfig(config)) {
+          return handleValidationError("Configuración TOKKO inválida");
+        }
+        result = await testTokkoConnection(config);
         break;
 
       case "GOOGLE_SHEETS":
+        if (!isGoogleSheetsConfig(config)) {
+          return handleValidationError("Configuración GOOGLE_SHEETS inválida");
+        }
         // For OAuth-based connections, get tokens from database
         const { data: integration } = await queryWithTimeout(
           supabase
@@ -78,32 +89,52 @@ export async function POST(request: NextRequest) {
           "get integration for test"
         );
         
-        const oauthTokens = (integration as any)?.oauth_tokens || null;
-        const integrationId = (integration as any)?.id;
+        const typedIntegration = integration as TenantIntegrationWithTokens | null;
+        const oauthTokens = (typedIntegration?.oauth_tokens || null) as GoogleOAuthTokens | null;
+        const integrationId = typedIntegration?.id;
         
         result = await testGoogleSheetsConnection(
-          config as GoogleSheetsConfig,
+          config,
           oauthTokens,
           integrationId
         );
         break;
 
       case "WEBHOOK":
-        result = await testWebhookConnection(config.url);
+        if (!config || typeof config !== "object" || typeof (config as { url?: unknown }).url !== "string") {
+          return handleValidationError("Configuración WEBHOOK inválida");
+        }
+        result = await testWebhookConnection((config as { url: string }).url);
         break;
 
       default:
-        result = { success: false, message: "Unknown integration type" };
+        result = { success: false, message: "Tipo de integración desconocido" };
     }
 
-    return NextResponse.json(result);
+    return apiSuccess(result);
   } catch (error) {
-    console.error("Integration test error:", error);
-    return NextResponse.json(
-      { success: false, message: error instanceof Error ? error.message : "Test failed" },
-      { status: 500 }
-    );
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      context: { route: "POST /api/integrations/test" },
+    });
   }
+}
+
+function isTokkoConfig(value: unknown): value is TokkoConfig {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  return typeof v.api_key === "string" && v.api_key.length > 0;
+}
+
+function isGoogleSheetsConfig(value: unknown): value is GoogleSheetsConfig {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.spreadsheet_id === "string" &&
+    v.spreadsheet_id.length > 0 &&
+    typeof v.sheet_name === "string" &&
+    v.sheet_name.length > 0
+  );
 }
 
 function isPrivateHostname(hostname: string): boolean {

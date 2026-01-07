@@ -5,7 +5,11 @@ import { searchKnowledge } from "@/lib/services/rag";
 import { extractQualificationFields, generateQualificationResponse, buildQualificationSystemPrompt } from "@/lib/services/openai";
 import { calculateLeadScore } from "@/lib/services/scoring";
 import { withRateLimit, RATE_LIMITS } from "@/lib/security/rate-limit";
+import { handleApiError, handleUnauthorized, handleForbidden, handleValidationError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
 import type { Offer, QualificationFields } from "@/types";
+import { isAdminProfile } from "@/types/supabase-helpers";
+import type { Tenant } from "@/types/database";
+import { validateBody, testingConversationBodySchema } from "@/lib/validation/schemas";
 
 // ============================================
 // Testing Conversation API
@@ -24,7 +28,7 @@ export async function POST(request: NextRequest) {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return handleUnauthorized("Debes iniciar sesión para probar conversaciones");
     }
 
     // Verify admin access
@@ -38,22 +42,32 @@ export async function POST(request: NextRequest) {
       "get user profile for testing"
     );
 
-    if (!(profile as any)?.is_converzia_admin) {
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+    if (!isAdminProfile(profile as { is_converzia_admin?: boolean } | null)) {
+      return handleForbidden("Solo administradores pueden probar conversaciones");
     }
 
-    const body = await request.json();
-    const { tenant_id, offer_id, message, conversation_history } = body;
-
-    if (!tenant_id || !message) {
-      return NextResponse.json(
-        { error: "tenant_id and message are required" },
-        { status: 400 }
-      );
+    // Validate request body
+    const bodyValidation = await validateBody(request, testingConversationBodySchema);
+    
+    if (!bodyValidation.success) {
+      return handleValidationError(new Error(bodyValidation.error), {
+        validationError: bodyValidation.error,
+      });
     }
+    
+    const { tenant_id, offer_id, message, conversation_history } = bodyValidation.data;
 
     const adminSupabase = createAdminClient();
-    const result: any = {
+    interface TestResult {
+      response: string | null;
+      rag_chunks: Array<{ content: string; similarity: number; document_id: string }>;
+      system_prompt: string | null;
+      extracted_fields: Partial<QualificationFields>;
+      score: { total: number; breakdown: Record<string, number> } | null;
+      errors: string[];
+    }
+    
+    const result: TestResult = {
       response: null,
       rag_chunks: [],
       system_prompt: null,
@@ -72,7 +86,7 @@ export async function POST(request: NextRequest) {
           .single(),
         10000,
         "get tenant for testing"
-      );
+      ) as { data: Tenant | null; error: unknown };
 
       let offer: Offer | null = null;
       if (offer_id) {
@@ -84,8 +98,8 @@ export async function POST(request: NextRequest) {
             .single(),
           10000,
           "get offer for testing"
-        );
-        offer = offerData as Offer;
+        ) as { data: Offer | null; error: unknown };
+        offer = offerData;
       }
 
       // Search RAG
@@ -117,9 +131,17 @@ export async function POST(request: NextRequest) {
             tenant_id,
             { messageCount: (conversation_history?.length || 0) + 1, responseTime: 30 }
           );
+          // Convert ScoreBreakdown to Record<string, number> by filtering undefined values
+          const breakdown: Record<string, number> = {};
+          for (const [key, value] of Object.entries(scoreResult.breakdown)) {
+            if (value !== undefined) {
+              breakdown[key] = value;
+            }
+          }
+          
           result.score = {
             total: scoreResult.score,
-            breakdown: scoreResult.breakdown,
+            breakdown,
           };
         }
       } catch (error) {
@@ -146,7 +168,7 @@ export async function POST(request: NextRequest) {
       try {
         const currentFields = result.extracted_fields as QualificationFields;
         const ragContext = result.rag_chunks
-          .map((c: any) => c.content)
+          .map((c) => c.content)
           .join("\n\n");
         
         // Build system prompt - we need to manually add RAG context
@@ -166,21 +188,22 @@ export async function POST(request: NextRequest) {
         result.errors.push(`System prompt error: ${error instanceof Error ? error.message : "Unknown"}`);
       }
 
-      return NextResponse.json(result);
+      return apiSuccess(result);
     } catch (error) {
-      return NextResponse.json(
-        {
-          error: error instanceof Error ? error.message : "Unknown error",
-          errors: [error instanceof Error ? error.message : "Unknown error"],
-        },
-        { status: 500 }
-      );
+      return handleApiError(error, {
+        code: ErrorCode.INTERNAL_ERROR,
+        status: 500,
+        message: "Error en el test de conversación",
+        context: { tenant_id, offer_id },
+      });
     }
   } catch (error) {
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      status: 500,
+      message: "Error al procesar la solicitud de testing de conversación",
+      context: { operation: "conversation_testing" },
+    });
   }
 }
 

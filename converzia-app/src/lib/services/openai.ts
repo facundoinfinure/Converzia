@@ -1,7 +1,9 @@
 import OpenAI from "openai";
 import { createAdminClient } from "@/lib/supabase/server";
-import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
+import { queryWithTimeout, rpcWithTimeout } from "@/lib/supabase/query-with-timeout";
+import { unsafeRpc } from "@/lib/supabase/unsafe-rpc";
 import type { QualificationFields, Offer, ScoreBreakdown } from "@/types";
+import type { AppSetting } from "@/types/supabase-helpers";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { logger, Metrics, Alerts, startTimer } from "@/lib/monitoring";
@@ -27,13 +29,17 @@ async function getQualificationPromptTemplate(): Promise<string> {
   // 1) Converzia Admin-configurable prompt (stored in app_settings)
   try {
     const supabase = createAdminClient();
-    const { data } = await supabase
-      .from("app_settings")
-      .select("value")
-      .eq("key", "qualification_system_prompt_md")
-      .single();
+    const { data } = await queryWithTimeout(
+      supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", "qualification_system_prompt_md")
+        .single(),
+      10000,
+      "get qualification prompt template"
+    ) as { data: AppSetting | null };
 
-    const fromDb = (data as any)?.value;
+    const fromDb = data?.value;
     if (typeof fromDb === "string" && fromDb.trim().length > 0) {
       cachedQualificationSystemPromptTemplate = fromDb;
       cachedQualificationSystemPromptTemplateAt = now;
@@ -510,14 +516,19 @@ export async function ragSearch(
     content: string;
     similarity: number;
   }
-  const rpcResult = await (supabase.rpc as any)("match_knowledge_chunks", {
-    query_embedding: embedding,
-    match_threshold: 0.7,
-    match_count: limit,
-    p_tenant_id: tenantId,
-    p_offer_id: offerId || null,
-  });
-  const chunks = (rpcResult.data || []) as KnowledgeChunk[];
+  const rpcResult = await rpcWithTimeout<KnowledgeChunk[]>(
+    unsafeRpc<KnowledgeChunk[]>(supabase, "match_knowledge_chunks", {
+      query_embedding: embedding,
+      match_threshold: 0.7,
+      match_count: limit,
+      p_tenant_id: tenantId,
+      p_offer_id: offerId || null,
+    }),
+    20000,
+    "match_knowledge_chunks",
+    true
+  );
+  const chunks = rpcResult.data || [];
 
   return chunks.map((chunk) => ({
     content: chunk.content,

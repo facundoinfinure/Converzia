@@ -26,6 +26,7 @@ import { QuickFilters, FilterDrawer, FilterSection, FilterChips } from "@/compon
 import { useTenants, useTenantMutations } from "@/lib/hooks/use-tenants";
 import { useAuth } from "@/lib/auth/context";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
+import { usePagination } from "@/lib/hooks/use-pagination";
 import { usePendingApprovalsContext } from "@/contexts/PendingApprovalsContext";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import type { TenantWithStats } from "@/types";
@@ -44,21 +45,25 @@ export default function TenantsPage() {
   const isMobile = useIsMobile();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
-  const [page, setPage] = useState(1);
+  const { page, setPage, pageSize, setPageSize } = usePagination({ initialPage: 1, initialPageSize: 20 });
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [approveId, setApproveId] = useState<string | null>(null);
   const [rejectId, setRejectId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [selectedTenants, setSelectedTenants] = useState<string[]>([]);
-  const [filterValues, setFilterValues] = useState<Record<string, any>>({});
+  const [filterValues, setFilterValues] = useState<Record<string, unknown>>({});
+
+  const verticalFilterValue =
+    typeof filterValues.vertical === "string" && filterValues.vertical ? filterValues.vertical : undefined;
+  const minCreditsValue = typeof filterValues.credits_min === "number" ? filterValues.credits_min : undefined;
 
   const { tenants, total, isLoading, error, refetch } = useTenants({
     search,
     status: statusFilter || undefined,
-    vertical: filterValues.vertical || undefined,
-    minCredits: filterValues.credits_min || undefined,
+    vertical: verticalFilterValue,
+    minCredits: minCreditsValue,
     page,
-    pageSize: 20,
+    pageSize,
   });
 
   const { updateTenantStatus, deleteTenant, approveTenant, rejectTenant, isLoading: isMutating } = useTenantMutations();
@@ -186,12 +191,15 @@ export default function TenantsPage() {
             </Link>
             <div className="flex items-center gap-2 text-sm text-[var(--text-tertiary)]">
               <span>{tenant.slug}</span>
-              {(tenant as any).vertical && (
+              {(() => {
+                const vertical = (tenant as unknown as { vertical?: string }).vertical;
+                return vertical ? (
                 <>
                   <span>•</span>
-                  <span>{VERTICAL_LABELS[(tenant as any).vertical] || (tenant as any).vertical}</span>
+                  <span>{VERTICAL_LABELS[vertical] || vertical}</span>
                 </>
-              )}
+                ) : null;
+              })()}
             </div>
           </div>
         </div>
@@ -371,7 +379,7 @@ export default function TenantsPage() {
                             { value: "LOAN", label: "Créditos" },
                             { value: "INSURANCE", label: "Seguros" },
                           ]}
-                          value={filterValues.vertical || ""}
+                          value={typeof filterValues.vertical === "string" ? filterValues.vertical : ""}
                           onChange={(v) => setFilterValues({ ...filterValues, vertical: v })}
                         />
                       </FilterSection>
@@ -477,7 +485,10 @@ export default function TenantsPage() {
                 </MobileCardAvatar>
               }
               title={tenant.name}
-              subtitle={`${tenant.slug}${(tenant as any).vertical ? ` • ${VERTICAL_LABELS[(tenant as any).vertical] || (tenant as any).vertical}` : ""}`}
+              subtitle={`${tenant.slug}${(() => {
+                const vertical = (tenant as unknown as { vertical?: string }).vertical;
+                return vertical ? ` • ${VERTICAL_LABELS[vertical] || vertical}` : "";
+              })()}`}
               badges={<TenantStatusBadge status={tenant.status} />}
               stats={[
                 { icon: Users, value: tenant._count?.leads || 0, label: "Leads" },
@@ -577,14 +588,15 @@ export default function TenantsPage() {
         )}
 
         {/* Pagination */}
-        {total > 20 && (
+        {total > pageSize && (
           <div className="p-4 border-t border-card-border">
             <Pagination
               currentPage={page}
-              totalPages={Math.ceil(total / 20)}
+              totalPages={Math.ceil(total / pageSize)}
               totalItems={total}
-              pageSize={20}
+              pageSize={pageSize}
               onPageChange={setPage}
+              onPageSizeChange={setPageSize}
             />
           </div>
         )}

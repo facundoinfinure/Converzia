@@ -211,15 +211,16 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
           <button
             type="button"
             onClick={onClear}
+            aria-label="Limpiar búsqueda"
             className={cn(
               "absolute right-4 top-1/2 -translate-y-1/2",
               "w-6 h-6 flex items-center justify-center rounded-full",
               "bg-[var(--bg-tertiary)] text-[var(--text-tertiary)]",
               "hover:bg-[var(--accent-primary-light)] hover:text-[var(--accent-primary)]",
-              "transition-colors duration-200"
+              "transition-colors duration-200 focus-ring"
             )}
           >
-            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>

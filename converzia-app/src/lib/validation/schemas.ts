@@ -37,6 +37,29 @@ export const offerGenerationSchema = z.object({
   country: z.string().length(2).default('AR'),
 });
 
+// Offer creation schema (for API)
+export const createOfferSchema = z.object({
+  tenant_id: uuidSchema,
+  name: z.string().min(1, 'Name is required').max(200, 'Name too long'),
+  slug: z.string().min(1, 'Slug is required').max(200).regex(/^[a-z0-9-]+$/, 'Slug can only contain lowercase letters, numbers, and hyphens'),
+  offer_type: z.enum(['PROPERTY', 'AUTO', 'LOAN', 'INSURANCE']).default('PROPERTY'),
+  status: z.enum(['DRAFT', 'ACTIVE', 'PAUSED', 'ARCHIVED']).default('DRAFT'),
+  description: z.string().max(5000).optional(),
+  short_description: z.string().max(500).optional(),
+  image_url: z.string().url().optional(),
+  address: z.string().max(500).optional(),
+  city: z.string().max(100).optional(),
+  zone: z.string().max(100).optional(),
+  country: z.string().length(2).default('AR'),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
+  price_from: z.number().min(0).optional(),
+  price_to: z.number().min(0).optional(),
+  currency: z.string().length(3).default('USD'),
+  priority: z.number().int().min(0).max(1000).default(100),
+  settings: z.record(z.unknown()).optional(),
+}).strict();
+
 // Webhook validation schemas
 export const metaWebhookSchema = z.object({
   object: z.string(),
@@ -75,6 +98,13 @@ export const createTenantSchema = z.object({
   contact_phone: phoneSchema.optional(),
   settings: z.record(z.unknown()).optional(),
 });
+
+// Full request schema used by /api/tenants (includes defaults)
+export const createTenantRequestSchema = createTenantSchema.extend({
+  timezone: z.string().optional().default("America/Argentina/Buenos_Aires"),
+  default_score_threshold: z.number().int().min(0).max(100).optional().default(80),
+  duplicate_window_days: z.number().int().min(1).max(365).optional().default(90),
+}).strict();
 
 export const updateTenantSchema = createTenantSchema.partial();
 
@@ -199,3 +229,193 @@ export function validateQuery<T>(
     return { success: false, error: 'Invalid query parameters' };
   }
 }
+
+// ============================================
+// Query Parameter Schemas
+// ============================================
+
+// Health check query params (none currently, but reserved for future)
+export const healthCheckQuerySchema = z.object({}).strict();
+
+// Metrics query params
+export const metricsQuerySchema = z.object({
+  filters: z.string().optional(),
+  from: z.string().datetime().optional(),
+  to: z.string().datetime().optional(),
+}).strict();
+
+// Funnel query params
+export const funnelQuerySchema = z.object({
+  tenant_id: uuidSchema.optional(),
+  offer_id: uuidSchema.optional(),
+  from: z.string().datetime().optional(),
+  to: z.string().datetime().optional(),
+}).strict();
+
+// Funnel insights query params
+export const funnelInsightsQuerySchema = z.object({
+  offer_id: uuidSchema.optional(),
+}).strict();
+
+// Billing consumption query params
+export const billingConsumptionQuerySchema = z.object({
+  offer_id: uuidSchema.optional(),
+  from: z.string().optional(), // Accept ISO date string
+  to: z.string().optional(), // Accept ISO date string
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+}).strict();
+
+// Settings query params
+export const settingsQuerySchema = z.object({}).strict();
+
+// Storage init body schema
+export const storageInitBodySchema = z.object({
+  tenant_id: uuidSchema,
+  offer_id: uuidSchema.optional(),
+}).strict();
+
+// Integrations query params
+export const integrationsTestBodySchema = z.object({
+  type: z.enum(["TOKKO", "GOOGLE_SHEETS", "WEBHOOK"]),
+  config: z.record(z.unknown()),
+  tenant_id: uuidSchema,
+}).strict();
+
+// Google integrations query params
+export const googleSpreadsheetsQuerySchema = z.object({
+  tenant_id: uuidSchema,
+}).strict();
+
+// Meta integrations query params
+// Note: ad-status uses ad_ids as comma-separated, validated manually
+export const metaAdsQuerySchema = z.object({
+  account_id: z.string().optional(),
+}).strict();
+
+export const metaConfigBodySchema = z.object({
+  selected_ad_accounts: z.array(z.string()).optional(),
+  selected_pages: z.array(z.string()).optional(),
+  selected_whatsapp_accounts: z.array(z.string()).optional(),
+}).strict();
+
+// Test endpoints query params
+export const testCheckConfigQuerySchema = z.object({}).strict();
+
+export const testTriggerConversationBodySchema = z.object({
+  leadOfferId: uuidSchema,
+}).strict();
+
+// Upload logo - multipart form validation (validated manually)
+// Note: For multipart, we validate manually in the handler
+
+// ============================================
+// Additional API Endpoint Schemas
+// ============================================
+
+// RAG ingestion body schema
+export const ragIngestBodySchema = z.object({
+  tenant_id: uuidSchema,
+  offer_id: uuidSchema.optional(),
+  source_type: z.enum(['URL', 'PDF', 'MANUAL']),
+  source_url: urlSchema.optional(),
+  source_file: z.string().optional(), // Base64 or file path
+  content: z.string().optional(),
+  title: z.string().max(500).optional(),
+  metadata: z.record(z.unknown()).optional(),
+}).strict();
+
+// RAG reindex body schema
+export const ragReindexBodySchema = z.object({
+  source_id: uuidSchema,
+  tenant_id: uuidSchema.optional(),
+}).strict();
+
+// GDPR delete body schema
+export const gdprDeleteBodySchema = z.object({
+  lead_id: uuidSchema,
+  reason: z.string().min(1).max(500), // Required for audit trail
+}).strict();
+
+// Billing checkout body schema
+export const billingCheckoutBodySchema = z.object({
+  quantity: z.number().int().min(1).max(10000),
+  return_url: urlSchema.optional(),
+  success_url: urlSchema.optional(),
+  cancel_url: urlSchema.optional(),
+}).strict();
+
+// Billing checkout session creation (server validates package_id)
+export const billingCheckoutSessionBodySchema = z.object({
+  tenant_id: uuidSchema,
+  package_id: z.string().min(1),
+}).strict();
+
+// Trial credits body schema
+export const trialCreditsBodySchema = z.object({
+  amount: z.number().int().min(1).max(10000),
+  description: z.string().max(500).optional(),
+}).strict();
+
+// Tenant notify approval body schema
+export const tenantNotifyApprovalBodySchema = z.object({
+  tenant_id: uuidSchema,
+  tenant_name: z.string().min(1).max(200),
+  emails: z.array(z.string().email()).min(1),
+  action: z.enum(['APPROVED', 'REJECTED']).optional(),
+  message: z.string().max(1000).optional(),
+}).strict();
+
+// Testing conversation (init) body schema (legacy / alternate testing flow)
+export const testingConversationInitBodySchema = z.object({
+  tenant_id: uuidSchema,
+  offer_id: uuidSchema.optional(),
+  lead_phone: phoneSchema,
+  lead_name: z.string().max(100).optional(),
+  initial_message: z.string().max(1000).optional(),
+}).strict();
+
+// Testing RAG body schema
+export const testingRagBodySchema = z.object({
+  tenant_id: uuidSchema,
+  query: z.string().min(1).max(1000),
+  offer_id: uuidSchema.optional(),
+  limit: z.number().int().min(1).max(20).default(5),
+}).strict();
+
+// Testing conversation body schema
+export const testingConversationBodySchema = z.object({
+  tenant_id: uuidSchema,
+  offer_id: uuidSchema.optional(),
+  message: z.string().min(1).max(5000),
+  conversation_history: z.array(z.object({
+    role: z.enum(['user', 'assistant']),
+    content: z.string(),
+  })).optional(),
+}).strict();
+
+// Tokko sync body schema
+export const tokkoSyncBodySchema = z.object({
+  tenant_id: uuidSchema,
+  force_full_sync: z.boolean().optional().default(false),
+}).strict();
+
+// Google disconnect body schema
+export const googleDisconnectBodySchema = z.object({
+  tenant_id: uuidSchema,
+}).strict();
+
+// Meta costs body schema
+export const metaCostsBodySchema = z.object({
+  tenant_id: uuidSchema,
+  account_id: z.string().min(1),
+  date_start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  date_end: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  force_refresh: z.boolean().optional().default(false),
+}).strict();
+
+// Google spreadsheets POST body schema
+export const googleSpreadsheetsPostBodySchema = z.object({
+  tenant_id: uuidSchema,
+  name: z.string().max(200).optional(),
+}).strict();

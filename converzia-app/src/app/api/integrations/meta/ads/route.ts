@@ -5,6 +5,10 @@ import {
   getAdAccounts,
   MetaOAuthTokens,
 } from "@/lib/services/meta-ads";
+import { validateQuery, metaAdsQuerySchema } from "@/lib/validation/schemas";
+import { handleApiError, handleUnauthorized, handleValidationError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
+import { logger } from "@/lib/utils/logger";
+import type { MetaIntegrationConfig } from "@/types/supabase-helpers";
 
 // GET /api/integrations/meta/ads - List ads from connected Meta account
 // The Meta connection is global (Admin's account), not per-tenant
@@ -19,11 +23,20 @@ export async function GET(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return handleUnauthorized("Debes iniciar sesión para ver los anuncios");
     }
 
-    const searchParams = request.nextUrl.searchParams;
-    const accountId = searchParams.get("account_id");
+    // Validate query params
+    const { searchParams } = new URL(request.url);
+    const queryValidation = validateQuery(searchParams, metaAdsQuerySchema);
+    
+    if (!queryValidation.success) {
+      return handleValidationError(new Error(queryValidation.error), {
+        validationError: queryValidation.error,
+      });
+    }
+    
+    const accountId = queryValidation.data.account_id || null;
 
     // Look for a global Meta Ads integration (any active one - Admin's connection)
     // First try to find one without tenant_id (global), then fall back to any active one
@@ -50,40 +63,39 @@ export async function GET(request: NextRequest) {
         .maybeSingle();
 
       if (integrationError) {
-        console.error("Error fetching Meta integration:", integrationError);
-        return NextResponse.json(
-          { error: "Failed to fetch integration" },
-          { status: 500 }
-        );
+        return handleApiError(integrationError, {
+          code: ErrorCode.DATABASE_ERROR,
+          status: 500,
+          message: "No se pudo obtener la integración",
+          context: { operation: "get_meta_ads" },
+        });
       }
       integration = anyIntegration;
     }
 
     if (!integration) {
-      return NextResponse.json(
-        { error: "Meta Ads no conectado. Conectá tu cuenta de Meta desde Configuración.", not_connected: true },
-        { status: 404 }
-      );
+      return handleApiError(new Error("Meta Ads not connected"), {
+        code: ErrorCode.NOT_FOUND,
+        status: 404,
+        message: "Meta Ads no conectado. Conectá tu cuenta de Meta desde Configuración.",
+        context: { not_connected: true },
+      });
     }
 
     const tokens = integration.oauth_tokens as MetaOAuthTokens;
 
     if (!tokens?.access_token) {
-      return NextResponse.json(
-        { error: "No access token found" },
-        { status: 400 }
-      );
+      return handleValidationError(new Error("No access token"), {
+        issue: "missing_token",
+      });
     }
 
     // Check if token is expired
     if (tokens.expires_at && Date.now() > tokens.expires_at) {
-      return NextResponse.json(
-        { error: "Access token expired. Please reconnect Meta." },
-        { status: 401 }
-      );
+      return handleUnauthorized("El token de acceso expiró. Por favor reconectá Meta.");
     }
 
-    const config = integration.config as any;
+    const config = integration.config as MetaIntegrationConfig | null;
     const selectedAccountId = config?.selected_ad_account_id;
 
     // If no account_id specified, return info about selected account or list of accounts
@@ -109,12 +121,17 @@ export async function GET(request: NextRequest) {
     const targetAccountId = accountId;
 
     // Fetch campaign structure for specified account
-    console.log("Fetching campaigns for account:", targetAccountId);
+    logger.info("Fetching campaigns for account", { accountId: targetAccountId });
     const { campaigns, adsets, ads } = await getCampaignStructure(
       targetAccountId,
       tokens.access_token
     );
-    console.log("Results:", { campaigns: campaigns.length, adsets: adsets.length, ads: ads.length });
+    logger.info("Results", { 
+      accountId: targetAccountId,
+      campaigns: campaigns.length, 
+      adsets: adsets.length, 
+      ads: ads.length 
+    });
 
     // Organize into hierarchical structure
     const campaignMap = new Map<string, {
@@ -173,12 +190,13 @@ export async function GET(request: NextRequest) {
         ads: ads.length,
       },
     });
-  } catch (error: any) {
-    console.error("Error fetching Meta ads:", error);
-    return NextResponse.json(
-      { error: error.message || "Failed to fetch ads" },
-      { status: 500 }
-    );
+  } catch (error) {
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      status: 500,
+      message: "Error al obtener anuncios de Meta",
+      context: { operation: "get_meta_ads" },
+    });
   }
 }
 

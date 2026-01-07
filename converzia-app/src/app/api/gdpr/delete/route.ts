@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
+import { queryWithTimeout, rpcWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { withRateLimit, RATE_LIMITS } from "@/lib/security/rate-limit";
+import { isAdminProfile } from "@/types/supabase-helpers";
+import { logger } from "@/lib/utils/logger";
+import { handleApiError, handleUnauthorized, handleForbidden, handleValidationError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
+import { logGdprDeletion } from "@/lib/monitoring/audit";
+import { validateBody, gdprDeleteBodySchema } from "@/lib/validation/schemas";
+import { z } from "zod";
+import { unsafeRpc } from "@/lib/supabase/unsafe-rpc";
 
 // ============================================
 // GDPR Right to Erasure (Delete) Endpoint
@@ -22,7 +29,7 @@ export async function POST(request: NextRequest) {
     // Verify user is authenticated
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return handleUnauthorized("Debes iniciar sesión para realizar esta acción");
     }
 
     // Check if user is Converzia admin (only admins can delete PII)
@@ -36,65 +43,92 @@ export async function POST(request: NextRequest) {
       "check admin status for GDPR delete"
     );
 
-    if (!(profile as any)?.is_converzia_admin) {
-      return NextResponse.json(
-        { error: "Admin access required for data deletion" },
-        { status: 403 }
-      );
+    if (!isAdminProfile(profile as { is_converzia_admin?: boolean } | null)) {
+      return handleForbidden("Solo administradores de Converzia pueden eliminar datos PII");
     }
 
-    const body = await request.json();
-    const { lead_id, reason } = body;
-
-    if (!lead_id) {
-      return NextResponse.json({ error: "lead_id is required" }, { status: 400 });
+    // Validate request body
+    const bodyValidation = await validateBody(request, gdprDeleteBodySchema.extend({
+      reason: z.string().min(1, 'Reason is required for audit trail'),
+    }));
+    
+    if (!bodyValidation.success) {
+      return handleValidationError(new Error(bodyValidation.error), {
+        validationError: bodyValidation.error,
+      });
     }
+    
+    const { lead_id, reason } = bodyValidation.data;
 
-    if (!reason) {
-      return NextResponse.json(
-        { error: "reason is required for audit trail" },
-        { status: 400 }
-      );
-    }
+    // Get lead data before deletion for audit log
+    type LeadPiiData = { id: string; phone: string | null; full_name: string | null; email: string | null; tenant_id: string };
+    const { data: leadBeforeDelete } = await queryWithTimeout(
+      admin
+        .from("leads")
+        .select("id, phone, full_name, email, tenant_id")
+        .eq("id", lead_id)
+        .single(),
+      10000,
+      "get lead before GDPR deletion"
+    ) as { data: LeadPiiData | null };
 
     // Call the GDPR deletion function
-    const { data, error } = await queryWithTimeout(
-      (admin as any).rpc("delete_lead_pii", {
+    const { data, error } = await rpcWithTimeout<{ success: boolean }>(
+      unsafeRpc<{ success: boolean }>(admin, "delete_lead_pii", {
         p_lead_id: lead_id,
         p_reason: reason,
         p_deleted_by: user.id,
       }),
       30000, // Longer timeout for deletion
-      "execute GDPR lead deletion"
+      "execute GDPR lead deletion",
+      true // Enable retry
     );
 
     if (error) {
-      console.error("GDPR deletion error:", error);
-      return NextResponse.json(
-        { error: "Failed to delete lead data" },
-        { status: 500 }
-      );
+      return handleApiError(error, {
+        code: ErrorCode.DATABASE_ERROR,
+        status: 500,
+        message: "No se pudo eliminar los datos del lead",
+        context: { lead_id, reason, deleted_by: user.id },
+        sendToSentry: true, // GDPR operations are critical
+      });
     }
 
     // Log the deletion for audit
-    console.log("GDPR: Lead PII deleted", {
+    logger.info("GDPR: Lead PII deleted", {
       lead_id,
       reason,
       deleted_by: user.id,
       deleted_at: new Date().toISOString(),
     });
 
-    return NextResponse.json({
-      success: true,
-      message: "Lead PII data has been deleted",
-      lead_id,
-    });
-  } catch (error) {
-    console.error("GDPR delete error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+    // Log audit event
+    if (leadBeforeDelete) {
+      await logGdprDeletion(
+        user.id,
+        lead_id,
+        reason,
+        {
+          phone: leadBeforeDelete.phone,
+          full_name: leadBeforeDelete.full_name,
+          email: leadBeforeDelete.email,
+          tenant_id: leadBeforeDelete.tenant_id,
+        },
+        request
+      );
+    }
+
+    return apiSuccess(
+      { lead_id },
+      "Datos PII del lead eliminados correctamente"
     );
+  } catch (error) {
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      status: 500,
+      message: "Ocurrió un error al eliminar los datos",
+      context: { operation: "gdpr_delete" },
+    });
   }
 }
 
@@ -105,17 +139,16 @@ export async function GET(request: NextRequest) {
   // Verify user is authenticated
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return handleUnauthorized("Debes iniciar sesión para consultar el estado de eliminación");
   }
 
   const { searchParams } = new URL(request.url);
   const lead_id = searchParams.get("lead_id");
 
   if (!lead_id) {
-    return NextResponse.json(
-      { error: "lead_id query parameter required" },
-      { status: 400 }
-    );
+    return handleValidationError(new Error("lead_id missing"), {
+      validationError: "El parámetro lead_id es requerido",
+    });
   }
 
   // Check if lead exists and if PII was deleted
@@ -130,19 +163,32 @@ export async function GET(request: NextRequest) {
   );
 
   if (!lead) {
-    return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+    return handleApiError(new Error("Lead not found"), {
+      code: ErrorCode.NOT_FOUND,
+      status: 404,
+      message: "No se encontró el lead solicitado",
+      context: { lead_id },
+    });
   }
 
   // Check if lead data was anonymized
-  const isDeleted = (lead as any).phone?.startsWith("DELETED_") || 
-                    (lead as any).full_name === "[ELIMINADO]";
+  const typedLead = lead as {
+    phone?: string;
+    full_name?: string | null;
+    opted_out?: boolean;
+    opted_out_at?: string | null;
+    opt_out_reason?: string | null;
+  };
+  
+  const isDeleted = typedLead.phone?.startsWith("DELETED_") || 
+                    typedLead.full_name === "[ELIMINADO]";
 
   return NextResponse.json({
     lead_id,
     pii_deleted: isDeleted,
-    opted_out: (lead as any).opted_out,
-    opted_out_at: (lead as any).opted_out_at,
-    reason: (lead as any).opt_out_reason,
+    opted_out: typedLead.opted_out,
+    opted_out_at: typedLead.opted_out_at,
+    reason: typedLead.opt_out_reason,
   });
 }
 

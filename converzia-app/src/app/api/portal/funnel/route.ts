@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
+import { logger } from "@/lib/utils/logger";
+import { handleApiError, handleUnauthorized, handleForbidden, handleValidationError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
+import type { MembershipWithRole } from "@/types/supabase-helpers";
+import { validateQuery, funnelQuerySchema } from "@/lib/validation/schemas";
 
 /**
  * GET /api/portal/funnel
@@ -18,7 +22,7 @@ export async function GET(request: NextRequest) {
     // Get authenticated user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+      return handleUnauthorized("Debes iniciar sesión para ver estadísticas del funnel");
     }
     
     // Get user's active tenant membership
@@ -33,19 +37,25 @@ export async function GET(request: NextRequest) {
       "get tenant membership"
     );
     
-    const membership = membershipData as { tenant_id: string; role: string } | null;
+    const membership = membershipData as MembershipWithRole | null;
     
     if (!membership) {
-      return NextResponse.json({ error: "No tiene acceso a ningún tenant" }, { status: 403 });
+      return handleForbidden("No tienes acceso a ningún tenant activo");
     }
     
     const tenantId = membership.tenant_id;
     
-    // Parse query params
+    // Validate query params
     const { searchParams } = new URL(request.url);
-    const offerId = searchParams.get("offer_id");
-    const fromDate = searchParams.get("from");
-    const toDate = searchParams.get("to");
+    const queryValidation = validateQuery(searchParams, funnelQuerySchema);
+    
+    if (!queryValidation.success) {
+      return handleValidationError(new Error(queryValidation.error), {
+        validationError: queryValidation.error,
+      });
+    }
+    
+    const { offer_id: offerId, from: fromDate, to: toDate } = queryValidation.data;
     
     // Get funnel stats
     if (offerId) {
@@ -62,8 +72,12 @@ export async function GET(request: NextRequest) {
       );
       
       if (offerError) {
-        console.error("Error fetching offer funnel:", offerError);
-        return NextResponse.json({ error: "Error al obtener estadísticas" }, { status: 500 });
+        return handleApiError(offerError, {
+          code: ErrorCode.DATABASE_ERROR,
+          status: 500,
+          message: "No se pudieron obtener las estadísticas del funnel",
+          context: { offerId, tenantId },
+        });
       }
       
       // Get delivered leads for this offer (with full details)
@@ -80,12 +94,9 @@ export async function GET(request: NextRequest) {
         "get delivered leads"
       );
       
-      return NextResponse.json({
-        success: true,
-        data: {
-          funnel: offerFunnel,
-          deliveredLeads: deliveredLeads || [],
-        }
+      return apiSuccess({
+        funnel: offerFunnel,
+        deliveredLeads: deliveredLeads || [],
       });
     } else {
       // Aggregated tenant funnel
@@ -100,8 +111,12 @@ export async function GET(request: NextRequest) {
       );
       
       if (tenantError) {
-        console.error("Error fetching tenant funnel:", tenantError);
-        return NextResponse.json({ error: "Error al obtener estadísticas" }, { status: 500 });
+        return handleApiError(tenantError, {
+          code: ErrorCode.DATABASE_ERROR,
+          status: 500,
+          message: "No se pudieron obtener las estadísticas del funnel",
+          context: { tenantId },
+        });
       }
       
       // Get per-offer breakdown
@@ -115,20 +130,18 @@ export async function GET(request: NextRequest) {
         "get offer breakdown"
       );
       
-      return NextResponse.json({
-        success: true,
-        data: {
-          funnel: tenantFunnel,
-          offers: offerBreakdown || [],
-        }
+      return apiSuccess({
+        funnel: tenantFunnel,
+        offers: offerBreakdown || [],
       });
     }
   } catch (error) {
-    console.error("Funnel API error:", error);
-    return NextResponse.json(
-      { error: "Error interno del servidor" },
-      { status: 500 }
-    );
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      status: 500,
+      message: "Ocurrió un error al obtener estadísticas del funnel",
+      context: { operation: "get_funnel_stats" },
+    });
   }
 }
 

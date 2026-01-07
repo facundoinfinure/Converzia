@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { withCronAuth } from "@/lib/security/cron-auth";
+import { logger } from "@/lib/utils/logger";
+import { handleApiError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
+import { sendLowCreditsAlert } from "@/lib/services/email";
 
 // ============================================
 // Cron Job: Credit Alerts
@@ -38,23 +41,38 @@ export async function GET(request: NextRequest) {
     );
 
     if (error) {
-      console.error("Error fetching low credit tenants:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return handleApiError(error, {
+        code: ErrorCode.DATABASE_ERROR,
+        status: 500,
+        message: "Error al obtener tenants con créditos bajos",
+        context: { operation: "credit_alerts_fetch" },
+      });
     }
 
-    const tenants = (lowCreditTenants as any) || [];
+    interface LowCreditTenantRow {
+      tenant_id: string;
+      current_balance: number;
+      tenants?: {
+        name: string;
+        contact_email: string | null;
+      } | Array<{
+        name: string;
+        contact_email: string | null;
+      }> | null;
+    }
+    const tenants = (lowCreditTenants || []) as LowCreditTenantRow[];
     if (tenants.length === 0) {
-      return NextResponse.json({ alerted: 0, message: "No tenants with low credits" });
+      return apiSuccess({ alerted: 0 }, "No hay tenants con créditos bajos");
     }
 
-    console.log(`Found ${tenants.length} tenants with low credits`);
+    logger.info("Found tenants with low credits", { count: tenants.length });
 
     // In production, send emails to tenant admins
     // For now, just log and track in events
     let alertCount = 0;
 
     for (const tenant of tenants) {
-      const tenantInfo = tenant.tenants as any;
+      const tenantInfo = Array.isArray(tenant.tenants) ? tenant.tenants[0] : tenant.tenants;
 
       // Log event
       await queryWithTimeout(
@@ -73,28 +91,46 @@ export async function GET(request: NextRequest) {
         "insert credit alert event"
       );
 
-      // TODO: Send email notification
-      // await sendLowCreditEmail(tenantInfo.contact_email, {
-      //   tenant_name: tenantInfo.name,
-      //   current_balance: tenant.current_balance,
-      // });
+      // Send email notification if contact email is available
+      if (tenantInfo?.contact_email) {
+        try {
+          await sendLowCreditsAlert(
+            tenantInfo.contact_email,
+            tenantInfo.name || "tu cuenta",
+            tenant.current_balance
+          );
+          logger.info("Low credits email sent", {
+            tenant_id: tenant.tenant_id,
+            email: tenantInfo.contact_email,
+            balance: tenant.current_balance,
+          });
+        } catch (emailError) {
+          logger.error("Failed to send low credits email", emailError, {
+            tenant_id: tenant.tenant_id,
+            email: tenantInfo.contact_email,
+          });
+        }
+      } else {
+        logger.warn("No contact email for tenant", { tenant_id: tenant.tenant_id });
+      }
 
       alertCount++;
     }
 
-    return NextResponse.json({
+    return apiSuccess({
       alerted: alertCount,
       details: tenants.map((t: { tenant_id: string; current_balance: number }) => ({
         tenant_id: t.tenant_id,
         balance: t.current_balance,
       })),
-    });
+    }, `Se alertó a ${alertCount} tenants con créditos bajos`);
   } catch (error) {
-    console.error("Cron credit-alerts error:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 }
-    );
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      status: 500,
+      message: "Error en el cron de alertas de créditos",
+      context: { operation: "credit_alerts_cron" },
+    });
   }
 }
 

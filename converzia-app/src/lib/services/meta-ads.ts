@@ -3,6 +3,8 @@
  * Handles interactions with Meta (Facebook) Marketing API
  */
 
+import { logger } from "@/lib/utils/logger";
+
 const META_API_VERSION = "v18.0";
 const META_API_BASE = `https://graph.facebook.com/${META_API_VERSION}`;
 
@@ -97,11 +99,12 @@ async function metaApiRequest<T>(
     url.searchParams.set(key, value);
   });
 
-  const response = await fetch(url.toString());
+  const { fetchWithTimeout } = await import("@/lib/utils/fetch-with-timeout");
+  const response = await fetchWithTimeout(url.toString(), {}, 30000);
   const data = await response.json();
 
   if (data.error) {
-    console.error("Meta API Error:", data.error);
+    logger.error("Meta API Error", data.error, { url: url.toString() });
     throw new Error(data.error.message || "Meta API request failed");
   }
 

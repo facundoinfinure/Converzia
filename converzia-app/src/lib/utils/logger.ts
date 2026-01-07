@@ -117,9 +117,12 @@ class Logger {
   /**
    * Debug-level logging (only in development)
    */
-  debug(message: string, context?: LogContext): void {
+  debug(message: string, context?: LogContext): void;
+  debug(message: string, error?: unknown, context?: LogContext): void;
+  debug(message: string, arg2?: unknown, arg3?: LogContext): void {
     if (isDevelopment) {
-      const mergedContext = { ...this.context, ...context };
+      const { error, context } = normalizeArgs(arg2, arg3);
+      const mergedContext = { ...this.context, ...context, ...(error ? { error } : {}) };
       console.debug(formatLog('debug', message, mergedContext));
     }
   }
@@ -127,8 +130,11 @@ class Logger {
   /**
    * Info-level logging
    */
-  info(message: string, context?: LogContext): void {
-    const mergedContext = { ...this.context, ...context };
+  info(message: string, context?: LogContext): void;
+  info(message: string, error?: unknown, context?: LogContext): void;
+  info(message: string, arg2?: unknown, arg3?: LogContext): void {
+    const { error, context } = normalizeArgs(arg2, arg3);
+    const mergedContext = { ...this.context, ...context, ...(error ? { error } : {}) };
 
     if (isDevelopment) {
       console.info(formatLog('info', message, mergedContext));
@@ -140,8 +146,11 @@ class Logger {
   /**
    * Warning-level logging
    */
-  warn(message: string, context?: LogContext): void {
-    const mergedContext = { ...this.context, ...context };
+  warn(message: string, context?: LogContext): void;
+  warn(message: string, error?: unknown, context?: LogContext): void;
+  warn(message: string, arg2?: unknown, arg3?: LogContext): void {
+    const { error, context } = normalizeArgs(arg2, arg3);
+    const mergedContext = { ...this.context, ...context, ...(error ? { error } : {}) };
 
     if (isDevelopment) {
       console.warn(formatLog('warn', message, mergedContext));
@@ -189,6 +198,49 @@ class Logger {
         break;
     }
   }
+
+  /**
+   * Exception logging (alias of error) used across the codebase.
+   * Keeps call-sites consistent: logger.exception("msg", error, context)
+   */
+  exception(message: string, error?: unknown, context?: LogContext): void {
+    this.error(message, error, context);
+  }
+
+  /**
+   * Security-focused logging (convenience helper).
+   * Keeps call-sites consistent: logger.security("event", context)
+   */
+  security(message: string, context?: LogContext): void {
+    this.warn(`[SECURITY] ${message}`, context);
+  }
+}
+
+function normalizeArgs(
+  arg2?: unknown,
+  arg3?: LogContext
+): { error?: unknown; context?: LogContext } {
+  // logger.info(message, context)
+  if (arg2 && typeof arg2 === 'object' && arg3 === undefined && !isErrorLike(arg2)) {
+    return { context: arg2 as LogContext };
+  }
+
+  // logger.info(message, error, context)
+  if (arg3 !== undefined) {
+    return { error: arg2, context: arg3 };
+  }
+
+  // logger.info(message, error)
+  if (arg2 !== undefined && (isErrorLike(arg2) || typeof arg2 !== 'object')) {
+    return { error: arg2 };
+  }
+
+  return {};
+}
+
+function isErrorLike(value: unknown): value is { name?: unknown; message?: unknown; stack?: unknown } {
+  if (!value || typeof value !== 'object') return false;
+  return 'message' in (value as Record<string, unknown>) || 'stack' in (value as Record<string, unknown>);
 }
 
 // Default logger instance

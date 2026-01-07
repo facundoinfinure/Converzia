@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { google } from "googleapis";
 import { createClient } from "@/lib/supabase/server";
 import type { GoogleOAuthTokens } from "@/types";
+import {
+  validateQuery,
+  validateBody,
+  googleSpreadsheetsQuerySchema,
+  googleSpreadsheetsPostBodySchema,
+} from "@/lib/validation/schemas";
+import { handleApiError, handleUnauthorized, handleValidationError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
+import { logger } from "@/lib/utils/logger";
 
 // ============================================
 // Google Spreadsheets - List & Create
@@ -23,30 +31,26 @@ interface SpreadsheetInfo {
  */
 export async function GET(request: NextRequest) {
   try {
-    const searchParams = request.nextUrl.searchParams;
-    const tenantId = searchParams.get("tenant_id");
-
-    if (!tenantId) {
-      console.error("[Google Spreadsheets] Missing tenant_id in request");
-      return NextResponse.json(
-        { error: "tenant_id es requerido" },
-        { status: 400 }
-      );
+    // Validate query params
+    const { searchParams } = new URL(request.url);
+    const queryValidation = validateQuery(searchParams, googleSpreadsheetsQuerySchema);
+    
+    if (!queryValidation.success) {
+      return handleValidationError(new Error(queryValidation.error), {
+        validationError: queryValidation.error,
+      });
     }
+    
+    const { tenant_id: tenantId } = queryValidation.data;
 
     // Validate environment variables first
     if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
-      console.error("[Google Spreadsheets] Missing environment variables:", {
-        hasClientId: !!GOOGLE_CLIENT_ID,
-        hasClientSecret: !!GOOGLE_CLIENT_SECRET,
+      return handleApiError(new Error("Missing Google OAuth config"), {
+        code: ErrorCode.INTERNAL_ERROR,
+        status: 503,
+        message: "Google OAuth no está configurado en el servidor",
+        context: { connected: false },
       });
-      return NextResponse.json(
-        { 
-          error: "Google OAuth no está configurado en el servidor", 
-          connected: false 
-        },
-        { status: 503 } // Service Unavailable - más apropiado que 500
-      );
     }
 
     // Authenticate user
@@ -54,18 +58,10 @@ export async function GET(request: NextRequest) {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     
     if (authError || !user) {
-      console.error("[Google Spreadsheets] Auth error:", {
-        error: authError,
-        hasUser: !!user,
-        tenantId,
-      });
-      return NextResponse.json({ 
-        error: "No autorizado",
-        connected: false 
-      }, { status: 401 });
+      return handleUnauthorized("Debes iniciar sesión para acceder a Google Spreadsheets");
     }
     
-    console.log("[Google Spreadsheets] User authenticated:", {
+    logger.info("[Google Spreadsheets] User authenticated", {
       userId: user.id,
       email: user.email,
       tenantId,
@@ -81,10 +77,9 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (membershipError || !membership) {
-      console.error("[Google Spreadsheets] Membership check failed:", {
+      logger.error("[Google Spreadsheets] Membership check failed", membershipError, {
         userId: user.id,
         tenantId,
-        error: membershipError,
       });
       return NextResponse.json({ 
         error: "No tiene acceso a este tenant",
@@ -92,7 +87,7 @@ export async function GET(request: NextRequest) {
       }, { status: 403 });
     }
 
-    console.log("[Google Spreadsheets] Membership verified:", {
+    logger.info("[Google Spreadsheets] Membership verified", {
       userId: user.id,
       tenantId,
       role: membership.role,
@@ -107,9 +102,8 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (integrationError) {
-      console.error("[Google Spreadsheets] Integration query failed:", {
+      logger.error("[Google Spreadsheets] Integration query failed", integrationError, {
         code: integrationError.code,
-        message: integrationError.message,
         details: integrationError.details,
         hint: integrationError.hint,
         tenantId,
@@ -131,7 +125,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (!integration) {
-      console.warn("[Google Spreadsheets] No integration found for tenant:", tenantId);
+      logger.warn("[Google Spreadsheets] No integration found for tenant", { tenantId });
       return NextResponse.json(
         { error: "No hay cuenta de Google conectada", connected: false },
         { status: 401 }
@@ -212,7 +206,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    console.log("[Google Spreadsheets] Successfully listed spreadsheets:", {
+    logger.info("[Google Spreadsheets] Successfully listed spreadsheets", {
       tenantId,
       count: spreadsheets.length,
       email: tokens.email,
@@ -225,10 +219,8 @@ export async function GET(request: NextRequest) {
       currentConfig: integration.config,
     });
   } catch (error: any) {
-    console.error("[Google Spreadsheets] Unexpected error:", {
-      error: error instanceof Error ? error.message : error,
+    logger.exception("[Google Spreadsheets] Unexpected error", error, {
       code: error?.code,
-      stack: error instanceof Error ? error.stack : undefined,
       tenantId: request.nextUrl.searchParams.get("tenant_id"),
     });
     
@@ -266,15 +258,17 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { tenant_id, name } = body;
-
-    if (!tenant_id) {
+    // Validate request body
+    const bodyValidation = await validateBody(request, googleSpreadsheetsPostBodySchema);
+    
+    if (!bodyValidation.success) {
       return NextResponse.json(
-        { error: "tenant_id es requerido" },
+        { error: bodyValidation.error },
         { status: 400 }
       );
     }
+    
+    const { tenant_id, name } = bodyValidation.data;
 
     // Get OAuth tokens from database
     const supabase = await createClient();
@@ -372,11 +366,12 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("Error creating spreadsheet:", error);
-    return NextResponse.json(
-      { error: "Error al crear spreadsheet" },
-      { status: 500 }
-    );
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      status: 500,
+      message: "Error al crear spreadsheet",
+      context: { operation: "create_spreadsheet" },
+    });
   }
 }
 
@@ -428,7 +423,7 @@ async function getAuthenticatedClient(
 
       oauth2Client.setCredentials(credentials);
     } catch (error) {
-      console.error("Error refreshing Google token:", error);
+      logger.exception("Error refreshing Google token", error, { integrationId });
       return null;
     }
   }

@@ -3,6 +3,9 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { processDelivery } from "@/lib/services/delivery";
 import { withCronAuth } from "@/lib/security/cron-auth";
+import { handleApiError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
+import type { DeliveryWithRelations } from "@/types/supabase-helpers";
+import { logger } from "@/lib/utils/logger";
 
 // ============================================
 // Cron Job: Process Pending Deliveries
@@ -34,16 +37,20 @@ export async function GET(request: NextRequest) {
     );
 
     if (error) {
-      console.error("Error fetching pending deliveries:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return handleApiError(error, {
+        code: ErrorCode.DATABASE_ERROR,
+        status: 500,
+        message: "Error al obtener entregas pendientes",
+        context: { operation: "process_deliveries_fetch" },
+      });
     }
 
-    const deliveries = (pendingDeliveries as any) || [];
+    const deliveries = (pendingDeliveries as DeliveryWithRelations[]) || [];
     if (deliveries.length === 0) {
-      return NextResponse.json({ processed: 0, message: "No pending deliveries" });
+      return apiSuccess({ processed: 0 }, "No hay entregas pendientes");
     }
 
-    console.log(`Processing ${deliveries.length} pending deliveries`);
+    logger.info(`Processing ${deliveries.length} pending deliveries`);
 
     let successCount = 0;
     let errorCount = 0;
@@ -54,7 +61,7 @@ export async function GET(request: NextRequest) {
         await processDelivery(delivery.id);
         successCount++;
       } catch (err) {
-        console.error(`Error processing delivery ${delivery.id}:`, err);
+        logger.error(`Error processing delivery ${delivery.id}`, err);
         errorCount++;
 
         // Increment retry count
@@ -72,17 +79,18 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({
+    return apiSuccess({
       processed: deliveries.length,
       success: successCount,
       errors: errorCount,
-    });
+    }, `Procesadas ${successCount}/${deliveries.length} entregas`);
   } catch (error) {
-    console.error("Cron process-deliveries error:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 }
-    );
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      status: 500,
+      message: "Error en el cron de procesamiento de entregas",
+      context: { operation: "process_deliveries_cron" },
+    });
   }
 }
 

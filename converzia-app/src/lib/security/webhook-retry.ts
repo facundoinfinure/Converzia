@@ -2,6 +2,8 @@
 // Webhook Retry Logic with Exponential Backoff
 // ============================================
 
+import { logger } from "@/lib/utils/logger";
+
 interface RetryOptions {
   maxRetries?: number;
   initialDelayMs?: number;
@@ -66,8 +68,10 @@ export function logWebhookRetry(
   maxRetries: number,
   error: Error | unknown
 ): void {
-  console.warn(`[Webhook Retry] ${webhookType} - Attempt ${attempt}/${maxRetries}`, {
-    error: error instanceof Error ? error.message : String(error),
+  logger.warn(`[Webhook Retry] ${webhookType} - Attempt ${attempt}/${maxRetries}`, error instanceof Error ? error : new Error(String(error)), {
+    webhookType,
+    attempt,
+    maxRetries,
     timestamp: new Date().toISOString(),
   });
 }
@@ -80,7 +84,10 @@ export function logWebhookSuccess(
   attempt: number
 ): void {
   if (attempt > 1) {
-    console.info(`[Webhook Success] ${webhookType} - Succeeded after ${attempt} attempts`);
+    logger.info(`[Webhook Success] ${webhookType} - Succeeded after ${attempt} attempts`, {
+      webhookType,
+      attempt,
+    });
   }
 }
 

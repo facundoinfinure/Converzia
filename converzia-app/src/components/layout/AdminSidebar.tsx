@@ -16,6 +16,7 @@ import {
   CreditCard,
   TrendingUp,
   ChevronLeft,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -77,6 +78,7 @@ const operationsNavigation: NavItem[] = [
   { name: "Operaciones", href: "/admin/operations", icon: Activity },
   { name: "Revenue", href: "/admin/revenue", icon: TrendingUp },
   { name: "Facturación", href: "/admin/billing", icon: CreditCard },
+  { name: "Audit Logs", href: "/admin/audit", icon: FileText },
 ];
 
 // Mobile bottom navigation

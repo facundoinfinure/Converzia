@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
+import { logger } from "@/lib/utils/logger";
+import { handleApiError, handleUnauthorized, handleForbidden, handleValidationError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
+import type { MembershipWithRole } from "@/types/supabase-helpers";
+import type { Tenant } from "@/types/database";
 
 const TENANT_LOGOS_BUCKET = "tenant-logos";
 const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
@@ -19,7 +23,7 @@ export async function POST(request: NextRequest) {
     // Get authenticated user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+      return handleUnauthorized("Debes iniciar sesión para subir un logo");
     }
     
     // Get user's active tenant membership
@@ -34,15 +38,15 @@ export async function POST(request: NextRequest) {
       "get tenant membership"
     );
     
-    const membership = membershipData as { tenant_id: string; role: string } | null;
+    const membership = membershipData as MembershipWithRole | null;
     
     if (!membership) {
-      return NextResponse.json({ error: "No tiene acceso a ningún tenant" }, { status: 403 });
+      return handleForbidden("No tienes acceso a ningún tenant activo");
     }
 
     // Check permissions
     if (!["OWNER", "ADMIN"].includes(membership.role)) {
-      return NextResponse.json({ error: "No tenés permisos para subir logos" }, { status: 403 });
+      return handleForbidden("Solo propietarios y administradores pueden subir logos");
     }
     
     const tenantId = membership.tenant_id;
@@ -52,23 +56,26 @@ export async function POST(request: NextRequest) {
     const file = formData.get("file") as File | null;
     
     if (!file) {
-      return NextResponse.json({ error: "No se proporcionó ningún archivo" }, { status: 400 });
+      return handleValidationError(new Error("No file provided"), {
+        validationError: "No se proporcionó ningún archivo",
+      });
     }
     
     // Validate file type
     if (!ALLOWED_MIME_TYPES.includes(file.type)) {
-      return NextResponse.json(
-        { error: "Tipo de archivo no permitido. Solo se permiten JPG, PNG o WebP" },
-        { status: 400 }
-      );
+      return handleValidationError(new Error("Invalid file type"), {
+        validationError: "Tipo de archivo no permitido. Solo se permiten JPG, PNG o WebP",
+        allowedTypes: ALLOWED_MIME_TYPES,
+      });
     }
     
     // Validate file size
     if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json(
-        { error: `El archivo es demasiado grande. Tamaño máximo: ${MAX_FILE_SIZE / 1024 / 1024}MB` },
-        { status: 400 }
-      );
+      return handleValidationError(new Error("File too large"), {
+        validationError: `El archivo es demasiado grande. Tamaño máximo: ${MAX_FILE_SIZE / 1024 / 1024}MB`,
+        maxSize: MAX_FILE_SIZE,
+        fileSize: file.size,
+      });
     }
     
     // Ensure bucket exists
@@ -84,11 +91,12 @@ export async function POST(request: NextRequest) {
       });
       
       if (createError) {
-        console.error("Error creating bucket:", createError);
-        return NextResponse.json(
-          { error: "Error al inicializar storage" },
-          { status: 500 }
-        );
+        return handleApiError(createError, {
+          code: ErrorCode.DATABASE_ERROR,
+          status: 500,
+          message: "No se pudo inicializar el almacenamiento",
+          context: { bucket: TENANT_LOGOS_BUCKET, tenantId },
+        });
       }
     }
     
@@ -110,11 +118,12 @@ export async function POST(request: NextRequest) {
       });
     
     if (uploadError) {
-      console.error("Error uploading file:", uploadError);
-      return NextResponse.json(
-        { error: "Error al subir el archivo" },
-        { status: 500 }
-      );
+      return handleApiError(uploadError, {
+        code: ErrorCode.EXTERNAL_API_ERROR,
+        status: 500,
+        message: "No se pudo subir el archivo",
+        context: { tenantId, filePath, fileSize: file.size },
+      });
     }
     
     // Get public URL
@@ -140,7 +149,10 @@ export async function POST(request: NextRequest) {
     
     if (updateError) {
       // If logo_url column doesn't exist, try storing in settings
-      console.warn("Error updating logo_url, trying settings:", updateError);
+      logger.warn("Error updating logo_url, trying settings", {
+        tenantId,
+        error: updateError instanceof Error ? updateError.message : String(updateError),
+      });
       
       // Get current settings
       const { data: tenantData } = await queryWithTimeout(
@@ -153,7 +165,8 @@ export async function POST(request: NextRequest) {
         "get tenant settings"
       );
       
-      const currentSettings = (tenantData as any)?.settings || {};
+      const typedTenant = tenantData as Tenant | null;
+      const currentSettings = (typedTenant?.settings as Record<string, unknown>) || {};
       const updatedSettings = { ...currentSettings, logo_url: logoUrl };
       
       const { error: settingsError } = await queryWithTimeout(
@@ -169,25 +182,25 @@ export async function POST(request: NextRequest) {
       );
       
       if (settingsError) {
-        console.error("Error updating settings:", settingsError);
-        return NextResponse.json(
-          { error: "Error al guardar el logo" },
-          { status: 500 }
-        );
+        return handleApiError(settingsError, {
+          code: ErrorCode.DATABASE_ERROR,
+          status: 500,
+          message: "No se pudo guardar el logo",
+          context: { tenantId },
+        });
       }
     }
     
-    return NextResponse.json({
-      success: true,
-      data: {
-        logo_url: logoUrl,
-      },
-    });
-  } catch (error) {
-    console.error("Logo upload error:", error);
-    return NextResponse.json(
-      { error: "Error interno del servidor" },
-      { status: 500 }
+    return apiSuccess(
+      { logo_url: logoUrl },
+      "Logo subido correctamente"
     );
+  } catch (error) {
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      status: 500,
+      message: "Ocurrió un error al subir el logo",
+      context: { operation: "upload_logo" },
+    });
   }
 }

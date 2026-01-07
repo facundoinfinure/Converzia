@@ -1,0 +1,608 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Converzia API",
+    "description": "API para la plataforma de calificación de leads Converzia. Esta documentación cubre los endpoints públicos y de administración.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Converzia Team",
+      "email": "support@converzia.com"
+    }
+  },
+  "servers": [
+    {
+      "url": "/api",
+      "description": "API Server"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Health",
+      "description": "Health check endpoints"
+    },
+    {
+      "name": "Auth",
+      "description": "Authentication endpoints"
+    },
+    {
+      "name": "Tenants",
+      "description": "Tenant management (Admin only)"
+    },
+    {
+      "name": "Offers",
+      "description": "Offer management"
+    },
+    {
+      "name": "Billing",
+      "description": "Billing and credit operations"
+    },
+    {
+      "name": "Integrations",
+      "description": "Third-party integrations"
+    },
+    {
+      "name": "Webhooks",
+      "description": "Webhook handlers"
+    },
+    {
+      "name": "Portal",
+      "description": "Tenant portal endpoints"
+    },
+    {
+      "name": "Admin",
+      "description": "Admin-only endpoints"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["Health"],
+        "summary": "Health Check",
+        "description": "Returns the health status of the API and database connection",
+        "operationId": "healthCheck",
+        "responses": {
+          "200": {
+            "description": "Service is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service is unhealthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tenants": {
+      "get": {
+        "tags": ["Tenants"],
+        "summary": "List Tenants",
+        "description": "Get a list of all tenants (Admin only)",
+        "operationId": "listTenants",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": { "type": "integer", "default": 1 }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": { "type": "integer", "default": 20 }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": { "type": "string", "enum": ["ACTIVE", "PAUSED", "SUSPENDED"] }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of tenants",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantListResponse"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      },
+      "post": {
+        "tags": ["Tenants"],
+        "summary": "Create Tenant",
+        "description": "Create a new tenant (Admin only)",
+        "operationId": "createTenant",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateTenantRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Tenant created successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Tenant" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/offers": {
+      "get": {
+        "tags": ["Offers"],
+        "summary": "List Offers",
+        "description": "Get a list of offers for the current tenant",
+        "operationId": "listOffers",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "query",
+            "schema": { "type": "string", "format": "uuid" }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": { "type": "string", "enum": ["ACTIVE", "PAUSED", "ARCHIVED"] }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of offers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Offer" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "post": {
+        "tags": ["Offers"],
+        "summary": "Create Offer",
+        "description": "Create a new offer",
+        "operationId": "createOffer",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateOfferRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Offer created successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Offer" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/billing/checkout": {
+      "post": {
+        "tags": ["Billing"],
+        "summary": "Create Checkout Session",
+        "description": "Create a Stripe checkout session for purchasing credits",
+        "operationId": "createCheckoutSession",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CheckoutRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Checkout session created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "url": { "type": "string", "format": "uri" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/webhooks/meta-leads": {
+      "get": {
+        "tags": ["Webhooks"],
+        "summary": "Meta Webhook Verification",
+        "description": "Endpoint for Meta to verify the webhook subscription",
+        "operationId": "verifyMetaWebhook",
+        "parameters": [
+          {
+            "name": "hub.mode",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "hub.verify_token",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "hub.challenge",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Challenge accepted",
+            "content": {
+              "text/plain": {
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "403": {
+            "description": "Invalid verify token"
+          }
+        }
+      },
+      "post": {
+        "tags": ["Webhooks"],
+        "summary": "Meta Lead Webhook",
+        "description": "Receive lead data from Meta Lead Ads",
+        "operationId": "receiveMetaLead",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/MetaWebhookPayload" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Webhook processed successfully"
+          },
+          "400": {
+            "description": "Invalid payload"
+          }
+        }
+      }
+    },
+    "/portal/funnel": {
+      "get": {
+        "tags": ["Portal"],
+        "summary": "Get Funnel Stats",
+        "description": "Get funnel statistics for the current tenant",
+        "operationId": "getFunnelStats",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Funnel statistics",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/FunnelStats" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/admin/revenue": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "Get Revenue Summary",
+        "description": "Get revenue analytics (Admin only)",
+        "operationId": "getRevenueSummary",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "date_start",
+            "in": "query",
+            "schema": { "type": "string", "format": "date" }
+          },
+          {
+            "name": "date_end",
+            "in": "query",
+            "schema": { "type": "string", "format": "date" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revenue summary",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RevenueSummary" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/admin/audit": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "Get Audit Logs",
+        "description": "Get audit logs (Admin only)",
+        "operationId": "getAuditLogs",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": { "type": "integer", "default": 1 }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": { "type": "integer", "default": 50 }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "entity_type",
+            "in": "query",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Audit logs",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AuditLogResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Supabase JWT token"
+      }
+    },
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "enum": ["healthy", "unhealthy"] },
+          "database": { "type": "string", "enum": ["connected", "disconnected"] },
+          "timestamp": { "type": "string", "format": "date-time" }
+        },
+        "required": ["status", "database"]
+      },
+      "Tenant": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "status": { "type": "string", "enum": ["ACTIVE", "PAUSED", "SUSPENDED"] },
+          "contact_email": { "type": "string", "format": "email" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CreateTenantRequest": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "contact_email": { "type": "string", "format": "email" },
+          "owner_email": { "type": "string", "format": "email" }
+        },
+        "required": ["name", "contact_email"]
+      },
+      "TenantListResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Tenant" }
+          },
+          "pagination": {
+            "type": "object",
+            "properties": {
+              "page": { "type": "integer" },
+              "pageSize": { "type": "integer" },
+              "total": { "type": "integer" }
+            }
+          }
+        }
+      },
+      "Offer": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "tenant_id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "offer_type": { "type": "string", "enum": ["PROPERTY", "AUTO", "LOAN", "INSURANCE"] },
+          "status": { "type": "string", "enum": ["ACTIVE", "PAUSED", "ARCHIVED"] },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CreateOfferRequest": {
+        "type": "object",
+        "properties": {
+          "tenant_id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "offer_type": { "type": "string", "enum": ["PROPERTY", "AUTO", "LOAN", "INSURANCE"] },
+          "description": { "type": "string" }
+        },
+        "required": ["tenant_id", "name", "offer_type"]
+      },
+      "CheckoutRequest": {
+        "type": "object",
+        "properties": {
+          "tenant_id": { "type": "string", "format": "uuid" },
+          "package_id": { "type": "string" },
+          "credits": { "type": "integer", "minimum": 1 }
+        },
+        "required": ["tenant_id", "package_id", "credits"]
+      },
+      "MetaWebhookPayload": {
+        "type": "object",
+        "properties": {
+          "object": { "type": "string" },
+          "entry": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "FunnelStats": {
+        "type": "object",
+        "properties": {
+          "leads_pending_mapping": { "type": "integer" },
+          "leads_pending_contact": { "type": "integer" },
+          "leads_in_chat": { "type": "integer" },
+          "leads_qualified": { "type": "integer" },
+          "leads_delivered": { "type": "integer" },
+          "leads_disqualified": { "type": "integer" }
+        }
+      },
+      "RevenueSummary": {
+        "type": "object",
+        "properties": {
+          "payments_received": { "type": "number" },
+          "leads_ready_value": { "type": "number" },
+          "attributed_spend": { "type": "number" },
+          "profit": { "type": "number" },
+          "margin_pct": { "type": "number" }
+        }
+      },
+      "AuditLogResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string", "format": "uuid" },
+                "action": { "type": "string" },
+                "entity_type": { "type": "string" },
+                "entity_id": { "type": "string" },
+                "created_at": { "type": "string", "format": "date-time" }
+              }
+            }
+          },
+          "pagination": {
+            "type": "object",
+            "properties": {
+              "page": { "type": "integer" },
+              "pageSize": { "type": "integer" },
+              "total": { "type": "integer" }
+            }
+          }
+        }
+      },
+      "ApiError": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "const": false },
+          "error": { "type": "string" },
+          "code": { "type": "string" }
+        },
+        "required": ["success", "error"]
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "Authentication required",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ApiError" }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Insufficient permissions",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ApiError" }
+          }
+        }
+      },
+      "ValidationError": {
+        "description": "Validation error",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ApiError" }
+          }
+        }
+      }
+    }
+  }
+}

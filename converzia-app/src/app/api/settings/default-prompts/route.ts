@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { logger } from "@/lib/utils/logger";
+import { handleApiError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
 
 // Default prompts content (used as fallback if files don't exist)
 const DEFAULT_EXTRACTION_PROMPT = `Sos un asistente que extrae información de calificación de mensajes de clientes interesados en inmuebles.
@@ -84,22 +86,18 @@ export async function GET() {
       qualificationPrompt = "";
     }
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        qualification_system_prompt_md: qualificationPrompt,
-        extraction_system_prompt_md: DEFAULT_EXTRACTION_PROMPT,
-        conversation_summary_prompt_md: DEFAULT_SUMMARY_PROMPT,
-        initial_greeting_template: DEFAULT_GREETING_TEMPLATE,
-        disqualification_reason_prompt_md: DEFAULT_DISQUALIFICATION_PROMPT,
-      },
+    return apiSuccess({
+      qualification_system_prompt_md: qualificationPrompt,
+      extraction_system_prompt_md: DEFAULT_EXTRACTION_PROMPT,
+      conversation_summary_prompt_md: DEFAULT_SUMMARY_PROMPT,
+      initial_greeting_template: DEFAULT_GREETING_TEMPLATE,
+      disqualification_reason_prompt_md: DEFAULT_DISQUALIFICATION_PROMPT,
     });
   } catch (error) {
-    console.error("Error fetching default prompts:", error);
-    return NextResponse.json(
-      { success: false, error: "Error fetching default prompts" },
-      { status: 500 }
-    );
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      context: { route: "GET /api/settings/default-prompts" },
+    });
   }
 }
 

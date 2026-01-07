@@ -39,6 +39,7 @@ import { ActionDropdown } from "@/components/ui/Dropdown";
 import { QuickFilters, FilterDrawer, FilterSection, FilterChips } from "@/components/ui/FilterDrawer";
 import { useUsers, useUserMutations } from "@/lib/hooks/use-users";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
+import { usePagination } from "@/lib/hooks/use-pagination";
 import { usePendingApprovalsContext } from "@/contexts/PendingApprovalsContext";
 import { formatRelativeTime, formatDate } from "@/lib/utils";
 
@@ -71,7 +72,7 @@ export default function UsersPage() {
   const isMobile = useIsMobile();
 
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  const { page, setPage, pageSize, setPageSize } = usePagination({ initialPage: 1, initialPageSize: 20 });
   const [adminFilter, setAdminFilter] = useState<boolean | undefined>(undefined);
   const [verticalFilter, setVerticalFilter] = useState<string>("");
 
@@ -80,7 +81,7 @@ export default function UsersPage() {
     isAdmin: adminFilter,
     vertical: verticalFilter || undefined,
     page,
-    pageSize: 20,
+    pageSize,
   });
 
   const { approvals, total: approvalsCount, isLoading: loadingApprovals, refetch: refetchApprovals } = usePendingApprovalsContext();
@@ -539,14 +540,15 @@ export default function UsersPage() {
                 }
               />
             </div>
-            {total > 20 && (
+            {total > pageSize && (
               <div className="p-4 border-t border-card-border">
                 <Pagination
                   currentPage={page}
-                  totalPages={Math.ceil(total / 20)}
+                  totalPages={Math.ceil(total / pageSize)}
                   totalItems={total}
-                  pageSize={20}
+                  pageSize={pageSize}
                   onPageChange={setPage}
+                  onPageSizeChange={setPageSize}
                 />
               </div>
             )}

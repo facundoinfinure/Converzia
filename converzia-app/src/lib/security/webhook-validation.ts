@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { logger } from "@/lib/utils/logger";
 
 // ============================================
 // Webhook Signature Validation
@@ -14,7 +15,7 @@ export function validateChatwootSignature(
   secret: string
 ): boolean {
   if (!signature || !secret) {
-    console.warn("Missing Chatwoot webhook signature or secret");
+    logger.warn("Missing Chatwoot webhook signature or secret", undefined, {});
     return false;
   }
 
@@ -30,7 +31,7 @@ export function validateChatwootSignature(
       Buffer.from(expectedSignature)
     );
   } catch (error) {
-    console.error("Chatwoot signature validation error:", error);
+    logger.error("Chatwoot signature validation error", error, {});
     return false;
   }
 }
@@ -45,7 +46,7 @@ export function validateMetaSignature(
   appSecret: string
 ): boolean {
   if (!signature || !appSecret) {
-    console.warn("Missing Meta webhook signature or app secret");
+    logger.warn("Missing Meta webhook signature or app secret", undefined, {});
     return false;
   }
 
@@ -63,7 +64,7 @@ export function validateMetaSignature(
       Buffer.from(expectedSignature)
     );
   } catch (error) {
-    console.error("Meta signature validation error:", error);
+    logger.error("Meta signature validation error", error, {});
     return false;
   }
 }
@@ -79,7 +80,7 @@ export function validateStripeSignature(
   secret: string
 ): boolean {
   if (!signature || !secret) {
-    console.warn("Missing Stripe webhook signature or secret");
+    logger.warn("Missing Stripe webhook signature or secret", undefined, {});
     return false;
   }
 
@@ -116,7 +117,7 @@ export function validateStripeSignature(
 
     return isValid && isTimestampValid;
   } catch (error) {
-    console.error("Stripe signature validation error:", error);
+    logger.error("Stripe signature validation error", error, {});
     return false;
   }
 }
@@ -148,7 +149,7 @@ export function validateHmacSignature(
       Buffer.from(expectedSignature)
     );
   } catch (error) {
-    console.error("HMAC validation error:", error);
+    logger.error("HMAC validation error", error, {});
     return false;
   }
 }

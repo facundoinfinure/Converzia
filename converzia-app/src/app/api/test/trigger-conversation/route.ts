@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { startInitialConversation } from "@/lib/services/conversation";
 import { createAdminClient } from "@/lib/supabase/server";
+import { handleApiError, handleForbidden, handleValidationError, handleNotFound, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
+import { logger } from "@/lib/utils/logger";
+import type { LeadOfferWithRelations } from "@/types/supabase-helpers";
+import { validateBody, testTriggerConversationBodySchema } from "@/lib/validation/schemas";
 
 /**
  * POST /api/test/trigger-conversation
@@ -17,28 +21,28 @@ export async function POST(request: NextRequest) {
   const hasValidSecret = testSecret === process.env.TEST_SECRET && process.env.TEST_SECRET;
   
   if (isProduction && !hasValidSecret) {
-    return NextResponse.json(
-      { error: "Not allowed in production without TEST_SECRET" }, 
-      { status: 403 }
-    );
+    return handleForbidden("No permitido en producción sin TEST_SECRET");
   }
 
+  let leadOfferId: string | undefined;
+  
   try {
-    const body = await request.json();
-    const { leadOfferId } = body;
+    // Validate request body
+    const bodyValidation = await validateBody(request, testTriggerConversationBodySchema);
     
-    if (!leadOfferId) {
-      return NextResponse.json(
-        { error: "leadOfferId is required" }, 
-        { status: 400 }
-      );
+    if (!bodyValidation.success) {
+      return handleValidationError(new Error(bodyValidation.error), {
+        validationError: bodyValidation.error,
+      });
     }
+    
+    leadOfferId = bodyValidation.data.leadOfferId;
 
     // Verificar que el lead_offer existe
     const supabase = createAdminClient();
     
     // Debug: Log the leadOfferId being searched
-    console.log(`[TEST] Searching for leadOfferId: "${leadOfferId}" (length: ${leadOfferId.length})`);
+    logger.info(`[TEST] Searching for leadOfferId`, { leadOfferId, length: leadOfferId.length });
     
     // First try a simple query without joins
     const { data: simpleCheck, error: simpleError } = await supabase
@@ -47,21 +51,10 @@ export async function POST(request: NextRequest) {
       .eq("id", leadOfferId.trim())
       .single();
     
-    console.log(`[TEST] Simple check result:`, { data: simpleCheck, error: simpleError?.message });
+    logger.info(`[TEST] Simple check result`, { hasData: !!simpleCheck, error: simpleError?.message });
     
     if (simpleError) {
-      return NextResponse.json(
-        { 
-          error: `Lead offer not found: ${leadOfferId}`,
-          debug: {
-            searchedId: leadOfferId,
-            idLength: leadOfferId.length,
-            supabaseError: simpleError.message,
-            supabaseCode: simpleError.code,
-          }
-        }, 
-        { status: 404 }
-      );
+      return handleNotFound(`Lead offer no encontrado: ${leadOfferId}`);
     }
     
     // Now get the full data - specify the FK relationship explicitly
@@ -84,20 +77,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const lead = Array.isArray(leadOffer.lead) ? leadOffer.lead[0] : leadOffer.lead;
-    const offer = Array.isArray(leadOffer.offer) ? leadOffer.offer[0] : leadOffer.offer;
-    const tenant = Array.isArray(leadOffer.tenant) ? leadOffer.tenant[0] : leadOffer.tenant;
+    const typedLeadOffer = leadOffer as LeadOfferWithRelations;
+    const lead = Array.isArray(typedLeadOffer.lead) ? typedLeadOffer.lead[0] : typedLeadOffer.lead;
+    const offer = Array.isArray(typedLeadOffer.offer) ? typedLeadOffer.offer[0] : typedLeadOffer.offer;
+    const tenant = Array.isArray(typedLeadOffer.tenant) ? typedLeadOffer.tenant[0] : typedLeadOffer.tenant;
 
-    console.log(`[TEST] Triggering conversation for lead_offer: ${leadOfferId}`);
-    console.log(`[TEST] Lead: ${lead?.full_name} (${lead?.phone})`);
-    console.log(`[TEST] Offer: ${offer?.name}`);
-    console.log(`[TEST] Tenant: ${tenant?.name}`);
+    logger.info(`[TEST] Triggering conversation for lead_offer`, {
+      leadOfferId,
+      leadName: lead?.full_name,
+      leadPhone: lead?.phone,
+      offerName: offer?.name,
+      tenantName: tenant?.name,
+    });
 
     // Disparar la conversación inicial
     await startInitialConversation(leadOfferId);
 
-    return NextResponse.json({ 
-      success: true, 
+    return apiSuccess({
       message: "Conversation started",
       details: {
         leadOfferId,
@@ -105,13 +101,14 @@ export async function POST(request: NextRequest) {
         offer: offer?.name,
         tenant: tenant?.name,
       }
-    });
+    }, "Conversación iniciada correctamente");
   } catch (error) {
-    console.error("[TEST] Error starting conversation:", error);
-    return NextResponse.json({ 
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error" 
-    }, { status: 500 });
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      status: 500,
+      message: "Error al iniciar conversación de prueba",
+      context: { leadOfferId: leadOfferId || "unknown" },
+    });
   }
 }
 

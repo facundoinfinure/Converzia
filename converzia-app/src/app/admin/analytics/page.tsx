@@ -1,17 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
+import dynamic from "next/dynamic";
 import { Download, Calendar, BarChart3, TrendingUp, Users, CheckCircle2 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { DashboardCard } from "@/components/dashboard/DashboardCard";
-import { AnalyticsCharts } from "@/components/admin/AnalyticsCharts";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useAnalytics, TimeRange } from "@/lib/hooks/use-analytics";
 
-export default function AnalyticsPage() {
+// Lazy load AnalyticsCharts component (heavy charts library)
+const AnalyticsCharts = dynamic(
+  () => import("@/components/admin/AnalyticsCharts").then((mod) => ({ default: mod.AnalyticsCharts })),
+  {
+    loading: () => <Skeleton className="h-96 w-full" />,
+    ssr: false, // Charts don't need SSR
+  }
+);
+
+function AnalyticsPageContent() {
   const [timeRange, setTimeRange] = useState<TimeRange>("30d");
   const { data, isLoading } = useAnalytics(timeRange);
 
@@ -214,5 +223,13 @@ export default function AnalyticsPage() {
         </CardContent>
       </Card>
     </PageContainer>
+  );
+}
+
+export default function AnalyticsPage() {
+  return (
+    <Suspense fallback={<Skeleton className="h-screen w-full" />}>
+      <AnalyticsPageContent />
+    </Suspense>
   );
 }

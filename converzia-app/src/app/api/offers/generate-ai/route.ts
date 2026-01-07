@@ -4,6 +4,7 @@ import { searchKnowledge } from "@/lib/services/rag";
 import { getOpenAI, getModel } from "@/lib/services/openai";
 import { z } from "zod";
 import { logger, sanitizeForLogging } from "@/lib/utils/logger";
+import { handleApiError, handleValidationError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
 
 const generateOfferSchema = z.object({
   tenant_id: z.string().uuid('Invalid tenant_id format'),
@@ -25,10 +26,7 @@ export async function POST(request: NextRequest) {
         error: `${firstError.path.join('.')}: ${firstError.message}`,
         body: sanitizeForLogging(body),
       });
-      return NextResponse.json(
-        { error: `${firstError.path.join('.')}: ${firstError.message}` },
-        { status: 400 }
-      );
+      return handleValidationError(`${firstError.path.join('.')}: ${firstError.message}`);
     }
 
     const { tenant_id, offer_type, name } = validation.data;
@@ -92,48 +90,67 @@ ${ragContext ? `\n\nCONTEXTO DEL RAG:\n${ragContext}` : "\n\nADVERTENCIA: No se 
     });
 
     const content = completion.choices[0]?.message?.content || "{}";
-    const generatedData = JSON.parse(content);
+    const generatedData = JSON.parse(content) as Record<string, unknown>;
 
     // Validar y limpiar los datos
-    const result: any = {
-      name: generatedData.name || name,
-      short_description: generatedData.short_description || null,
-      description: generatedData.description || null,
-      city: generatedData.city || null,
-      zone: generatedData.zone || null,
-      address: generatedData.address || null,
-      price_from: generatedData.price_from ? Number(generatedData.price_from) : null,
-      price_to: generatedData.price_to ? Number(generatedData.price_to) : null,
-      currency: generatedData.currency || null,
+    interface GeneratedOfferData {
+      name: string;
+      short_description?: string | null;
+      description?: string | null;
+      city?: string | null;
+      zone?: string | null;
+      address?: string | null;
+      price_from?: number | string | null;
+      price_to?: number | string | null;
+      currency?: string | null;
+    }
+
+    const typedData = generatedData as Partial<GeneratedOfferData>;
+
+    interface OfferGenerationResult {
+      name: string;
+      short_description: string | null;
+      description: string | null;
+      city: string | null;
+      zone: string | null;
+      address: string | null;
+      price_from: number | null;
+      price_to: number | null;
+      currency: string | null;
+      rag_sources_used: number;
+      rag_references: Array<{
+        index: number;
+        doc_type: string;
+        source: string;
+        similarity: number;
+      }>;
+    }
+
+    const result: OfferGenerationResult = {
+      name: typedData.name || name,
+      short_description: typedData.short_description || null,
+      description: typedData.description || null,
+      city: typedData.city || null,
+      zone: typedData.zone || null,
+      address: typedData.address || null,
+      price_from: typedData.price_from ? Number(typedData.price_from) : null,
+      price_to: typedData.price_to ? Number(typedData.price_to) : null,
+      currency: typedData.currency || null,
       rag_sources_used: ragResults.length,
       rag_references: ragResults.map((r, i) => ({
         index: i + 1,
-        doc_type: r.metadata?.doc_type || "unknown",
-        source: r.metadata?.source || "unknown",
+        doc_type: (r.metadata?.doc_type as string) || "unknown",
+        source: (r.metadata?.source as string) || "unknown",
         similarity: r.similarity,
       })),
     };
 
-    return NextResponse.json(
-      { success: true, data: result },
-      {
-        status: 200,
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
-    );
+    return apiSuccess(result);
   } catch (error) {
-    logger.error("Error generating offer with AI", error);
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Error al generar la oferta con AI" },
-      {
-        status: 500,
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
-    );
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      context: { route: "POST /api/offers/generate-ai" },
+    });
   }
 }
 

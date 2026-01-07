@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { logger } from "@/lib/utils/logger";
+import { fetchWithTimeout } from "@/lib/utils/fetch-with-timeout";
 
 const META_APP_ID = process.env.META_APP_ID;
 const META_APP_SECRET = process.env.META_APP_SECRET;
@@ -49,7 +51,7 @@ export async function GET(request: NextRequest) {
 
     // Handle errors from Meta
     if (error) {
-      console.error("Meta OAuth error:", error, errorDescription);
+      logger.error("Meta OAuth error", new Error(error), { errorDescription });
       return NextResponse.redirect(
         new URL(`/admin/settings?meta_error=${encodeURIComponent(errorDescription || error)}`, request.url)
       );
@@ -88,7 +90,7 @@ export async function GET(request: NextRequest) {
 
     // Exchange code for access token
     const redirectUri = getRedirectUri();
-    console.log("Meta OAuth callback - redirect URI:", redirectUri);
+    logger.info("Meta OAuth callback - redirect URI", { redirectUri });
     
     const tokenUrl = new URL("https://graph.facebook.com/v18.0/oauth/access_token");
     tokenUrl.searchParams.set("client_id", META_APP_ID);
@@ -96,11 +98,11 @@ export async function GET(request: NextRequest) {
     tokenUrl.searchParams.set("redirect_uri", redirectUri);
     tokenUrl.searchParams.set("code", code);
 
-    const tokenResponse = await fetch(tokenUrl.toString());
+    const tokenResponse = await fetchWithTimeout(tokenUrl.toString(), {}, 15000);
     const tokenData: MetaTokenResponse = await tokenResponse.json();
 
     if (!tokenResponse.ok || !tokenData.access_token) {
-      console.error("Failed to get Meta access token:", tokenData);
+      logger.error("Failed to get Meta access token", new Error("Invalid token response"), { hasToken: !!tokenData?.access_token });
       return NextResponse.redirect(
         new URL("/admin/settings?meta_error=token_failed", request.url)
       );
@@ -113,25 +115,27 @@ export async function GET(request: NextRequest) {
     longLivedUrl.searchParams.set("client_secret", META_APP_SECRET);
     longLivedUrl.searchParams.set("fb_exchange_token", tokenData.access_token);
 
-    const longLivedResponse = await fetch(longLivedUrl.toString());
+    const longLivedResponse = await fetchWithTimeout(longLivedUrl.toString(), {}, 15000);
     const longLivedData: MetaTokenResponse = await longLivedResponse.json();
 
     const accessToken = longLivedData.access_token || tokenData.access_token;
     const expiresIn = longLivedData.expires_in || tokenData.expires_in || 3600;
 
     // Get user info
-    const userResponse = await fetch(
-      `https://graph.facebook.com/v18.0/me?access_token=${accessToken}`
+    const userResponse = await fetchWithTimeout(
+      `https://graph.facebook.com/v18.0/me?access_token=${accessToken}`,
+      {},
+      15000
     );
     const userData: MetaUserResponse = await userResponse.json();
-    console.log("Meta user data:", userData);
+    logger.info("Meta user data received", { userId: userData?.id, userName: userData?.name });
 
     // Get ALL ad accounts (for Marketing API) - paginate through all results
     let allAdAccounts: any[] = [];
     let adAccountsUrl = `https://graph.facebook.com/v18.0/me/adaccounts?fields=id,name,account_id&limit=100&access_token=${accessToken}`;
     
     while (adAccountsUrl) {
-      const adAccountsResponse = await fetch(adAccountsUrl);
+      const adAccountsResponse = await fetchWithTimeout(adAccountsUrl, {}, 30000);
       const adAccountsData = await adAccountsResponse.json();
       
       if (adAccountsData.data) {
@@ -141,7 +145,7 @@ export async function GET(request: NextRequest) {
       // Check for next page
       adAccountsUrl = adAccountsData.paging?.next || null;
     }
-    console.log("Total Ad accounts fetched:", allAdAccounts.length);
+    logger.info("Total Ad accounts fetched", { count: allAdAccounts.length });
 
     // Get ALL pages with page access tokens (for Lead Ads) - paginate
     let allPages: any[] = [];
@@ -149,7 +153,7 @@ export async function GET(request: NextRequest) {
     
     try {
       while (pagesUrl) {
-        const pagesResponse: Response = await fetch(pagesUrl);
+        const pagesResponse: Response = await fetchWithTimeout(pagesUrl, {}, 30000);
         const pagesData: any = await pagesResponse.json();
         
         if (pagesData.data) {
@@ -158,25 +162,29 @@ export async function GET(request: NextRequest) {
         
         pagesUrl = pagesData.paging?.next || null;
       }
-      console.log("Total Pages fetched:", allPages.length);
+      logger.info("Total Pages fetched", { count: allPages.length });
     } catch (err) {
-      console.error("Error fetching pages:", err);
+      logger.error("Error fetching pages", err, { hasAccessToken: !!accessToken });
     }
 
     // Get WhatsApp Business Accounts
     let wabaData: any = { data: [] };
     try {
       // First get the business accounts
-      const businessResponse = await fetch(
-        `https://graph.facebook.com/v18.0/me/businesses?fields=id,name&access_token=${accessToken}`
+      const businessResponse = await fetchWithTimeout(
+        `https://graph.facebook.com/v18.0/me/businesses?fields=id,name&access_token=${accessToken}`,
+        {},
+        30000
       );
       const businessData = await businessResponse.json();
       
       // For each business, get the WhatsApp Business Accounts
       const wabas: any[] = [];
       for (const business of businessData.data || []) {
-        const wabaResponse = await fetch(
-          `https://graph.facebook.com/v18.0/${business.id}/owned_whatsapp_business_accounts?fields=id,name,currency,timezone_id&access_token=${accessToken}`
+        const wabaResponse = await fetchWithTimeout(
+          `https://graph.facebook.com/v18.0/${business.id}/owned_whatsapp_business_accounts?fields=id,name,currency,timezone_id&access_token=${accessToken}`,
+          {},
+          30000
         );
         const wabaResult = await wabaResponse.json();
         if (wabaResult.data) {
@@ -188,21 +196,23 @@ export async function GET(request: NextRequest) {
         }
       }
       wabaData.data = wabas;
-      console.log("WhatsApp Business Accounts:", wabas.length);
+      logger.info("WhatsApp Business Accounts fetched", { count: wabas.length });
     } catch (err) {
-      console.error("Error fetching WABA:", err);
+      logger.error("Error fetching WABA", err, { hasAccessToken: !!accessToken });
     }
 
     // Get phone numbers for each WABA
     for (const waba of wabaData.data || []) {
       try {
-        const phoneResponse = await fetch(
-          `https://graph.facebook.com/v18.0/${waba.id}/phone_numbers?fields=id,display_phone_number,verified_name,quality_rating&access_token=${accessToken}`
+        const phoneResponse = await fetchWithTimeout(
+          `https://graph.facebook.com/v18.0/${waba.id}/phone_numbers?fields=id,display_phone_number,verified_name,quality_rating&access_token=${accessToken}`,
+          {},
+          30000
         );
         const phoneData = await phoneResponse.json();
         waba.phone_numbers = phoneData.data || [];
       } catch (err) {
-        console.error("Error fetching phone numbers for WABA:", waba.id, err);
+        logger.error("Error fetching phone numbers for WABA", err, { wabaId: waba.id });
         waba.phone_numbers = [];
       }
     }
@@ -265,7 +275,7 @@ export async function GET(request: NextRequest) {
         .eq("id", existing.id);
 
       if (updateError) {
-        console.error("Error updating Meta integration:", updateError);
+        logger.error("Error updating Meta integration", updateError, { integrationId: existing?.id });
         return NextResponse.redirect(
           new URL("/admin/settings?meta_error=save_failed", request.url)
         );
@@ -277,7 +287,7 @@ export async function GET(request: NextRequest) {
         .insert(integrationData);
 
       if (insertError) {
-        console.error("Error creating Meta integration:", insertError);
+        logger.error("Error creating Meta integration", insertError, {});
         return NextResponse.redirect(
           new URL("/admin/settings?meta_error=save_failed", request.url)
         );
@@ -289,7 +299,7 @@ export async function GET(request: NextRequest) {
       new URL("/admin/settings?meta_success=true", request.url)
     );
   } catch (error) {
-    console.error("Error in Meta OAuth callback:", error);
+    logger.exception("Error in Meta OAuth callback", error);
     return NextResponse.redirect(
       new URL("/admin/settings?meta_error=unknown", request.url)
     );

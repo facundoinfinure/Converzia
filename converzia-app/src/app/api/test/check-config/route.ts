@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
+import { handleForbidden, apiSuccess } from "@/lib/utils/api-error-handler";
+import type { MetaIntegrationConfig, TenantIntegrationWithTokens } from "@/types/supabase-helpers";
 
 /**
  * GET /api/test/check-config
@@ -16,10 +18,7 @@ export async function GET(request: NextRequest) {
   const hasValidSecret = testSecret === process.env.TEST_SECRET && process.env.TEST_SECRET;
   
   if (isProduction && !hasValidSecret) {
-    return NextResponse.json(
-      { error: "Not allowed in production without TEST_SECRET" }, 
-      { status: 403 }
-    );
+    return handleForbidden("No permitido en producción sin TEST_SECRET");
   }
 
   const supabase = createAdminClient();
@@ -32,11 +31,17 @@ export async function GET(request: NextRequest) {
     .is("tenant_id", null)
     .maybeSingle();
 
-  const hasMetaOAuth = !!(metaIntegration?.is_active && metaIntegration?.config);
-  const metaConfig = metaIntegration?.config as any;
-  const hasSelectedPage = hasMetaOAuth && !!metaConfig?.selected_page_id;
+  const typedIntegration = metaIntegration as TenantIntegrationWithTokens | null;
+  const hasMetaOAuth = !!(typedIntegration?.is_active && typedIntegration?.config);
+  const metaConfig = typedIntegration?.config as MetaIntegrationConfig | null;
+  const hasSelectedPage = hasMetaOAuth && !!metaConfig?.selected_pages && metaConfig.selected_pages.length > 0;
   
   // Obtener settings de app_settings
+  interface AppSetting {
+    key: string;
+    value: string;
+  }
+  
   const { data: settings } = await supabase
     .from("app_settings")
     .select("key, value")
@@ -49,7 +54,7 @@ export async function GET(request: NextRequest) {
     ]);
 
   const settingsMap: Record<string, string> = {};
-  (settings || []).forEach((s: any) => {
+  (settings || []).forEach((s: AppSetting) => {
     settingsMap[s.key] = s.value;
   });
 

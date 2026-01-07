@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { google } from "googleapis";
 import { createClient } from "@/lib/supabase/server";
+import { logger } from "@/lib/utils/logger";
 
 // ============================================
 // Google OAuth - Callback Handler
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
 
     // Handle OAuth errors
     if (error) {
-      console.error("Google OAuth error:", error);
+      logger.error("Google OAuth error", new Error(error), {});
       return NextResponse.redirect(
         `${APP_URL}/admin/tenants?error=google_auth_denied`
       );
@@ -50,7 +51,7 @@ export async function GET(request: NextRequest) {
 
     // Validate environment
     if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
-      console.error("[Google OAuth Callback] Missing environment variables");
+      logger.error("[Google OAuth Callback] Missing environment variables", undefined, {});
       const redirectUrl = returnUrl || `${APP_URL}/admin/tenants/${tenantId}`;
       return NextResponse.redirect(
         `${redirectUrl}?error=google_not_configured`
@@ -68,7 +69,7 @@ export async function GET(request: NextRequest) {
     const { tokens } = await oauth2Client.getToken(code);
 
     if (!tokens.access_token || !tokens.refresh_token) {
-      console.error("Missing tokens from Google OAuth");
+      logger.error("Missing tokens from Google OAuth", undefined, { tenantId });
       const redirectUrl = returnUrl || `${APP_URL}/admin/tenants/${tenantId}`;
       return NextResponse.redirect(
         `${redirectUrl}?error=google_auth_no_tokens`
@@ -106,7 +107,7 @@ export async function GET(request: NextRequest) {
         .eq("id", integrationId);
 
       if (updateError) {
-        console.error("Error updating integration:", updateError);
+        logger.error("Error updating integration", updateError, { integrationId, tenantId });
         const redirectUrl = returnUrl || `${APP_URL}/admin/tenants/${tenantId}`;
         return NextResponse.redirect(
           `${redirectUrl}?error=google_auth_save_failed`
@@ -133,7 +134,7 @@ export async function GET(request: NextRequest) {
           .eq("id", existing.id);
 
         if (updateError) {
-          console.error("Error updating integration:", updateError);
+          logger.error("Error updating integration", updateError, { tenantId, integrationId: existing.id });
           const redirectUrl = returnUrl || `${APP_URL}/admin/tenants/${tenantId}`;
           return NextResponse.redirect(
             `${redirectUrl}?error=google_auth_save_failed`
@@ -157,7 +158,7 @@ export async function GET(request: NextRequest) {
           });
 
         if (insertError) {
-          console.error("Error creating integration:", insertError);
+          logger.error("Error creating integration", insertError, { tenantId });
           const redirectUrl = returnUrl || `${APP_URL}/admin/tenants/${tenantId}`;
           return NextResponse.redirect(
             `${redirectUrl}?error=google_auth_save_failed`
@@ -172,7 +173,7 @@ export async function GET(request: NextRequest) {
       `${redirectUrl}?google_connected=true`
     );
   } catch (error) {
-    console.error("Google OAuth callback error:", error);
+    logger.exception("Google OAuth callback error", error);
     return NextResponse.redirect(`${APP_URL}/admin/tenants?error=google_auth_failed`);
   }
 }

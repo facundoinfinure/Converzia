@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
+import { queryWithTimeout, rpcWithTimeout } from "@/lib/supabase/query-with-timeout";
+import { unsafeRpc } from "@/lib/supabase/unsafe-rpc";
 import { withRateLimit, RATE_LIMITS, getClientIdentifier } from "@/lib/security/rate-limit";
 import Stripe from "stripe";
+import { logger } from "@/lib/utils/logger";
+import { logCreditPurchase } from "@/lib/monitoring/audit";
+import type { CreditLedgerEntry } from "@/types/supabase-helpers";
 
 // ============================================
 // Stripe Webhook Handler
@@ -28,7 +32,7 @@ export async function POST(request: NextRequest) {
   // Validate required configuration
   const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!endpointSecret) {
-    console.error("SECURITY: STRIPE_WEBHOOK_SECRET not configured - webhook rejected");
+    logger.error("SECURITY: STRIPE_WEBHOOK_SECRET not configured - webhook rejected");
     return NextResponse.json(
       { error: "Server configuration error" },
       { status: 500 }
@@ -40,7 +44,7 @@ export async function POST(request: NextRequest) {
   const signature = request.headers.get("stripe-signature");
 
   if (!signature) {
-    console.error("SECURITY: Stripe webhook missing signature", {
+    logger.error("SECURITY: Stripe webhook missing signature", {
       ip: getClientIdentifier(request).substring(0, 8) + "...",
     });
     return NextResponse.json({ error: "No signature" }, { status: 400 });
@@ -51,9 +55,8 @@ export async function POST(request: NextRequest) {
   try {
     event = stripe.webhooks.constructEvent(body, signature, endpointSecret);
   } catch (err) {
-    console.error("SECURITY: Stripe webhook signature verification failed", {
+    logger.error("SECURITY: Stripe webhook signature verification failed", err, {
       ip: getClientIdentifier(request).substring(0, 8) + "...",
-      error: err instanceof Error ? err.message : "Unknown error",
     });
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
@@ -66,7 +69,7 @@ export async function POST(request: NextRequest) {
       const metadata = session.metadata;
 
       if (!metadata?.tenant_id || !metadata?.credits || !metadata?.billing_order_id) {
-        console.error("Missing metadata in checkout session");
+        logger.error("Missing metadata in checkout session", { sessionId: session.id, metadata });
         break;
       }
 
@@ -75,29 +78,34 @@ export async function POST(request: NextRequest) {
       const billingOrderId = metadata.billing_order_id;
 
       // Idempotency: if order already completed, do nothing
+      interface BillingOrder {
+        id: string;
+        status: string;
+      }
+      
       const { data: existingOrder } = await queryWithTimeout(
-        (supabase as any)
+        supabase
           .from("billing_orders")
           .select("id, status")
           .eq("id", billingOrderId)
           .maybeSingle(),
         10000,
         "check existing billing order"
-      );
+      ) as { data: BillingOrder | null; error: unknown };
 
       if (!existingOrder) {
-        console.error("Billing order not found for session:", session.id);
+        logger.error("Billing order not found for session", { sessionId: session.id, billingOrderId });
         break;
       }
 
-      if ((existingOrder as any).status === "completed") {
-        console.log("Stripe webhook already processed:", session.id);
+      if (existingOrder.status === "completed") {
+        logger.info("Stripe webhook already processed", { sessionId: session.id, billingOrderId });
         break;
       }
 
       // Mark order completed
       await queryWithTimeout(
-        (supabase as any)
+        supabase
           .from("billing_orders")
           .update({
             status: "completed",
@@ -111,33 +119,47 @@ export async function POST(request: NextRequest) {
       );
 
       // Add credits atomically (ledger trigger calculates balance_after)
-      // RPC calls need manual timeout
-      const rpcTimeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error("Timeout: La operación RPC tardó más de 10 segundos")), 10000);
-      });
-
-      const { error: addError } = await Promise.race([
-        (supabase as any).rpc("add_credits", {
+      const rpcResult = await rpcWithTimeout<unknown>(
+        unsafeRpc<unknown>(supabase, "add_credits", {
           p_tenant_id: tenantId,
           p_amount: credits,
           p_billing_order_id: billingOrderId,
           p_description: `Compra de ${credits} créditos`,
         }),
-        rpcTimeoutPromise,
-      ]) as any;
+        10000,
+        "add_credits",
+        false
+      );
+      const addError = rpcResult.error;
 
       if (addError) {
-        console.error("Error adding credits:", addError);
+        logger.error("Error adding credits", addError, { tenantId, credits, billingOrderId });
         break;
       }
 
-      console.log(`Credits added: ${credits} to tenant ${tenantId} (order ${billingOrderId})`);
+      logger.info(`Credits added: ${credits} to tenant ${tenantId}`, { tenantId, credits, billingOrderId });
+      
+      // Log audit event (user_id from metadata, or null for system-initiated)
+      const userId = metadata.user_id || null;
+      const packageId = metadata.package_id || undefined;
+      if (userId) {
+        await logCreditPurchase(
+          userId,
+          tenantId,
+          billingOrderId,
+          credits, // Using credits as amount since price is not directly available
+          credits,
+          packageId,
+          request
+        );
+      }
+      
       break;
     }
 
     case "payment_intent.payment_failed": {
       const paymentIntent = event.data.object as Stripe.PaymentIntent;
-      console.log("Payment failed:", paymentIntent.id);
+      logger.warn("Payment failed", { paymentIntentId: paymentIntent.id });
       break;
     }
 
@@ -145,7 +167,7 @@ export async function POST(request: NextRequest) {
     case "customer.subscription.updated": {
       // Handle subscription events if we add subscription billing
       const subscription = event.data.object as Stripe.Subscription;
-      console.log("Subscription event:", subscription.id);
+      logger.info("Subscription event", { subscriptionId: subscription.id, eventType: event.type });
       break;
     }
   }

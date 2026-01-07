@@ -17,11 +17,11 @@ export interface FilterConfig {
 
 interface AdvancedFiltersProps {
   filters: FilterConfig[];
-  values: Record<string, any>;
-  onChange: (values: Record<string, any>) => void;
+  values: Record<string, unknown>;
+  onChange: (values: Record<string, unknown>) => void;
   onReset?: () => void;
-  savedFilters?: Array<{ name: string; values: Record<string, any> }>;
-  onSaveFilter?: (name: string, values: Record<string, any>) => void;
+  savedFilters?: Array<{ name: string; values: Record<string, unknown> }>;
+  onSaveFilter?: (name: string, values: Record<string, unknown>) => void;
   className?: string;
 }
 
@@ -37,7 +37,23 @@ export function AdvancedFilters({
   const [isOpen, setIsOpen] = useState(false);
   const [saveFilterName, setSaveFilterName] = useState("");
 
-  const handleFilterChange = (key: string, value: any) => {
+  const asInputValue = (v: unknown): string => {
+    if (typeof v === "string") return v;
+    if (typeof v === "number") return String(v);
+    return "";
+  };
+
+  const asDateValue = (v: unknown): Date | null => {
+    if (!v) return null;
+    if (v instanceof Date) return v;
+    if (typeof v === "string") {
+      const d = new Date(v);
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+    return null;
+  };
+
+  const handleFilterChange = (key: string, value: unknown) => {
     onChange({ ...values, [key]: value });
   };
 
@@ -90,27 +106,27 @@ export function AdvancedFilters({
                   </label>
                   {filter.type === "text" && (
                     <Input
-                      value={values[filter.key] || ""}
+                      value={asInputValue(values[filter.key])}
                       onChange={(e) => handleFilterChange(filter.key, e.target.value)}
                       placeholder={filter.placeholder}
                     />
                   )}
                   {filter.type === "date" && (
                     <DatePicker
-                      value={values[filter.key]}
+                      value={asDateValue(values[filter.key])}
                       onChange={(date) => handleFilterChange(filter.key, date?.toISOString())}
                     />
                   )}
                   {filter.type === "dateRange" && (
                     <div className="flex items-center gap-2">
                       <DatePicker
-                        value={values[`${filter.key}_start`]}
+                        value={asDateValue(values[`${filter.key}_start`])}
                         onChange={(date) => handleFilterChange(`${filter.key}_start`, date?.toISOString())}
                         placeholder="Desde"
                       />
                       <span className="text-[var(--text-tertiary)]">-</span>
                       <DatePicker
-                        value={values[`${filter.key}_end`]}
+                        value={asDateValue(values[`${filter.key}_end`])}
                         onChange={(date) => handleFilterChange(`${filter.key}_end`, date?.toISOString())}
                         placeholder="Hasta"
                       />
@@ -119,7 +135,7 @@ export function AdvancedFilters({
                   {filter.type === "number" && (
                     <Input
                       type="number"
-                      value={values[filter.key] || ""}
+                      value={asInputValue(values[filter.key])}
                       onChange={(e) => handleFilterChange(filter.key, e.target.value ? Number(e.target.value) : null)}
                       placeholder={filter.placeholder}
                     />
@@ -128,14 +144,14 @@ export function AdvancedFilters({
                     <div className="flex items-center gap-2">
                       <Input
                         type="number"
-                        value={values[`${filter.key}_min`] || ""}
+                        value={asInputValue(values[`${filter.key}_min`])}
                         onChange={(e) => handleFilterChange(`${filter.key}_min`, e.target.value ? Number(e.target.value) : null)}
                         placeholder="Mín"
                       />
                       <span className="text-[var(--text-tertiary)]">-</span>
                       <Input
                         type="number"
-                        value={values[`${filter.key}_max`] || ""}
+                        value={asInputValue(values[`${filter.key}_max`])}
                         onChange={(e) => handleFilterChange(`${filter.key}_max`, e.target.value ? Number(e.target.value) : null)}
                         placeholder="Máx"
                       />
@@ -143,7 +159,7 @@ export function AdvancedFilters({
                   )}
                   {filter.type === "select" && (
                     <select
-                      value={values[filter.key] || ""}
+                      value={asInputValue(values[filter.key])}
                       onChange={(e) => handleFilterChange(filter.key, e.target.value)}
                       className="w-full px-3 py-2 border border-[var(--border-primary)] rounded-lg text-sm bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]"
                     >

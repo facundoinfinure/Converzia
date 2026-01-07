@@ -93,9 +93,12 @@ export default function PortalSettingsPage() {
         console.error("Error loading tenant:", tenantError);
         toast.error("Error al cargar datos del tenant");
       } else if (tenant) {
-        const tenantTyped = tenant as any;
+        type TenantWithSettings = TenantData & {
+          settings?: { logo_url?: string | null } | null;
+        };
+        const tenantTyped = tenant as TenantWithSettings;
         // Get logo_url from column or settings JSONB
-        const logoUrl = tenantTyped.logo_url || (tenantTyped.settings as any)?.logo_url || null;
+        const logoUrl = tenantTyped.logo_url || tenantTyped.settings?.logo_url || null;
         
         setTenantData({
           ...tenantTyped,
@@ -171,6 +174,29 @@ export default function PortalSettingsPage() {
     }
   };
 
+  const handleLogoDelete = async () => {
+    if (!canEdit || !logoPreview) return;
+
+    try {
+      const response = await fetch("/api/portal/settings/logo", {
+        method: "DELETE",
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Error al eliminar el logo");
+      }
+
+      toast.success("Logo eliminado correctamente");
+      setLogoPreview(null);
+      await loadData();
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Error al eliminar el logo";
+      toast.error(errorMessage);
+    }
+  };
+
   const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -214,9 +240,9 @@ export default function PortalSettingsPage() {
 
       toast.success("Logo actualizado correctamente");
       await loadData();
-    } catch (error: any) {
-      console.error("Error uploading logo:", error);
-      toast.error(error?.message || "Error al subir el logo");
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Error al subir el logo";
+      toast.error(errorMessage);
       setLogoPreview(tenantData?.logo_url || null);
     } finally {
       setIsUploadingLogo(false);
@@ -291,11 +317,10 @@ export default function PortalSettingsPage() {
                       />
                       {canEdit && (
                         <button
-                          onClick={() => {
-                            setLogoPreview(null);
-                            // TODO: Add API call to delete logo
-                          }}
-                          className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-[var(--error)] text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={handleLogoDelete}
+                          className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-[var(--error)] text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                          title="Eliminar logo"
+                          aria-label="Eliminar logo"
                         >
                           <X className="h-3 w-3" />
                         </button>

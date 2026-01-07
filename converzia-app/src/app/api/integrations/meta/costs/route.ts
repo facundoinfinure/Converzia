@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import { getAdInsights, MetaOAuthTokens } from "@/lib/services/meta-ads";
+import { getAdInsights, MetaOAuthTokens, type MetaAdInsights } from "@/lib/services/meta-ads";
+import { logger } from "@/lib/utils/logger";
+import { validateBody, metaCostsBodySchema } from "@/lib/validation/schemas";
+import { rpcWithTimeout } from "@/lib/supabase/query-with-timeout";
+import { unsafeRpc } from "@/lib/supabase/unsafe-rpc";
+import { handleApiError, handleUnauthorized, handleValidationError, handleNotFound, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
+
+type AdminClient = ReturnType<typeof createAdminClient>;
 
 // ============================================
 // Helper: Get days that need syncing
@@ -13,7 +20,7 @@ interface SyncDay {
 }
 
 async function getDaysToSync(
-  supabase: any,
+  supabase: AdminClient,
   tenantId: string,
   accountId: string,
   dateStart: string,
@@ -31,9 +38,14 @@ async function getDaysToSync(
     .gte("sync_date", dateStart)
     .lte("sync_date", dateEnd);
 
+  interface SyncStatusRow {
+    sync_date: string;
+    is_complete: boolean;
+    synced_at: string;
+  }
   const syncStatusArray = Array.isArray(syncStatus) ? syncStatus : [];
-  const syncMap = new Map<string, { sync_date: string; is_complete: boolean; synced_at: string }>(
-    syncStatusArray.map((s: any) => [s.sync_date, s])
+  const syncMap = new Map<string, SyncStatusRow>(
+    syncStatusArray.map((s: SyncStatusRow) => [s.sync_date, s])
   );
 
   // Generate all dates in range
@@ -66,7 +78,7 @@ async function getDaysToSync(
 // Helper: Update sync status for days
 // ============================================
 async function updateSyncStatus(
-  supabase: any,
+  supabase: AdminClient,
   tenantId: string,
   accountId: string,
   days: string[],
@@ -95,7 +107,7 @@ async function updateSyncStatus(
 // Helper: Invalidate revenue cache for synced days
 // ============================================
 async function invalidateRevenueCache(
-  supabase: any,
+  supabase: AdminClient,
   tenantId: string,
   days: string[]
 ) {
@@ -123,19 +135,17 @@ export async function POST(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return handleUnauthorized("Autenticación requerida");
     }
 
-    // Get request body
-    const body = await request.json();
-    const { tenant_id, account_id, date_start, date_end, force_refresh } = body;
-
-    if (!tenant_id || !account_id) {
-      return NextResponse.json(
-        { error: "tenant_id and account_id are required" },
-        { status: 400 }
-      );
+    // Validate request body
+    const bodyValidation = await validateBody(request, metaCostsBodySchema);
+    
+    if (!bodyValidation.success) {
+      return handleValidationError(bodyValidation.error);
     }
+    
+    const { tenant_id, account_id, date_start, date_end, force_refresh = false } = bodyValidation.data;
 
     // Default to last 30 days if no dates provided
     const endDate = date_end || new Date().toISOString().split("T")[0];
@@ -171,27 +181,18 @@ export async function POST(request: NextRequest) {
     }
 
     if (!integration) {
-      return NextResponse.json(
-        { error: "Meta Ads not connected" },
-        { status: 404 }
-      );
+      return handleNotFound("Meta Ads no conectado");
     }
 
     const tokens = integration.oauth_tokens as MetaOAuthTokens;
 
     if (!tokens?.access_token) {
-      return NextResponse.json(
-        { error: "No access token found" },
-        { status: 400 }
-      );
+      return handleValidationError("No se encontró access token");
     }
 
     // Check if token is expired
     if (tokens.expires_at && Date.now() > tokens.expires_at) {
-      return NextResponse.json(
-        { error: "Access token expired. Please reconnect Meta." },
-        { status: 401 }
-      );
+      return handleUnauthorized("Access token expirado. Reconectá Meta.");
     }
 
     // Determine which days need syncing (smart sync)
@@ -250,7 +251,7 @@ export async function POST(request: NextRequest) {
     if (currentRange) ranges.push(currentRange);
 
     // Fetch insights from Meta for each range
-    const allInsights: any[] = [];
+    const allInsights: MetaAdInsights[] = [];
     
     for (const range of ranges) {
       try {
@@ -262,7 +263,12 @@ export async function POST(request: NextRequest) {
         );
         allInsights.push(...insights);
       } catch (err) {
-        console.error(`Error fetching insights for range ${range.start}-${range.end}:`, err);
+        logger.error(`Error fetching insights for range ${range.start}-${range.end}`, err, { 
+          tenant_id, 
+          account_id,
+          start: range.start,
+          end: range.end 
+        });
       }
     }
 
@@ -291,8 +297,12 @@ export async function POST(request: NextRequest) {
       .select("ad_id, offer_id")
       .eq("tenant_id", tenant_id);
 
-    const adToOfferMap = new Map(
-      (adMappings || []).map((m: any) => [m.ad_id, m.offer_id])
+    interface AdMappingRow {
+      ad_id: string;
+      offer_id: string | null;
+    }
+    const adToOfferMap = new Map<string, string | null>(
+      (adMappings || []).map((m: AdMappingRow) => [m.ad_id, m.offer_id])
     );
 
     // Track records per day for sync status
@@ -302,7 +312,7 @@ export async function POST(request: NextRequest) {
     const costRecords = allInsights.map((insight) => {
       // Extract lead count from actions
       const leadAction = insight.actions?.find(
-        (a: any) =>
+        (a: { action_type: string; value: string }) =>
           a.action_type === "lead" ||
           a.action_type === "leadgen_grouped" ||
           a.action_type === "onsite_conversion.lead_grouped"
@@ -345,11 +355,8 @@ export async function POST(request: NextRequest) {
       });
 
     if (upsertError) {
-      console.error("Error upserting platform costs:", upsertError);
-      return NextResponse.json(
-        { error: "Failed to save cost data" },
-        { status: 500 }
-      );
+      logger.error("Error upserting platform costs", upsertError, { tenant_id, account_id, recordCount: costRecords.length });
+      throw new Error("Error al guardar datos de costos");
     }
 
     // Update sync status
@@ -371,11 +378,16 @@ export async function POST(request: NextRequest) {
     // Recalculate attributed costs for leads that may have been affected
     // This is done via trigger on lead_sources, but we should update existing ones
     try {
-      await admin.rpc("recalculate_attributed_costs_for_tenant", {
-        p_tenant_id: tenant_id,
-        p_date_start: startDate,
-        p_date_end: endDate,
-      } as any);
+      await rpcWithTimeout<unknown>(
+        unsafeRpc<unknown>(admin, "recalculate_attributed_costs_for_tenant", {
+          p_tenant_id: tenant_id,
+          p_date_start: startDate,
+          p_date_end: endDate,
+        }),
+        30000,
+        "recalculate_attributed_costs_for_tenant",
+        false
+      );
     } catch {
       // Function may not exist yet, ignore
     }
@@ -385,8 +397,7 @@ export async function POST(request: NextRequest) {
     const totalImpressions = allInsights.reduce((sum, i) => sum + i.impressions, 0);
     const totalClicks = allInsights.reduce((sum, i) => sum + i.clicks, 0);
 
-    return NextResponse.json({
-      success: true,
+    return apiSuccess({
       synced: costRecords.length,
       days_synced: daysNeedingSync.length,
       days_skipped: daysToSync.filter(d => !d.needsSync).length,
@@ -397,12 +408,11 @@ export async function POST(request: NextRequest) {
         clicks: totalClicks,
       },
     });
-  } catch (error: any) {
-    console.error("Error syncing Meta costs:", error);
-    return NextResponse.json(
-      { error: error.message || "Failed to sync costs" },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      context: { route: "POST /api/integrations/meta/costs" },
+    });
   }
 }
 
@@ -420,7 +430,7 @@ export async function GET(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return handleUnauthorized("Autenticación requerida");
     }
 
     const searchParams = request.nextUrl.searchParams;
@@ -445,11 +455,8 @@ export async function GET(request: NextRequest) {
     const { data: costs, error } = await query;
 
     if (error) {
-      console.error("Error fetching costs:", error);
-      return NextResponse.json(
-        { error: "Failed to fetch costs" },
-        { status: 500 }
-      );
+      logger.error("Error fetching costs", error, { tenantId, offerId });
+      throw new Error("Error al obtener costos");
     }
 
     // Optionally include sync status
@@ -465,15 +472,14 @@ export async function GET(request: NextRequest) {
       syncStatus = data;
     }
 
-    return NextResponse.json({ 
+    return apiSuccess({ 
       costs,
       sync_status: syncStatus,
     });
   } catch (error) {
-    console.error("Error in GET costs:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      context: { route: "GET /api/integrations/meta/costs" },
+    });
   }
 }

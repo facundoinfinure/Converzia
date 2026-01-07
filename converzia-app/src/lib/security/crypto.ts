@@ -1,4 +1,5 @@
 import { randomBytes, createCipheriv, createDecipheriv } from "crypto";
+import { logger } from "@/lib/utils/logger";
 
 // ============================================
 // PII Encryption Module
@@ -93,7 +94,7 @@ export function decryptPII(encryptedData: string): string {
   
   const parts = encryptedData.split(":");
   if (parts.length !== 3) {
-    console.warn("Invalid encrypted PII format");
+    logger.warn("Invalid encrypted PII format", undefined, { encryptedLength: encryptedData.length });
     return encryptedData;
   }
   
@@ -118,7 +119,7 @@ export function decryptPII(encryptedData: string): string {
     
     return decrypted.toString("utf8");
   } catch (error) {
-    console.error("Failed to decrypt PII:", error instanceof Error ? error.message : "Unknown error");
+    logger.error("Failed to decrypt PII", error, {});
     // Return the original encrypted data if decryption fails
     // This prevents data loss if key changed
     return encryptedData;

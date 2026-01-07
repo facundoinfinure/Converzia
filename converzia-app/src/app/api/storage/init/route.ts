@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { ensureRagBucketExists, initializeTenantStorage, initializeOfferStorage } from "@/lib/services/storage";
+import { handleApiError, handleUnauthorized, handleForbidden, handleValidationError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
+import { isAdminProfile } from "@/types/supabase-helpers";
+import { logger } from "@/lib/utils/logger";
+import { validateBody, storageInitBodySchema } from "@/lib/validation/schemas";
 
 // ============================================
 // Storage Initialization API
@@ -20,7 +24,7 @@ export async function POST(request: NextRequest) {
     // Verify user is authenticated and is Converzia admin
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+      return handleUnauthorized("Debes iniciar sesión para inicializar storage");
     }
 
     const { data: profile } = await queryWithTimeout(
@@ -33,17 +37,20 @@ export async function POST(request: NextRequest) {
       "verificar perfil de admin"
     );
 
-    if (!(profile as any)?.is_converzia_admin) {
-      return NextResponse.json({ error: "Se requiere acceso de administrador" }, { status: 403 });
+    if (!isAdminProfile(profile as { is_converzia_admin?: boolean } | null)) {
+      return handleForbidden("Solo administradores pueden inicializar storage");
     }
 
-    // Parse request body
-    const body = await request.json();
-    const { tenant_id, offer_id } = body;
-
-    if (!tenant_id) {
-      return NextResponse.json({ error: "tenant_id es requerido" }, { status: 400 });
+    // Validate request body
+    const bodyValidation = await validateBody(request, storageInitBodySchema);
+    
+    if (!bodyValidation.success) {
+      return handleValidationError(new Error(bodyValidation.error), {
+        validationError: bodyValidation.error,
+      });
     }
+    
+    const { tenant_id, offer_id } = bodyValidation.data;
 
     // Initialize storage
     let result;
@@ -56,19 +63,22 @@ export async function POST(request: NextRequest) {
     }
 
     if (!result.success) {
-      return NextResponse.json(
-        { error: result.error || "Error al inicializar storage" },
-        { status: 500 }
-      );
+      return handleApiError(new Error(result.error || "Storage init failed"), {
+        code: ErrorCode.INTERNAL_ERROR,
+        status: 500,
+        message: result.error || "Error al inicializar storage",
+        context: { tenant_id, offer_id },
+      });
     }
 
-    return NextResponse.json({ success: true });
+    return apiSuccess(null, "Storage inicializado correctamente");
   } catch (error) {
-    console.error("Error in POST /api/storage/init:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Error interno" },
-      { status: 500 }
-    );
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      status: 500,
+      message: "Error al inicializar storage",
+      context: { operation: "storage_init" },
+    });
   }
 }
 
@@ -81,19 +91,22 @@ export async function GET() {
     const result = await ensureRagBucketExists();
     
     if (!result.success) {
-      return NextResponse.json(
-        { error: result.error || "Error al verificar storage" },
-        { status: 500 }
-      );
+      return handleApiError(new Error(result.error || "Bucket check failed"), {
+        code: ErrorCode.INTERNAL_ERROR,
+        status: 500,
+        message: result.error || "Error al verificar storage",
+        context: { bucket: "rag-documents" },
+      });
     }
 
-    return NextResponse.json({ success: true, bucket: "rag-documents" });
+    return apiSuccess({ bucket: "rag-documents" }, "Storage verificado correctamente");
   } catch (error) {
-    console.error("Error in GET /api/storage/init:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Error interno" },
-      { status: 500 }
-    );
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      status: 500,
+      message: "Error al verificar storage",
+      context: { operation: "storage_check" },
+    });
   }
 }
 

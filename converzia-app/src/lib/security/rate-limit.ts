@@ -197,10 +197,12 @@ export async function withRateLimit(
 
   if (!result.success) {
     // Log rate limit hit for security monitoring
-    console.warn(`Rate limit exceeded for ${config.keyPrefix || "api"}`, {
+    const { logger } = await import("@/lib/utils/logger");
+    logger.security(`Rate limit exceeded for ${config.keyPrefix || "api"}`, {
       clientId: clientId.substring(0, 8) + "...", // Partial IP for privacy
       remaining: result.remaining,
       retryAfter: result.retryAfter,
+      path: request.nextUrl.pathname,
     });
     
     return NextResponse.json(
@@ -274,7 +276,8 @@ export async function checkRedisHealth(): Promise<boolean> {
     await redisClient.ping();
     return true;
   } catch (error) {
-    console.error("Redis health check failed:", error);
+    const { logger } = await import("@/lib/utils/logger");
+    logger.error("Redis health check failed", error, {});
     return false;
   }
 }

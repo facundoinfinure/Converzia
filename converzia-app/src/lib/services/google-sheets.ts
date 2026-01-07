@@ -32,12 +32,14 @@ export interface SheetsAppendResult {
 /**
  * Get authenticated OAuth2 client from tokens, with automatic refresh
  */
+import { logger } from "@/lib/utils/logger";
+
 async function getOAuthClient(
   tokens: GoogleOAuthTokens,
   integrationId: string
 ): Promise<InstanceType<typeof google.auth.OAuth2> | null> {
   if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
-    console.error("Google OAuth not configured");
+    logger.error("Google OAuth not configured");
     return null;
   }
 
@@ -77,7 +79,7 @@ async function getOAuthClient(
 
       oauth2Client.setCredentials(credentials);
     } catch (error) {
-      console.error("Error refreshing Google token:", error);
+      logger.error("Error refreshing Google token", error, { integrationId });
       return null;
     }
   }
@@ -138,7 +140,12 @@ export async function appendToGoogleSheets(
       };
     }
 
-    const sheets = google.sheets({ version: "v4" as const, auth: auth as any });
+    type SheetsAuth = NonNullable<Parameters<typeof google.sheets>[0]>["auth"];
+    // Both OAuth2Client and GoogleAuth are compatible with google.sheets auth parameter
+    const sheets = google.sheets({ 
+      version: "v4" as const, 
+      auth: auth as unknown as SheetsAuth
+    });
 
     // Build row data
     const rowData = buildSheetRow(delivery, config.column_mapping);
@@ -282,8 +289,13 @@ function columnToNumber(col: string): number {
 /**
  * Get nested value from object using dot notation
  */
-function getNestedValue(obj: any, path: string): unknown {
-  return path.split(".").reduce((current, key) => current?.[key], obj);
+function getNestedValue(obj: unknown, path: string): unknown {
+  return path.split(".").reduce((current: unknown, key: string) => {
+    if (current && typeof current === "object" && key in current) {
+      return (current as Record<string, unknown>)[key];
+    }
+    return undefined;
+  }, obj);
 }
 
 /**
@@ -299,17 +311,28 @@ function formatValue(value: unknown): string {
 /**
  * Log Sheets sync to database
  */
+interface SheetsAppendResponse {
+  updates?: {
+    updatedRange?: string | null;
+    updatedRows?: number | null;
+    updatedColumns?: number | null;
+    updatedCells?: number | null;
+  };
+}
+
 async function logSheetsSync(
   delivery: Delivery,
   rowData: string[] | null,
-  response: any,
+  response: SheetsAppendResponse | null,
   errorMessage: string | null
 ): Promise<void> {
+  let integration: { id: string } | null = null;
+  
   try {
     const supabase = await createClient();
 
     // Get integration ID
-    const { data: integration } = await queryWithTimeout(
+    const { data: integrationData } = await queryWithTimeout(
       supabase
         .from("tenant_integrations")
         .select("id")
@@ -321,15 +344,16 @@ async function logSheetsSync(
       "get Google Sheets integration"
     );
 
-    const integrationTyped = integration as { id: string } | null;
-    if (!integrationTyped) return;
+    integration = integrationData as { id: string } | null;
+    if (!integration) return;
 
     const startedAt = new Date();
     const completedAt = new Date();
+    const integrationId = integration.id;
 
     await queryWithTimeout(
       supabase.from("integration_sync_logs").insert({
-        integration_id: integrationTyped.id,
+        integration_id: integrationId,
         delivery_id: delivery.id,
         sync_type: "LEAD_DELIVERY",
         status: errorMessage ? "FAILED" : "SUCCESS",
@@ -344,7 +368,11 @@ async function logSheetsSync(
       "log Sheets sync"
     );
   } catch (error) {
-    console.error("Error logging Sheets sync:", error);
+    const integrationId = integration?.id || "unknown";
+    logger.exception("Error logging Sheets sync", error, {
+      integrationId,
+      errorMessage: errorMessage || "unknown",
+    });
   }
 }
 
@@ -375,7 +403,12 @@ export async function testGoogleSheetsConnection(
       };
     }
 
-    const sheets = google.sheets({ version: "v4" as const, auth: auth as any });
+    // Both OAuth2Client and GoogleAuth are compatible with google.sheets auth parameter
+    type SheetsAuth = NonNullable<Parameters<typeof google.sheets>[0]>["auth"];
+    const sheets = google.sheets({ 
+      version: "v4" as const, 
+      auth: auth as unknown as SheetsAuth
+    });
 
     // Try to get spreadsheet metadata
     const response = await sheets.spreadsheets.get({
@@ -402,22 +435,24 @@ export async function testGoogleSheetsConnection(
       message: "Conexión exitosa con Google Sheets",
       sheet_title: sheetTitle || undefined,
     };
-  } catch (error: any) {
-    if (error.code === 404) {
-      return {
-        success: false,
-        message: "Spreadsheet no encontrado. Verificá el ID.",
-      };
-    }
-    if (error.code === 403) {
-      return {
-        success: false,
-        message: "Sin permisos para acceder al spreadsheet.",
-      };
+  } catch (error: unknown) {
+    if (error && typeof error === "object" && "code" in error) {
+      if (error.code === 404) {
+        return {
+          success: false,
+          message: "Spreadsheet no encontrado. Verificá el ID.",
+        };
+      }
+      if (error.code === 403) {
+        return {
+          success: false,
+          message: "Sin permisos para acceder al spreadsheet.",
+        };
+      }
     }
     return {
       success: false,
-      message: error.message || "Error de conexión",
+      message: error instanceof Error ? error.message : "Error de conexión",
     };
   }
 }
@@ -443,7 +478,12 @@ export async function createSheetHeaders(
       };
     }
 
-    const sheets = google.sheets({ version: "v4" as const, auth: auth as any });
+    // Both OAuth2Client and GoogleAuth are compatible with google.sheets auth parameter
+    type SheetsAuth = NonNullable<Parameters<typeof google.sheets>[0]>["auth"];
+    const sheets = google.sheets({ 
+      version: "v4" as const, 
+      auth: auth as unknown as SheetsAuth
+    });
 
     const headers = [
       "Fecha/Hora",

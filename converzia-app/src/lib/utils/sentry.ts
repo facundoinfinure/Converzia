@@ -7,15 +7,29 @@ import * as Sentry from '@sentry/nextjs';
 
 /**
  * Capture an exception with Sentry
+ * Enhanced with better context and breadcrumbs
  */
-export function captureException(error: Error | unknown, context?: Record<string, any>) {
+export function captureException(error: Error | unknown, context?: Record<string, unknown>) {
   if (process.env.NODE_ENV === 'development' && !process.env.SENTRY_DEV) {
     console.error('Error captured (Sentry disabled in dev):', error, context);
     return;
   }
 
+  // Add breadcrumb before capturing
+  if (context) {
+    Sentry.addBreadcrumb({
+      message: 'Error context',
+      data: context,
+      level: 'error',
+      timestamp: Date.now() / 1000,
+    });
+  }
+
   Sentry.captureException(error, {
     extra: context,
+    tags: {
+      source: 'application',
+    },
   });
 }
 
@@ -36,13 +50,24 @@ export function captureMessage(message: string, level: 'info' | 'warning' | 'err
 
 /**
  * Set user context for error tracking
+ * Enhanced with tenant context
  */
 export function setUser(user: {
   id: string;
   email?: string;
   username?: string;
+  tenantId?: string;
 }) {
-  Sentry.setUser(user);
+  Sentry.setUser({
+    id: user.id,
+    email: user.email,
+    username: user.username,
+  });
+
+  // Set tenant as tag for filtering
+  if (user.tenantId) {
+    Sentry.setTag('tenant_id', user.tenantId);
+  }
 }
 
 /**
@@ -50,6 +75,20 @@ export function setUser(user: {
  */
 export function clearUser() {
   Sentry.setUser(null);
+  Sentry.setTag('tenant_id', undefined);
+}
+
+/**
+ * Set tenant context for error tracking
+ */
+export function setTenantContext(tenantId: string, tenantName?: string) {
+  Sentry.setTag('tenant_id', tenantId);
+  if (tenantName) {
+    Sentry.setContext('tenant', {
+      id: tenantId,
+      name: tenantName,
+    });
+  }
 }
 
 /**

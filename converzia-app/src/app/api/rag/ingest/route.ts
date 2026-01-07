@@ -9,6 +9,10 @@ import {
   ingestFromPdf 
 } from "@/lib/services/rag";
 import { ensureRagBucketExists } from "@/lib/services/storage";
+import { handleApiError, handleUnauthorized, handleForbidden, handleValidationError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
+import { isAdminProfile } from "@/types/supabase-helpers";
+import type { RagSourceRow } from "@/types/supabase-helpers";
+import { logger } from "@/lib/utils/logger";
 
 // ============================================
 // RAG Ingest API
@@ -32,7 +36,7 @@ export async function POST(request: NextRequest) {
     // Verify user is authenticated and is Converzia admin
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return handleUnauthorized("Debes iniciar sesión para ingestar contenido RAG");
     }
 
     const { data: profile } = await queryWithTimeout(
@@ -45,8 +49,8 @@ export async function POST(request: NextRequest) {
       "get user profile for RAG ingest"
     );
 
-    if (!(profile as any)?.is_converzia_admin) {
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+    if (!isAdminProfile(profile as { is_converzia_admin?: boolean } | null)) {
+      return handleForbidden("Solo administradores pueden ingestar contenido RAG");
     }
 
     // Check if this is a multipart form (PDF upload) or JSON
@@ -93,7 +97,8 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const approvalStatus = (sourceData as any).approval_status;
+      const typedSource = sourceData as RagSourceRow;
+      const approvalStatus = typedSource.approval_status;
       if (approvalStatus !== 'APPROVED') {
         return NextResponse.json(
           { 
@@ -147,11 +152,12 @@ export async function POST(request: NextRequest) {
       });
     }
   } catch (error) {
-    console.error("RAG ingest error:", error);
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 }
-    );
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      status: 500,
+      message: "Error al procesar la ingesta RAG",
+      context: { operation: "rag_ingest" },
+    });
   }
 }
 
@@ -198,7 +204,7 @@ async function handlePdfFromStorage(
 
     return result;
   } catch (error) {
-    console.error("PDF from storage error:", error);
+    logger.error("PDF from storage error", error, { sourceId, storagePath });
     return {
       success: false,
       error: error instanceof Error ? error.message : "Error al procesar PDF desde storage",
@@ -253,7 +259,7 @@ async function handlePdfUpload(request: NextRequest): Promise<NextResponse> {
     
     // Warning if file is large (might fail on Vercel free/hobby plans)
     if (file.size > 4 * 1024 * 1024) {
-      console.warn(`Large file upload: ${(file.size / 1024 / 1024).toFixed(2)}MB - may fail on Vercel free plan`);
+      logger.warn(`Large file upload: ${(file.size / 1024 / 1024).toFixed(2)}MB - may fail on Vercel free plan`, { fileSize: file.size, fileName: file.name });
     }
 
     const supabase = createAdminClient();
@@ -298,7 +304,8 @@ async function handlePdfUpload(request: NextRequest): Promise<NextResponse> {
 
     // Upload to Supabase Storage
     // Structure: tenant_id/[offer_id/]source_id/filename
-    const sourceId = (source as any).id;
+    const typedSource = source as RagSourceRow;
+    const sourceId = typedSource.id;
     const storagePath = offerId 
       ? `${tenantId}/${offerId}/${sourceId}/${file.name}`
       : `${tenantId}/${sourceId}/${file.name}`;
@@ -341,11 +348,12 @@ async function handlePdfUpload(request: NextRequest): Promise<NextResponse> {
       requiresApproval: true,
     });
   } catch (error) {
-    console.error("PDF upload error:", error);
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Upload failed" },
-      { status: 500 }
-    );
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      status: 500,
+      message: "Error al subir el PDF",
+      context: { operation: "pdf_upload" },
+    });
   }
 }
 

@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
+import { logger } from "@/lib/utils/logger";
+import { handleApiError, handleUnauthorized, handleForbidden, handleValidationError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
+import type { MembershipWithRole, CreditLedgerRowWithRelations, BillingOrderRow, PurchaserRow, DeliveryRow, LeadOfferRow, OfferRow, LeadRow, BillingConsumptionItem } from "@/types/supabase-helpers";
+import { validateQuery, billingConsumptionQuerySchema } from "@/lib/validation/schemas";
 
 /**
  * Generate Stripe invoice URL from available identifiers
@@ -44,14 +48,10 @@ export async function GET(request: NextRequest) {
     // Get authenticated user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-      console.error("[Billing Consumption] Auth error:", {
-        error: authError,
-        hasUser: !!user,
-      });
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+      return handleUnauthorized("Debes iniciar sesión para ver el historial de facturación");
     }
     
-    console.log("[Billing Consumption] User authenticated:", {
+    logger.info("[Billing Consumption] User authenticated", {
       userId: user.id,
       email: user.email,
     });
@@ -69,37 +69,39 @@ export async function GET(request: NextRequest) {
     );
     
     if (membershipError) {
-      console.error("[Billing Consumption] Membership query failed:", {
+      logger.error("[Billing Consumption] Membership query failed", membershipError, {
         userId: user.id,
-        error: membershipError,
       });
     }
     
-    const membership = membershipData as { tenant_id: string; role: string } | null;
+    const membership = membershipData as MembershipWithRole | null;
     
     if (!membership) {
-      console.error("[Billing Consumption] No active membership found:", {
-        userId: user.id,
-      });
-      return NextResponse.json({ error: "No tiene acceso a ningún tenant" }, { status: 403 });
+      return handleForbidden("No tienes acceso a ningún tenant activo");
     }
     
     const tenantId = membership.tenant_id;
     
-    console.log("[Billing Consumption] Tenant membership verified:", {
+    logger.info("[Billing Consumption] Tenant membership verified", {
       userId: user.id,
       tenantId,
       role: membership.role,
     });
     
-    // Parse query params
+    // Validate query params
     const { searchParams } = new URL(request.url);
-    const offerId = searchParams.get("offer_id");
-    const fromDate = searchParams.get("from");
-    const toDate = searchParams.get("to");
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = Math.min(parseInt(searchParams.get("limit") || "20"), 100);
-    const offset = (page - 1) * limit;
+    const queryValidation = validateQuery(searchParams, billingConsumptionQuerySchema);
+    
+    if (!queryValidation.success) {
+      return handleValidationError(new Error(queryValidation.error), {
+        validationError: queryValidation.error,
+      });
+    }
+    
+    const { offer_id: offerId, from: fromDate, to: toDate, page, limit } = queryValidation.data;
+    const pageNum = page ?? 1;
+    const limitNum = limit ?? 25;
+    const offset = (pageNum - 1) * limitNum;
     
     // Query credit_ledger for all transactions (purchases and consumptions)
     // Optimized: Limit joins and use more efficient query structure
@@ -169,34 +171,34 @@ export async function GET(request: NextRequest) {
     );
     
     if (ledgerError) {
-      console.error("[Billing Consumption] Ledger query failed:", {
-        tenantId,
-        code: ledgerError.code,
-        message: ledgerError.message,
-        details: ledgerError.details,
-        hint: ledgerError.hint,
+      return handleApiError(ledgerError, {
+        code: ErrorCode.DATABASE_ERROR,
+        status: 500,
+        message: "No se pudo obtener el historial de facturación",
+        context: { tenantId },
       });
-      return NextResponse.json({ 
-        error: "Error al obtener historial",
-        details: ledgerError.message 
-      }, { status: 500 });
     }
     
-    console.log("[Billing Consumption] Ledger query result:", {
+    logger.info("[Billing Consumption] Ledger query result", {
       tenantId,
       transactionCount: Array.isArray(ledgerData) ? ledgerData.length : 0,
       hasData: !!ledgerData,
     });
     
     // Transform and filter transactions
-    const allTransactions = (Array.isArray(ledgerData) ? ledgerData : []).map((tx: any) => {
+    const ledgerRows = (Array.isArray(ledgerData) ? ledgerData : []) as CreditLedgerRowWithRelations[];
+    const allTransactions = ledgerRows.map((tx) => {
       const isPurchase = tx.transaction_type === "CREDIT_PURCHASE";
-      const billingOrder = Array.isArray(tx.billing_order) ? tx.billing_order[0] : tx.billing_order;
-      const purchaser = Array.isArray(tx.purchaser) ? tx.purchaser[0] : tx.purchaser;
-      const delivery = Array.isArray(tx.delivery) ? tx.delivery[0] : tx.delivery;
-      const leadOffer = Array.isArray(tx.lead_offer) ? tx.lead_offer[0] : tx.lead_offer;
-      const offer = leadOffer?.offer ? (Array.isArray(leadOffer.offer) ? leadOffer.offer[0] : leadOffer.offer) : null;
-      const lead = leadOffer?.lead ? (Array.isArray(leadOffer.lead) ? leadOffer.lead[0] : leadOffer.lead) : null;
+      const billingOrder = Array.isArray(tx.billing_order) ? tx.billing_order[0] : (tx.billing_order as BillingOrderRow | null);
+      const purchaser = Array.isArray(tx.purchaser) ? tx.purchaser[0] : (tx.purchaser as PurchaserRow | null);
+      const delivery = Array.isArray(tx.delivery) ? tx.delivery[0] : (tx.delivery as DeliveryRow | null);
+      const leadOffer = Array.isArray(tx.lead_offer) ? tx.lead_offer[0] : (tx.lead_offer as LeadOfferRow | null);
+      const offer = leadOffer?.offer 
+        ? (Array.isArray(leadOffer.offer) ? leadOffer.offer[0] : leadOffer.offer as OfferRow)
+        : null;
+      const lead = leadOffer?.lead 
+        ? (Array.isArray(leadOffer.lead) ? leadOffer.lead[0] : leadOffer.lead as LeadRow)
+        : null;
       
       if (isPurchase) {
         // Purchase transaction
@@ -284,11 +286,11 @@ export async function GET(request: NextRequest) {
           invoice_url: null,
         };
       }
-    }).filter((tx: any) => tx !== null);
+    }).filter((tx) => tx !== null) as BillingConsumptionItem[];
     
     // Apply pagination after filtering
     const totalCount = allTransactions.length;
-    const paginatedTransactions = allTransactions.slice(offset, offset + limit);
+    const paginatedTransactions = allTransactions.slice(offset, offset + limitNum);
     
     // Get current balance
     const { data: balanceData, error: balanceError } = await queryWithTimeout(
@@ -302,15 +304,23 @@ export async function GET(request: NextRequest) {
     );
     
     if (balanceError) {
-      console.warn("[Billing Consumption] Balance query failed (non-fatal):", {
+      logger.warn("[Billing Consumption] Balance query failed (non-fatal)", {
         tenantId,
-        error: balanceError,
+        error: balanceError instanceof Error ? balanceError.message : String(balanceError),
       });
     }
     
-    const balance = balanceData as { current_balance: number } | null;
+    interface BalanceRow {
+      current_balance: number;
+    }
+    const balance = balanceData as BalanceRow | null;
     
     // Get summary stats (optimized - only fetch what we need)
+    interface SummaryRow {
+      transaction_type: string;
+      amount: number;
+    }
+    
     const { data: summaryData } = await queryWithTimeout(
       supabase
         .from("credit_ledger")
@@ -321,7 +331,7 @@ export async function GET(request: NextRequest) {
       false // Don't retry
     );
     
-    const summary = Array.isArray(summaryData) ? summaryData as Array<{ transaction_type: string; amount: number }> : [];
+    const summary = (Array.isArray(summaryData) ? summaryData : []) as SummaryRow[];
     
     const totalPurchased = summary
       .filter((s) => s.transaction_type === 'CREDIT_PURCHASE')
@@ -335,43 +345,35 @@ export async function GET(request: NextRequest) {
       .filter((s) => s.transaction_type === 'CREDIT_REFUND')
       .reduce((sum, s) => sum + Math.abs(s.amount), 0);
     
-    console.log("[Billing Consumption] Successfully retrieved data:", {
+    logger.info("[Billing Consumption] Successfully retrieved data", {
       tenantId,
       transactionCount: paginatedTransactions.length,
       totalCount,
       balance: balance?.current_balance || 0,
     });
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        balance: balance?.current_balance || 0,
-        summary: {
-          totalPurchased,
-          totalConsumed,
-          totalRefunded,
-        },
-        transactions: paginatedTransactions,
-        pagination: {
-          page,
-          limit,
-          total: totalCount,
-          totalPages: Math.ceil(totalCount / limit),
-        }
-      }
+    return apiSuccess({
+      balance: balance?.current_balance || 0,
+      summary: {
+        totalPurchased,
+        totalConsumed,
+        totalRefunded,
+      },
+      transactions: paginatedTransactions,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total: totalCount,
+        totalPages: Math.ceil(totalCount / limitNum),
+      },
     });
   } catch (error) {
-    console.error("[Billing Consumption] Unexpected error:", {
-      error: error instanceof Error ? error.message : error,
-      stack: error instanceof Error ? error.stack : undefined,
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      status: 500,
+      message: "Ocurrió un error al obtener el historial de facturación",
+      context: { operation: "get_billing_consumption" },
     });
-    return NextResponse.json(
-      { 
-        error: "Error interno del servidor",
-        details: error instanceof Error ? error.message : "Unknown error"
-      },
-      { status: 500 }
-    );
   }
 }
 

@@ -10,9 +10,10 @@ import {
   getMessagesToKeep
 } from "./openai";
 import { calculateLeadScore, checkMinimumFieldsForScoring } from "./scoring";
-import type { LeadOffer, QualificationFields, Offer } from "@/types";
+import type { LeadOffer, QualificationFields, Offer, Lead } from "@/types";
+import type { LeadOfferQueryResult } from "@/types/supabase-helpers";
 import { normalizePhoneForDb } from "@/lib/utils";
-import { logger, Metrics, getTraceId } from "@/lib/monitoring";
+import { Metrics, getTraceId, logger } from "@/lib/monitoring";
 
 // ============================================
 // Conversation Flow Service
@@ -55,9 +56,9 @@ export async function startInitialConversation(leadOfferId: string): Promise<voi
     throw new Error(`Lead offer not found: ${leadOfferId}`);
   }
 
-  const lo = leadOffer as any;
-  const lead: any = Array.isArray(lo.lead) ? lo.lead[0] : lo.lead;
-  const offer = Array.isArray(lo.offer) ? lo.offer[0] : lo.offer;
+  const lo = leadOffer as LeadOfferQueryResult;
+  const lead: Lead | null = Array.isArray(lo.lead) ? lo.lead[0] : (lo.lead || null);
+  const offer: Offer | null = Array.isArray(lo.offer) ? lo.offer[0] : (lo.offer || null);
   const tenant = Array.isArray(lo.tenant) ? lo.tenant[0] : lo.tenant;
 
   if (!lead?.phone) {
@@ -75,8 +76,8 @@ export async function startInitialConversation(leadOfferId: string): Promise<voi
       .from("conversations")
       .upsert(
         {
-          lead_id: (lead as any).id,
-          tenant_id: (leadOffer as any).tenant_id,
+          lead_id: lead.id,
+          tenant_id: lo.tenant_id,
           chatwoot_conversation_id: chatwootConversationId,
           chatwoot_contact_id: String(contact.id),
           is_active: true,
@@ -126,7 +127,7 @@ export async function startInitialConversation(leadOfferId: string): Promise<voi
       .from("lead_offers")
       .update({
         status: "CONTACTED",
-        contact_attempts: ((leadOffer as any).contact_attempts || 0) + 1,
+        contact_attempts: (lo.contact_attempts || 0) + 1,
         last_attempt_at: new Date().toISOString(),
         status_changed_at: new Date().toISOString(),
       })
@@ -138,7 +139,7 @@ export async function startInitialConversation(leadOfferId: string): Promise<voi
   // Log event
   await queryWithTimeout(
     supabase.from("lead_events").insert({
-      lead_id: (lead as any).id,
+      lead_id: lead.id,
       lead_offer_id: leadOfferId,
       event_type: "MESSAGE_SENT",
       details: { message: initialMessage, type: "initial" },
@@ -161,7 +162,7 @@ export async function processIncomingMessage(
   const supabase = createAdminClient();
 
   // Find lead by phone
-  const { data: lead } = await queryWithTimeout(
+  const { data: lead } = await queryWithTimeout<{ id: string }>(
     supabase
       .from("leads")
       .select("id")
@@ -177,14 +178,14 @@ export async function processIncomingMessage(
   }
 
   // Get active lead offer
-  const { data: leadOffer } = await queryWithTimeout(
+  const { data: leadOffer } = await queryWithTimeout<LeadOfferQueryResult>(
     supabase
       .from("lead_offers")
       .select(`
         *,
         offer:offers!offer_id(*)
       `)
-      .eq("lead_id", (lead as any).id)
+      .eq("lead_id", lead.id)
       .in("status", ["CONTACTED", "ENGAGED", "QUALIFYING"])
       .order("created_at", { ascending: false })
       .limit(1)
@@ -194,17 +195,20 @@ export async function processIncomingMessage(
   );
 
   if (!leadOffer) {
-    logger.info("No active lead offer for lead", { leadId: (lead as any).id });
+    logger.info("No active lead offer for lead", { leadId: lead.id });
     return null;
   }
 
-  logger.conversation("message_received", (leadOffer as any).id);
+  const typedLeadOffer = leadOffer;
+  logger.conversation("message_received", typedLeadOffer.id);
 
-  const offer = Array.isArray((leadOffer as any).offer) ? (leadOffer as any).offer[0] : (leadOffer as any).offer;
+  const offer: Offer | null = Array.isArray(typedLeadOffer.offer) 
+    ? typedLeadOffer.offer[0] 
+    : (typedLeadOffer.offer || null);
 
   // Store incoming message
   // Ensure we have a Converzia conversation record mapped to Chatwoot conversation ID
-  const { data: convo } = await queryWithTimeout(
+  const { data: convo } = await queryWithTimeout<{ id: string }>(
     supabase
       .from("conversations")
       .select("id")
@@ -216,12 +220,12 @@ export async function processIncomingMessage(
 
   let conversationRow = convo;
   if (!conversationRow) {
-    const { data: newConvo } = await queryWithTimeout(
+    const { data: newConvo } = await queryWithTimeout<{ id: string }>(
       supabase
         .from("conversations")
         .insert({
-          lead_id: (lead as any).id,
-          tenant_id: (leadOffer as any).tenant_id,
+          lead_id: lead.id,
+          tenant_id: typedLeadOffer.tenant_id,
           chatwoot_conversation_id: conversationId,
           is_active: true,
         })
@@ -237,10 +241,12 @@ export async function processIncomingMessage(
     throw new Error("Failed to get or create conversation");
   }
 
+  const conversationIdValue = conversationRow.id;
+
   await queryWithTimeout(
     supabase.from("messages").insert({
-      conversation_id: (conversationRow as any).id,
-      lead_id: (lead as any).id,
+      conversation_id: conversationIdValue,
+      lead_id: lead.id,
       direction: "INBOUND",
       sender: "LEAD",
       content: message,
@@ -250,7 +256,7 @@ export async function processIncomingMessage(
   );
 
   // Update lead offer status to ENGAGED if still CONTACTED
-  if ((leadOffer as any).status === "CONTACTED") {
+  if (typedLeadOffer.status === "CONTACTED") {
     await queryWithTimeout(
       supabase
         .from("lead_offers")
@@ -259,25 +265,32 @@ export async function processIncomingMessage(
           first_response_at: new Date().toISOString(),
           status_changed_at: new Date().toISOString(),
         })
-        .eq("id", (leadOffer as any).id),
+        .eq("id", typedLeadOffer.id),
       10000,
       "update lead offer to ENGAGED"
     );
   }
 
   // Get conversation history with count for rolling summary
+  interface MessageRow {
+    direction: string;
+    sender: string;
+    content: string;
+  }
+
   const { data: history, count: messageCount } = await queryWithTimeout(
     supabase
       .from("messages")
       .select("direction, sender, content", { count: "exact" })
-      .eq("conversation_id", (conversationRow as any).id)
+      .eq("conversation_id", conversationIdValue)
       .order("created_at", { ascending: true }),
     10000,
     "get conversation history"
   );
 
-  const allMessages = ((history as any[] || []) as any[]).map((m: any) => ({
-    role: m.sender === "LEAD" ? "user" as const : "assistant" as const,
+  const historyArray: MessageRow[] = Array.isArray(history) ? history : [];
+  const allMessages = historyArray.map((m) => ({
+    role: m.sender === "LEAD" ? ("user" as const) : ("assistant" as const),
     content: m.content,
   }));
 
@@ -287,17 +300,21 @@ export async function processIncomingMessage(
 
   if (shouldGenerateRollingSummary(messageCount || 0)) {
     // Get existing summary from conversation record
+    interface ConversationSummary {
+      summary: string | null;
+    }
+
     const { data: convoData } = await queryWithTimeout(
       supabase
         .from("conversations")
         .select("summary")
-        .eq("id", (conversationRow as any).id)
+        .eq("id", conversationIdValue)
         .single(),
       5000,
       "get conversation summary"
     );
 
-    const existingSummary = (convoData as any)?.summary || null;
+    const existingSummary = (convoData as ConversationSummary | null)?.summary || null;
     
     // Keep only last N messages, summarize the rest
     const messagesToSummarize = allMessages.slice(0, -getMessagesToKeep());
@@ -312,7 +329,7 @@ export async function processIncomingMessage(
         supabase
           .from("conversations")
           .update({ summary: conversationSummaryContext })
-          .eq("id", (conversationRow as any).id),
+          .eq("id", conversationIdValue),
         5000,
         "update conversation summary"
       );
@@ -320,7 +337,7 @@ export async function processIncomingMessage(
   }
 
   // Extract qualification fields from new message
-  const currentFields = ((leadOffer as any).qualification_fields as QualificationFields) || {};
+  const currentFields = (typedLeadOffer.qualification_fields as QualificationFields | null) || ({} as QualificationFields);
   const newFields = await extractQualificationFields(message, currentFields);
   const mergedFields = { ...currentFields, ...newFields };
 
@@ -333,22 +350,20 @@ export async function processIncomingMessage(
         status: "QUALIFYING",
         status_changed_at: new Date().toISOString(),
       })
-      .eq("id", (leadOffer as any).id),
+      .eq("id", typedLeadOffer.id),
     10000,
     "update qualification fields"
   );
 
   // Check if we have enough information to score
   const fieldCheck = checkMinimumFieldsForScoring(mergedFields);
-  
-  const historyArray = Array.isArray(history) ? history : [];
 
   if (fieldCheck.ready) {
     // Calculate score using real scoring engine
     const scoreResult = await calculateLeadScore(
       mergedFields,
       offer,
-      (leadOffer as any).tenant_id,
+      typedLeadOffer.tenant_id || "",
       { messageCount: historyArray.length + 1, responseTime: 30 }
     );
 
@@ -363,14 +378,14 @@ export async function processIncomingMessage(
           qualified_at: scoreResult.isReady ? new Date().toISOString() : null,
           status_changed_at: new Date().toISOString(),
         })
-        .eq("id", (leadOffer as any).id),
+        .eq("id", typedLeadOffer.id),
       10000,
       "update lead offer score"
     );
 
     // If lead ready, trigger delivery
     if (scoreResult.isReady) {
-      await triggerDelivery((leadOffer as any).id, scoreResult.explanation.summary);
+      await triggerDelivery(typedLeadOffer.id, scoreResult.explanation.summary);
     }
   }
 
@@ -385,8 +400,8 @@ export async function processIncomingMessage(
   // Store outgoing message
   await queryWithTimeout(
     supabase.from("messages").insert({
-      conversation_id: (conversationRow as any).id,
-      lead_id: (lead as any).id,
+      conversation_id: conversationIdValue,
+      lead_id: lead.id,
       direction: "OUTBOUND",
       sender: "BOT",
       content: response,
@@ -398,8 +413,8 @@ export async function processIncomingMessage(
   // Log event
   await queryWithTimeout(
     supabase.from("lead_events").insert({
-      lead_id: (lead as any).id,
-      lead_offer_id: (leadOffer as any).id,
+      lead_id: lead.id,
+      lead_offer_id: typedLeadOffer.id,
       event_type: "MESSAGE_RECEIVED",
       details: { message, extracted_fields: newFields },
       actor_type: "LEAD",
@@ -437,12 +452,13 @@ export async function retryContact(leadOfferId: string): Promise<void> {
     throw new Error("Lead offer not found");
   }
 
-  const lead: any = Array.isArray((leadOffer as any).lead) ? (leadOffer as any).lead[0] : (leadOffer as any).lead;
-  const offer = Array.isArray((leadOffer as any).offer) ? (leadOffer as any).offer[0] : (leadOffer as any).offer;
+  const typedLeadOffer = leadOffer as LeadOfferQueryResult;
+  const lead: Lead | null = Array.isArray(typedLeadOffer.lead) ? typedLeadOffer.lead[0] : (typedLeadOffer.lead || null);
+  const offer: Offer | null = Array.isArray(typedLeadOffer.offer) ? typedLeadOffer.offer[0] : (typedLeadOffer.offer || null);
 
   // Check max attempts
   const maxAttempts = 3;
-  if (((leadOffer as any).contact_attempts || 0) >= maxAttempts) {
+  if ((typedLeadOffer.contact_attempts || 0) >= maxAttempts) {
     await queryWithTimeout(
       supabase
         .from("lead_offers")
@@ -457,11 +473,15 @@ export async function retryContact(leadOfferId: string): Promise<void> {
     return;
   }
 
+  if (!lead) {
+    throw new Error("Lead not found in lead offer");
+  }
+
   // Send follow-up message
   const followUpMessage = generateFollowUpMessage({
-    leadName: lead?.first_name || "",
+    leadName: lead.first_name || "",
     offerName: offer?.name || "",
-    attemptNumber: ((leadOffer as any).contact_attempts || 0) + 1,
+    attemptNumber: (typedLeadOffer.contact_attempts || 0) + 1,
   });
 
   const contact = await findOrCreateContact(lead.phone, lead.full_name || undefined);
@@ -472,7 +492,7 @@ export async function retryContact(leadOfferId: string): Promise<void> {
     supabase
       .from("lead_offers")
       .update({
-        contact_attempts: ((leadOffer as any).contact_attempts || 0) + 1,
+        contact_attempts: (typedLeadOffer.contact_attempts || 0) + 1,
         last_attempt_at: new Date().toISOString(),
         next_attempt_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Next day
       })
@@ -508,12 +528,17 @@ export async function sendReactivation(leadOfferId: string): Promise<void> {
     throw new Error("Lead offer not found");
   }
 
-  const lead: any = Array.isArray((leadOffer as any).lead) ? (leadOffer as any).lead[0] : (leadOffer as any).lead;
-  const offer = Array.isArray((leadOffer as any).offer) ? (leadOffer as any).offer[0] : (leadOffer as any).offer;
-  const tenant = Array.isArray((leadOffer as any).tenant) ? (leadOffer as any).tenant[0] : (leadOffer as any).tenant;
+  const typedLeadOffer = leadOffer as LeadOfferQueryResult;
+  const lead: Lead | null = Array.isArray(typedLeadOffer.lead) ? typedLeadOffer.lead[0] : (typedLeadOffer.lead || null);
+  const offer: Offer | null = Array.isArray(typedLeadOffer.offer) ? typedLeadOffer.offer[0] : (typedLeadOffer.offer || null);
+  const tenant = Array.isArray(typedLeadOffer.tenant) ? typedLeadOffer.tenant[0] : typedLeadOffer.tenant;
+
+  if (!lead) {
+    throw new Error("Lead not found in lead offer");
+  }
 
   const reactivationMessage = generateReactivationMessage({
-    leadName: lead?.first_name || "",
+    leadName: lead.first_name || "",
     offerName: offer?.name || "",
     tenantName: tenant?.name || "",
   });
@@ -526,7 +551,7 @@ export async function sendReactivation(leadOfferId: string): Promise<void> {
       .from("lead_offers")
       .update({
         status: "REACTIVATION",
-        reactivation_count: ((leadOffer as any).reactivation_count || 0) + 1,
+        reactivation_count: (typedLeadOffer.reactivation_count || 0) + 1,
         status_changed_at: new Date().toISOString(),
       })
       .eq("id", leadOfferId),
@@ -559,16 +584,44 @@ async function triggerDelivery(leadOfferId: string, scoreSummary?: string): Prom
 
   if (!leadOffer) return;
 
-  const lead: any = Array.isArray((leadOffer as any).lead) ? (leadOffer as any).lead[0] : (leadOffer as any).lead;
-  const offer = Array.isArray((leadOffer as any).offer) ? (leadOffer as any).offer[0] : (leadOffer as any).offer;
-  const source = Array.isArray((leadOffer as any).lead_source) ? (leadOffer as any).lead_source[0] : (leadOffer as any).lead_source;
+  interface LeadOfferWithSource extends LeadOfferQueryResult {
+    lead_source?: {
+      platform: string;
+      ad_id: string | null;
+      campaign_id: string | null;
+      form_id: string | null;
+    } | Array<{
+      platform: string;
+      ad_id: string | null;
+      campaign_id: string | null;
+      form_id: string | null;
+    }>;
+  }
+
+  const typedLeadOffer = leadOffer as LeadOfferWithSource;
+  const lead: Lead | null = Array.isArray(typedLeadOffer.lead) ? typedLeadOffer.lead[0] : (typedLeadOffer.lead || null);
+  const offer: Offer | null = Array.isArray(typedLeadOffer.offer) ? typedLeadOffer.offer[0] : (typedLeadOffer.offer || null);
+  const source = Array.isArray(typedLeadOffer.lead_source) 
+    ? typedLeadOffer.lead_source[0] 
+    : typedLeadOffer.lead_source;
+
+  if (!lead) {
+    logger.error("Lead not found in lead offer for delivery", { leadOfferId });
+    return;
+  }
 
   // Get conversation history for summary
+  interface MessageRow {
+    direction: string;
+    sender: string;
+    content: string;
+  }
+
   const { data: messages } = await queryWithTimeout(
     supabase
       .from("messages")
       .select("direction, sender, content")
-      .eq("lead_id", (lead as any).id)
+      .eq("lead_id", lead.id)
       .order("created_at", { ascending: true })
       .limit(50),
     10000,
@@ -576,18 +629,21 @@ async function triggerDelivery(leadOfferId: string, scoreSummary?: string): Prom
   );
 
   // Generate conversation summary
-  const messagesArray = Array.isArray(messages) ? messages : [];
-  let conversationSummary = null;
+  const messagesArray: MessageRow[] = Array.isArray(messages) ? messages : [];
+  let conversationSummary: string | null = null;
   if (messagesArray.length > 0) {
     try {
       conversationSummary = await generateConversationSummary(
-        messagesArray.map((m: any) => ({
-          role: m.sender === "LEAD" ? "user" as const : "assistant" as const,
+        messagesArray.map((m) => ({
+          role: m.sender === "LEAD" ? ("user" as const) : ("assistant" as const),
           content: m.content,
         }))
       );
     } catch (error) {
-      console.error("Error generating conversation summary:", error);
+      logger.exception("Error generating conversation summary", error, {
+        leadOfferId: leadOfferId || "unknown",
+        messageCount: messagesArray.length,
+      });
       conversationSummary = `Conversación con ${messagesArray.length} mensajes.`;
     }
   }
@@ -597,32 +653,32 @@ async function triggerDelivery(leadOfferId: string, scoreSummary?: string): Prom
   await queryWithTimeout(
     supabase.from("deliveries").insert({
       lead_offer_id: leadOfferId,
-      lead_id: (lead as any).id,
-      tenant_id: (leadOffer as any).tenant_id,
-      offer_id: offer?.id,
+      lead_id: lead.id,
+      tenant_id: typedLeadOffer.tenant_id || "",
+      offer_id: offer?.id || null,
       status: "PENDING",
       trace_id: currentTraceId || null,
       payload: {
-      lead: {
-        name: lead.full_name || lead.first_name || "Sin nombre",
-        phone: lead.phone,
-        email: lead.email,
-      },
-      qualification: (leadOffer as any).qualification_fields,
-      score: {
-        total: (leadOffer as any).score_total,
-        breakdown: (leadOffer as any).score_breakdown,
-        explanation: scoreSummary,
-      },
-      recommended_offer: offer ? { id: offer.id, name: offer.name } : null,
-      alternatives: (leadOffer as any).alternative_offers || [],
-      conversation_summary: conversationSummary,
-      source: source ? {
-        platform: source.platform,
-        ad_id: source.ad_id,
-        campaign_id: source.campaign_id,
-        form_id: source.form_id,
-      } : null,
+        lead: {
+          name: lead.full_name || lead.first_name || "Sin nombre",
+          phone: lead.phone,
+          email: lead.email || null,
+        },
+        qualification: typedLeadOffer.qualification_fields || {},
+        score: {
+          total: typedLeadOffer.score_total || null,
+          breakdown: typedLeadOffer.score_breakdown || null,
+          explanation: scoreSummary,
+        },
+        recommended_offer: offer ? { id: offer.id, name: offer.name } : null,
+        alternatives: (typedLeadOffer.alternative_offers as unknown[]) || [],
+        conversation_summary: conversationSummary,
+        source: source ? {
+          platform: source.platform,
+          ad_id: source.ad_id,
+          campaign_id: source.campaign_id,
+          form_id: source.form_id,
+        } : null,
       },
     }),
     30000,
@@ -632,12 +688,12 @@ async function triggerDelivery(leadOfferId: string, scoreSummary?: string): Prom
   // Log delivery event with trace_id
   await queryWithTimeout(
     supabase.from("lead_events").insert({
-      lead_id: (lead as any).id,
+      lead_id: lead.id,
       lead_offer_id: leadOfferId,
-      tenant_id: (leadOffer as any).tenant_id,
+      tenant_id: typedLeadOffer.tenant_id || "",
       event_type: "DELIVERY_ATTEMPTED",
       details: {
-        score: (leadOffer as any).score_total,
+        score: typedLeadOffer.score_total,
         offer_name: offer?.name,
       },
       actor_type: "SYSTEM",
@@ -648,8 +704,8 @@ async function triggerDelivery(leadOfferId: string, scoreSummary?: string): Prom
   );
 
   logger.delivery("created", "pending", { 
-    leadId: (lead as any).id, 
-    score: (leadOffer as any).score_total 
+    leadId: lead.id, 
+    score: typedLeadOffer.score_total 
   });
 }
 
@@ -731,11 +787,6 @@ function generateReactivationMessage(data: {
   return `Hola ${data.leadName || ""}, soy de ${data.tenantName}. Hace un tiempo consultaste por ${data.offerName || "nuestros proyectos"}. ¿Seguís buscando? Tenemos novedades que pueden interesarte.`;
 }
 
-function normalizePhone(phone: string): string {
-  let normalized = phone.replace(/[^\d+]/g, "");
-  if (!normalized.startsWith("+")) {
-    normalized = "+" + normalized;
-  }
-  return normalized;
-}
+// normalizePhone removed - use normalizePhone from @/lib/utils instead
+// Import already exists: normalizePhoneForDb from "@/lib/utils"
 

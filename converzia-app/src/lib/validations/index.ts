@@ -18,31 +18,9 @@ export const phoneSchema = z
   .regex(/^\+[1-9]\d{1,14}$/, "Teléfono debe estar en formato E.164 (ej: +5491123456789)")
   .or(z.string().length(0));
 
-// Normalize phone to E.164
-export function normalizePhone(phone: string, defaultCountry = "54"): string {
-  // Remove all non-numeric characters except +
-  let normalized = phone.replace(/[^\d+]/g, "");
-
-  // If no + prefix, add country code
-  if (!normalized.startsWith("+")) {
-    // Remove leading 0 if present
-    if (normalized.startsWith("0")) {
-      normalized = normalized.substring(1);
-    }
-
-    // If length suggests it's missing country code
-    if (normalized.length <= 12) {
-      // Check if it already starts with country code
-      if (!normalized.startsWith(defaultCountry)) {
-        normalized = defaultCountry + normalized;
-      }
-    }
-
-    normalized = "+" + normalized;
-  }
-
-  return normalized;
-}
+// Re-export normalizePhone from utils to avoid duplication
+// Use @/lib/utils for normalizePhone instead
+export { normalizePhone } from "@/lib/utils";
 
 // Email validation
 export const emailSchema = z

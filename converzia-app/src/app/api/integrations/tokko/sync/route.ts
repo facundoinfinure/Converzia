@@ -3,7 +3,10 @@ import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { syncTokkoPublications, getTokkoConfig, TokkoConfig } from "@/lib/services/tokko";
 import { withRateLimit, RATE_LIMITS } from "@/lib/security/rate-limit";
+import { handleApiError, handleUnauthorized, handleForbidden, handleValidationError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
 import { logger } from "@/lib/monitoring";
+import { validateBody, tokkoSyncBodySchema } from "@/lib/validation/schemas";
+import { isAdminProfile, type MembershipWithRole } from "@/types/supabase-helpers";
 
 // ============================================
 // Tokko Sync API
@@ -21,18 +24,19 @@ export async function POST(request: NextRequest) {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return handleUnauthorized("Debes iniciar sesión para sincronizar Tokko");
     }
 
-    const body = await request.json();
-    const { tenant_id, force_full_sync } = body;
-
-    if (!tenant_id) {
-      return NextResponse.json(
-        { error: "tenant_id is required" },
-        { status: 400 }
-      );
+    // Validate request body
+    const bodyValidation = await validateBody(request, tokkoSyncBodySchema);
+    
+    if (!bodyValidation.success) {
+      return handleValidationError(new Error(bodyValidation.error), {
+        validationError: bodyValidation.error,
+      });
     }
+    
+    const { tenant_id, force_full_sync = false } = bodyValidation.data;
 
     // Verify user has access to this tenant
     const { data: profile } = await queryWithTimeout(
@@ -45,7 +49,7 @@ export async function POST(request: NextRequest) {
       "get user profile for Tokko sync"
     );
 
-    const isAdmin = !!(profile as any)?.is_converzia_admin;
+    const isAdmin = isAdminProfile(profile as { is_converzia_admin?: boolean } | null);
 
     if (!isAdmin) {
       // Check if user is OWNER or ADMIN of the tenant
@@ -61,21 +65,21 @@ export async function POST(request: NextRequest) {
         "get tenant membership for Tokko sync"
       );
 
-      if (!membership || !["OWNER", "ADMIN"].includes((membership as any).role)) {
-        return NextResponse.json(
-          { error: "No access to this tenant" },
-          { status: 403 }
-        );
+      const typedMembership = membership as MembershipWithRole | null;
+      if (!typedMembership || !["OWNER", "ADMIN"].includes(typedMembership.role)) {
+        return handleForbidden("No tienes acceso a este tenant");
       }
     }
 
     // Get Tokko config
     const config = await getTokkoConfig(tenant_id);
     if (!config) {
-      return NextResponse.json(
-        { error: "Tokko integration not configured for this tenant" },
-        { status: 400 }
-      );
+      return handleApiError(new Error("Tokko not configured"), {
+        code: ErrorCode.NOT_FOUND,
+        status: 404,
+        message: "Tokko no está configurado para este tenant",
+        context: { tenant_id },
+      });
     }
 
     // Perform sync
@@ -93,13 +97,14 @@ export async function POST(request: NextRequest) {
       errors_count: result.errors.length,
     });
 
-    return NextResponse.json(result);
+    return apiSuccess(result, "Sincronización de Tokko completada");
   } catch (error) {
-    logger.exception("Tokko sync error", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      status: 500,
+      message: "Error en la sincronización de Tokko",
+      context: { operation: "tokko_sync" },
+    });
   }
 }
 

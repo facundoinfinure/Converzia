@@ -8,6 +8,15 @@ import { createClient } from '@/lib/supabase/client';
 import { queryWithTimeout } from '@/lib/supabase/query-with-timeout';
 import { queryKeys, STALE_TIMES } from '../config';
 import type { Tenant, TenantWithStats } from '@/types';
+import { logger } from '@/lib/utils/logger';
+
+interface TenantStatsMVRow {
+  tenant_id: string;
+  current_credits: number | string;
+  total_leads: number | string;
+  active_offers: number | string;
+  active_members: number | string;
+}
 
 /**
  * Fetch tenants list with filters
@@ -39,7 +48,7 @@ async function fetchTenants(params: {
   const to = from + pageSize - 1;
   query = query.range(from, to).order('created_at', { ascending: false });
 
-  const { data, error, count } = await queryWithTimeout(
+  const { data, error, count } = await queryWithTimeout<Tenant[]>(
     query,
     5000,
     'fetch tenants'
@@ -47,8 +56,63 @@ async function fetchTenants(params: {
 
   if (error) throw error;
 
-  // TODO: En producción, usar tenant_stats_mv (vista materializada)
-  // para evitar N+1 queries
+  // Use tenant_stats_mv to get stats efficiently (avoids N+1 queries)
+  // Query materialized view directly (RLS will be handled by Supabase)
+  // If RLS is needed, we can use get_tenant_stats() RPC function instead
+  const tenantIds = (data || []).map((t: Tenant) => t.id);
+  
+  if (tenantIds.length > 0) {
+    try {
+      const { data: statsData } = await queryWithTimeout<TenantStatsMVRow[]>(
+        supabase
+          .from('tenant_stats_mv')
+          .select('*')
+          .in('tenant_id', tenantIds),
+        5000,
+        'fetch tenant stats from materialized view',
+        false // Don't retry stats queries
+      );
+      
+      // Map stats to tenants
+      const statsMap = new Map<string, TenantStatsMVRow>(
+        (statsData || []).map((s: TenantStatsMVRow) => [s.tenant_id, s])
+      );
+      
+      const tenantsWithStats = (data || []).map((tenant: Tenant) => {
+        const stats = statsMap.get(tenant.id);
+        return {
+          ...tenant,
+          _count: stats ? {
+            leads: Number(stats.total_leads) || 0,
+            offers: Number(stats.active_offers) || 0,
+            members: Number(stats.active_members) || 0,
+          } : {
+            leads: 0,
+            offers: 0,
+            members: 0,
+          },
+          credit_balance: stats ? Number(stats.current_credits) || 0 : 0,
+        };
+      });
+      
+      return {
+        tenants: tenantsWithStats,
+        total: count || 0,
+      };
+    } catch (statsError) {
+      // Fallback: return tenants without stats if materialized view is not available
+      logger.warn("Error fetching tenant stats from materialized view, falling back to basic data", { error: statsError });
+      return {
+        tenants: (data || []).map((tenant: Tenant) => ({
+          ...tenant,
+          _count: { leads: 0, offers: 0, members: 0 },
+          credit_balance: 0,
+        })),
+        total: count || 0,
+      };
+    }
+  }
+  
   return {
     tenants: data || [],
     total: count || 0,
@@ -89,56 +153,43 @@ async function fetchTenant(id: string) {
   if (tenantError) throw tenantError;
   if (!tenant) throw new Error('Tenant not found');
 
-  // Fetch stats in parallel
-  const [balanceData, leadsCount, offersCount, membersCount] = await Promise.all([
-    queryWithTimeout(
+  // Use tenant_stats_mv for efficient stats retrieval (avoids N+1 queries)
+  try {
+    const { data: statsData } = await queryWithTimeout<TenantStatsMVRow>(
       supabase
-        .from('tenant_credit_balance')
-        .select('current_balance')
+        .from('tenant_stats_mv')
+        .select('*')
         .eq('tenant_id', id)
         .maybeSingle(),
       3000,
-      `credit balance for tenant ${id}`,
-      false
-    ),
-    queryWithTimeout(
-      supabase
-        .from('lead_offers')
-        .select('id', { count: 'exact', head: true })
-        .eq('tenant_id', id),
-      3000,
-      `leads count for tenant ${id}`
-    ),
-    queryWithTimeout(
-      supabase
-        .from('offers')
-        .select('id', { count: 'exact', head: true })
-        .eq('tenant_id', id),
-      3000,
-      `offers count for tenant ${id}`
-    ),
-    queryWithTimeout(
-      supabase
-        .from('tenant_members')
-        .select('id', { count: 'exact', head: true })
-        .eq('tenant_id', id)
-        .eq('status', 'ACTIVE'),
-      3000,
-      `members count for tenant ${id}`
-    ),
-  ]);
-
-  const balanceInfo = balanceData.data as { current_balance: number } | null;
-  
-  return {
-    ...tenant,
-    credit_balance: balanceInfo?.current_balance || 0,
-    _count: {
-      leads: leadsCount.count || 0,
-      offers: offersCount.count || 0,
-      members: membersCount.count || 0,
-    },
-  } as TenantWithStats;
+      `fetch tenant stats from materialized view for ${id}`,
+      false // Don't retry stats queries
+    );
+    
+    const stats = statsData as TenantStatsMVRow | null;
+    
+    return {
+      ...tenant,
+      credit_balance: stats ? Number(stats.current_credits) || 0 : 0,
+      _count: {
+        leads: stats ? Number(stats.total_leads) || 0 : 0,
+        offers: stats ? Number(stats.active_offers) || 0 : 0,
+        members: stats ? Number(stats.active_members) || 0 : 0,
+      },
+    } as TenantWithStats;
+  } catch (statsError) {
+    // Fallback: return tenant without stats if materialized view is not available
+    logger.warn("Error fetching tenant stats from materialized view, falling back to basic data", { tenantId: id, error: statsError });
+    return {
+      ...tenant,
+      credit_balance: 0,
+      _count: {
+        leads: 0,
+        offers: 0,
+        members: 0,
+      },
+    } as TenantWithStats;
+  }
 }
 
 /**

@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
+import { logger } from "@/lib/utils/logger";
+import { handleApiError, handleUnauthorized, handleForbidden, handleValidationError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
+import type { MembershipWithRole } from "@/types/supabase-helpers";
+import { validateQuery, funnelInsightsQuerySchema } from "@/lib/validation/schemas";
 
 /**
  * GET /api/portal/funnel/insights
@@ -16,7 +20,7 @@ export async function GET(request: NextRequest) {
     // Get authenticated user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+      return handleUnauthorized("Debes iniciar sesión para ver insights del funnel");
     }
     
     // Get user's active tenant membership
@@ -31,17 +35,25 @@ export async function GET(request: NextRequest) {
       "get tenant membership"
     );
     
-    const membership = membershipData as { tenant_id: string; role: string } | null;
+    const membership = membershipData as MembershipWithRole | null;
     
     if (!membership) {
-      return NextResponse.json({ error: "No tiene acceso a ningún tenant" }, { status: 403 });
+      return handleForbidden("No tienes acceso a ningún tenant activo");
     }
     
     const tenantId = membership.tenant_id;
     
-    // Parse query params
+    // Validate query params
     const { searchParams } = new URL(request.url);
-    const offerId = searchParams.get("offer_id");
+    const queryValidation = validateQuery(searchParams, funnelInsightsQuerySchema);
+    
+    if (!queryValidation.success) {
+      return handleValidationError(new Error(queryValidation.error), {
+        validationError: queryValidation.error,
+      });
+    }
+    
+    const { offer_id: offerId } = queryValidation.data;
     
     // Build query for disqualification breakdown
     let query = supabase
@@ -62,8 +74,12 @@ export async function GET(request: NextRequest) {
     );
     
     if (error) {
-      console.error("Error fetching insights:", error);
-      return NextResponse.json({ error: "Error al obtener insights" }, { status: 500 });
+      return handleApiError(error, {
+        code: ErrorCode.DATABASE_ERROR,
+        status: 500,
+        message: "No se pudieron obtener los insights",
+        context: { tenantId, offerId },
+      });
     }
     
     const disqualifications = Array.isArray(disqualificationsData) 
@@ -113,19 +129,17 @@ export async function GET(request: NextRequest) {
       }))
       .sort((a, b) => b.count - a.count);
     
-    return NextResponse.json({
-      success: true,
-      data: {
-        totalDisqualified: disqualifications.length,
-        insights,
-      }
+    return apiSuccess({
+      totalDisqualified: disqualifications.length,
+      insights,
     });
   } catch (error) {
-    console.error("Insights API error:", error);
-    return NextResponse.json(
-      { error: "Error interno del servidor" },
-      { status: 500 }
-    );
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      status: 500,
+      message: "Ocurrió un error al obtener insights",
+      context: { operation: "get_funnel_insights" },
+    });
   }
 }
 

@@ -259,27 +259,45 @@ function DataTable<T extends object>({
       <Table className={className}>
         <TableHeader className={stickyHeader ? "sticky top-0 z-10 bg-background" : ""}>
           <TableRow>
-            {columns.map((col) => (
-              <TableHead
-                key={col.key}
-                style={{ width: col.width }}
-                className={cn(
-                  col.align === "center" && "text-center",
-                  col.align === "right" && "text-right",
-                  col.sortable && "cursor-pointer select-none hover:bg-muted/50"
-                )}
-                onClick={col.sortable ? () => handleSort(col.key) : undefined}
-              >
-                <div className={cn(
-                  "flex items-center gap-2",
-                  col.align === "center" && "justify-center",
-                  col.align === "right" && "justify-end"
-                )}>
-                  {col.header}
-                  {col.sortable && getSortIcon(col.key)}
-                </div>
-              </TableHead>
-            ))}
+            {columns.map((col) => {
+              const isSorted = sortState?.column === col.key
+              const sortDirection = isSorted ? sortState?.direction : undefined
+              const ariaSort = isSorted 
+                ? (sortDirection === "asc" ? "ascending" : "descending") 
+                : col.sortable ? "none" : undefined
+
+              return (
+                <TableHead
+                  key={col.key}
+                  style={{ width: col.width }}
+                  className={cn(
+                    col.align === "center" && "text-center",
+                    col.align === "right" && "text-right",
+                    col.sortable && "cursor-pointer select-none hover:bg-muted/50"
+                  )}
+                  onClick={col.sortable ? () => handleSort(col.key) : undefined}
+                  onKeyDown={col.sortable ? (e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault()
+                      handleSort(col.key)
+                    }
+                  } : undefined}
+                  tabIndex={col.sortable ? 0 : undefined}
+                  role={col.sortable ? "button" : undefined}
+                  aria-sort={ariaSort}
+                  aria-label={col.sortable ? `Ordenar por ${col.header}` : undefined}
+                >
+                  <div className={cn(
+                    "flex items-center gap-2",
+                    col.align === "center" && "justify-center",
+                    col.align === "right" && "justify-end"
+                  )}>
+                    {col.header}
+                    {col.sortable && getSortIcon(col.key)}
+                  </div>
+                </TableHead>
+              )
+            })}
           </TableRow>
         </TableHeader>
         <TableBody>

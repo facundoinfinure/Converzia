@@ -3,6 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { searchKnowledge } from "@/lib/services/rag";
 import { withRateLimit, RATE_LIMITS } from "@/lib/security/rate-limit";
+import { handleApiError, handleUnauthorized, handleForbidden, handleValidationError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
+import { isAdminProfile } from "@/types/supabase-helpers";
+import { validateBody, testingRagBodySchema } from "@/lib/validation/schemas";
 
 // ============================================
 // Testing RAG API
@@ -21,7 +24,7 @@ export async function POST(request: NextRequest) {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return handleUnauthorized("Debes iniciar sesión para probar RAG");
     }
 
     // Verify admin access
@@ -35,19 +38,20 @@ export async function POST(request: NextRequest) {
       "get user profile for RAG testing"
     );
 
-    if (!(profile as any)?.is_converzia_admin) {
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+    if (!isAdminProfile(profile as { is_converzia_admin?: boolean } | null)) {
+      return handleForbidden("Solo administradores pueden probar RAG");
     }
 
-    const body = await request.json();
-    const { tenant_id, offer_id, query } = body;
-
-    if (!tenant_id || !query) {
-      return NextResponse.json(
-        { error: "tenant_id and query are required" },
-        { status: 400 }
-      );
+    // Validate request body
+    const bodyValidation = await validateBody(request, testingRagBodySchema);
+    
+    if (!bodyValidation.success) {
+      return handleValidationError(new Error(bodyValidation.error), {
+        validationError: bodyValidation.error,
+      });
     }
+    
+    const { tenant_id, offer_id, query, limit = 5 } = bodyValidation.data;
 
     try {
       const chunks = await searchKnowledge(
@@ -57,7 +61,7 @@ export async function POST(request: NextRequest) {
         10 // Get more results for testing
       );
 
-      return NextResponse.json({
+      return apiSuccess({
         chunks: chunks.map((c) => ({
           content: c.content,
           similarity: c.similarity,
@@ -70,19 +74,20 @@ export async function POST(request: NextRequest) {
         offer_id: offer_id || null,
       });
     } catch (error) {
-      return NextResponse.json(
-        {
-          error: error instanceof Error ? error.message : "Unknown error",
-          chunks: [],
-        },
-        { status: 500 }
-      );
+      return handleApiError(error, {
+        code: ErrorCode.INTERNAL_ERROR,
+        status: 500,
+        message: "Error en la búsqueda RAG",
+        context: { query, tenant_id, offer_id },
+      });
     }
   } catch (error) {
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return handleApiError(error, {
+      code: ErrorCode.INTERNAL_ERROR,
+      status: 500,
+      message: "Error al procesar la solicitud de testing RAG",
+      context: { operation: "rag_testing" },
+    });
   }
 }
 

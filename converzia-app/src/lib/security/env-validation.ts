@@ -3,6 +3,8 @@
 // Ensures all required security-critical env vars are configured
 // ============================================
 
+import { logger } from "@/lib/utils/logger";
+
 /**
  * Required environment variables for production
  * Missing any of these will cause the app to fail at startup
@@ -94,10 +96,9 @@ export function assertEnvVars(): void {
   }
   
   if (result.warnings.length > 0) {
-    console.warn(
-      "[Security] Recommended environment variables not set:\n" +
-      result.warnings.map(w => `  - ${w}`).join("\n")
-    );
+    logger.warn("[Security] Recommended environment variables not set", {
+      missingVars: result.warnings,
+    });
   }
 }
 
