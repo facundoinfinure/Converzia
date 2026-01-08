@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { handleApiError, handleUnauthorized, handleForbidden, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
 import { logger } from "@/lib/utils/logger";
+import { isAdminProfile } from "@/types/supabase-helpers";
 
 // ============================================
 // Portal Leads API
@@ -47,7 +48,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "statuses requerido" }, { status: 400 });
     }
 
-    // Verify user has access to this tenant
+    // Verify user has access to this tenant (membership OR admin)
     const { data: membership } = await queryWithTimeout(
       supabase
         .from("tenant_members")
@@ -60,7 +61,19 @@ export async function GET(request: NextRequest) {
       "check membership"
     );
 
-    if (!membership) {
+    // Check if user is a Converzia admin
+    const { data: profile } = await queryWithTimeout<{ is_converzia_admin?: boolean } | null>(
+      supabase
+        .from("user_profiles")
+        .select("is_converzia_admin")
+        .eq("id", user.id)
+        .single(),
+      5000,
+      "get user profile"
+    );
+    const isAdmin = isAdminProfile(profile);
+
+    if (!membership && !isAdmin) {
       return handleForbidden("No tienes acceso a este tenant");
     }
 

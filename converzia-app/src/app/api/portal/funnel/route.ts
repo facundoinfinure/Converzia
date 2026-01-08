@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { logger } from "@/lib/utils/logger";
 import { handleApiError, handleUnauthorized, handleForbidden, handleValidationError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
-import type { MembershipWithRole } from "@/types/supabase-helpers";
+import { isAdminProfile, type MembershipWithRole } from "@/types/supabase-helpers";
 import { validateQuery, funnelQuerySchema } from "@/lib/validation/schemas";
 
 /**
@@ -38,16 +38,32 @@ export async function GET(request: NextRequest) {
     );
     
     const membership = membershipData as MembershipWithRole | null;
+
+    // Check if user is a Converzia admin
+    const { data: profile } = await queryWithTimeout<{ is_converzia_admin?: boolean } | null>(
+      supabase
+        .from("user_profiles")
+        .select("is_converzia_admin")
+        .eq("id", user.id)
+        .single(),
+      5000,
+      "get user profile"
+    );
+    const isAdmin = isAdminProfile(profile);
     
-    if (!membership) {
+    if (!membership && !isAdmin) {
       return handleForbidden("No tienes acceso a ningún tenant activo");
     }
-    
-    const tenantId = membership.tenant_id;
     
     // Validate query params
     const { searchParams } = new URL(request.url);
     const queryValidation = validateQuery(searchParams, funnelQuerySchema);
+    
+    // For admins without membership, they need to provide tenant_id in query
+    const tenantId = membership?.tenant_id || searchParams.get("tenant_id");
+    if (!tenantId) {
+      return handleForbidden("Se requiere tenant_id");
+    }
     
     if (!queryValidation.success) {
       return handleValidationError(new Error(queryValidation.error), {
