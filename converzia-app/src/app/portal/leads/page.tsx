@@ -197,105 +197,37 @@ export default function PortalLeadsPage() {
         ? ["PENDING_MAPPING", "TO_BE_CONTACTED"]
         : category.statuses;
       
-      // FIX: Query leads using the same logic as offer_funnel_stats view
-      // The view counts leads by joining offers.tenant_id, not lead_offers.tenant_id
-      // So we need to first get tenant's offer_ids, then query lead_offers by those offer_ids
-      
-      // Step 1: Get offer IDs for this tenant (or use filter if provided)
-      let offerIdsToQuery: string[] = [];
+      // Use API endpoint that bypasses RLS restrictions
+      // RLS only allows SENT_TO_DEVELOPER status, but we need to see all funnel stages
+      const params = new URLSearchParams({
+        tenant_id: activeTenantId,
+        statuses: statuses.join(","),
+        limit: "50",
+      });
       
       if (offerFilter) {
-        // User selected a specific offer
-        offerIdsToQuery = [offerFilter];
-      } else {
-        // Get all tenant's offer IDs
-        const { data: tenantOffers } = await queryWithTimeout(
-          supabase
-            .from("offers")
-            .select("id")
-            .eq("tenant_id", activeTenantId),
-          5000,
-          "tenant offers"
-        );
-        
-        if (tenantOffers && Array.isArray(tenantOffers)) {
-          offerIdsToQuery = tenantOffers.map((o: { id: string }) => o.id);
-        }
+        params.set("offer_id", offerFilter);
       }
       
-      // If no offers, no leads to show
-      if (offerIdsToQuery.length === 0) {
-        console.log("[Leads Debug] No offers found for tenant");
-        setLeads([]);
-        return;
-      }
-      
-      // Step 2: Query lead_offers by offer_id (matching the view's logic)
-      const { data: leadsDataRaw, error } = await queryWithTimeout(
-        supabase
-          .from("lead_offers")
-          .select(`
-            id,
-            status,
-            score_total,
-            qualification_fields,
-            created_at,
-            updated_at,
-            offer_id
-          `)
-          .in("offer_id", offerIdsToQuery)
-          .in("status", statuses)
-          .order("updated_at", { ascending: false })
-          .limit(50),
-        10000,
-        "leads list"
-      );
-      
-      // DEBUG: Log query info
-      console.log("[Leads Debug] Query:", {
-        offerIds: offerIdsToQuery.length,
-        statuses,
-        resultsCount: Array.isArray(leadsDataRaw) ? leadsDataRaw.length : 0,
-        error: error || null
-      });
+      const response = await fetch(`/api/portal/leads?${params.toString()}`);
       
       // SIEMPRE resetear el array primero
       setLeads([]);
       
-      if (error) {
-        console.error("Error fetching leads:", error);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error("Error fetching leads:", errorData);
         toast.error("Error al cargar leads");
         return;
       }
       
-      const leadsData = Array.isArray(leadsDataRaw) ? leadsDataRaw : [];
+      const { data } = await response.json();
+      const leadsData = data?.leads || [];
+      const offerNames: Record<string, string> = data?.offerNames || {};
+      
+      console.log("[Leads] Loaded:", { count: leadsData.length, category: selectedCategory });
       
       if (leadsData.length > 0) {
-        // Get unique offer IDs to fetch offer names in a single query
-        const offerIds = [...new Set(leadsData.map((d: any) => d.offer_id).filter(Boolean))];
-        
-        // Fetch offer names in parallel (lightweight query)
-        let offerNames: Record<string, string> = {};
-        if (offerIds.length > 0) {
-          try {
-            const { data: offersData } = await queryWithTimeout(
-              supabase
-                .from("offers")
-                .select("id, name")
-                .in("id", offerIds),
-              5000,
-              "offer names"
-            );
-            if (offersData) {
-              offerNames = Object.fromEntries(
-                (offersData as { id: string; name: string }[]).map(o => [o.id, o.name])
-              );
-            }
-          } catch {
-            // Silently fail - offer names are optional
-          }
-        }
-        
         // Process leads with offer names
         const processedLeads: TenantLeadView[] = leadsData
           .map((d: any) => {
