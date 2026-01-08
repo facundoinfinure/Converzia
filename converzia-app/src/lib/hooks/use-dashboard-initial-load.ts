@@ -112,25 +112,25 @@ export function useDashboardInitialLoad() {
           false
         ),
 
-        // 3. Contacted count (for pipeline stats)
+        // 3. Contacted count (for pipeline stats) - includes all "in_chat" statuses
         queryWithTimeout(
           supabase
             .from("lead_offers")
             .select("id", { count: "exact", head: true })
             .eq("tenant_id", activeTenantId)
-            .in("status", ["CONTACTED", "ENGAGED"]),
+            .in("status", ["CONTACTED", "ENGAGED", "QUALIFYING", "HUMAN_HANDOFF"]),
           8000,
           "contacted count",
           false
         ),
 
-        // 4. Qualifying count (for pipeline stats)
+        // 4. Qualifying count (SCORED + LEAD_READY for pipeline stats)
         queryWithTimeout(
           supabase
             .from("lead_offers")
             .select("id", { count: "exact", head: true })
             .eq("tenant_id", activeTenantId)
-            .eq("status", "QUALIFYING"),
+            .in("status", ["SCORED", "LEAD_READY"]),
           8000,
           "qualifying count",
           false

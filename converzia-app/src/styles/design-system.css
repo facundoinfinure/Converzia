@@ -30,7 +30,7 @@
   
   /* Z-index scale */
   --z-base: 1;
-  --z-dropdown: 50;
+  --z-dropdown: 1000;
   --z-sticky: 100;
   --z-header: 150;
   --z-sidebar: 180;

@@ -5,6 +5,7 @@ import { handleApiError, handleUnauthorized, handleForbidden, handleValidationEr
 import { logger } from "@/lib/utils/logger";
 import { isAdminProfile } from "@/types/supabase-helpers";
 import { cacheService, cacheKeys, CacheTTL } from "@/lib/services/cache";
+import { TENANT_FUNNEL_STAGES } from "@/lib/constants/tenant-funnel";
 
 export const runtime = "nodejs";
 export const maxDuration = 15;
@@ -97,24 +98,32 @@ export async function GET(request: NextRequest) {
 
     const leads = Array.isArray(leadCountsData) ? leadCountsData as Array<{ status: string }> : [];
 
-    // Count by category (matching the view logic)
+    // Build status sets from TENANT_FUNNEL_STAGES for guaranteed consistency
+    const statusSets = TENANT_FUNNEL_STAGES.reduce((acc, stage) => {
+      acc[stage.key] = new Set(stage.statuses);
+      return acc;
+    }, {} as Record<string, Set<string>>);
+
+    // Count by category using the exact statuses from TENANT_FUNNEL_STAGES
     const stats = {
-      received: leads.filter(l => 
-        l.status === "PENDING_MAPPING" || l.status === "TO_BE_CONTACTED"
-      ).length,
-      in_chat: leads.filter(l => 
-        l.status === "CONTACTED" || l.status === "ENGAGED" || l.status === "QUALIFYING"
-      ).length,
-      qualified: leads.filter(l => 
-        l.status === "SCORED" || l.status === "LEAD_READY"
-      ).length,
-      delivered: leads.filter(l => 
-        l.status === "SENT_TO_DEVELOPER"
-      ).length,
-      not_qualified: leads.filter(l => 
-        l.status === "DISQUALIFIED" || l.status === "STOPPED" || l.status === "COOLING"
-      ).length,
+      received: leads.filter(l => statusSets.received?.has(l.status)).length,
+      in_chat: leads.filter(l => statusSets.in_chat?.has(l.status)).length,
+      qualified: leads.filter(l => statusSets.qualified?.has(l.status)).length,
+      delivered: leads.filter(l => statusSets.delivered?.has(l.status)).length,
+      not_qualified: leads.filter(l => statusSets.not_qualified?.has(l.status)).length,
     };
+
+    // Log any unmapped statuses for debugging
+    const allMappedStatuses = new Set(TENANT_FUNNEL_STAGES.flatMap(s => s.statuses));
+    const unmappedLeads = leads.filter(l => !allMappedStatuses.has(l.status));
+    if (unmappedLeads.length > 0) {
+      const unmappedStatuses = [...new Set(unmappedLeads.map(l => l.status))];
+      logger.warn("[API Stats] Found leads with unmapped statuses", { 
+        tenantId, 
+        unmappedStatuses,
+        count: unmappedLeads.length 
+      });
+    }
 
     // Cache the stats
     await cacheService.set(cacheKey, stats, CacheTTL.STATS);

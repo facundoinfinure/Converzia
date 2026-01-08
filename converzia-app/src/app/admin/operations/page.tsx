@@ -270,12 +270,12 @@ export default function OperationsPage() {
           ? refundData.reduce((sum: number, r: any) => sum + Math.abs(r.amount), 0) 
           : 0;
 
-        // Fetch active conversations
+        // Fetch active conversations (includes HUMAN_HANDOFF as they're being attended)
         const { count: activeConversations, error: conversationsError } = await queryWithTimeout(
           supabase
             .from("lead_offers")
             .select("id", { count: "exact", head: true })
-            .in("status", ["CONTACTED", "ENGAGED", "QUALIFYING"]),
+            .in("status", ["CONTACTED", "ENGAGED", "QUALIFYING", "HUMAN_HANDOFF"]),
           10000,
           "active conversations"
         );

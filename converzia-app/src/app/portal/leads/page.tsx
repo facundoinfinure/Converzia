@@ -40,8 +40,8 @@ import { TENANT_FUNNEL_STAGES, type TenantFunnelStage } from "@/lib/constants/te
 // ============================================
 
 interface TenantLeadStats {
-  received: number;      // PENDING_MAPPING + TO_BE_CONTACTED
-  in_chat: number;        // CONTACTED, ENGAGED, QUALIFYING
+  received: number;      // PENDING_MAPPING, TO_BE_CONTACTED
+  in_chat: number;       // CONTACTED, ENGAGED, QUALIFYING, HUMAN_HANDOFF
   qualified: number;     // SCORED, LEAD_READY
   delivered: number;     // SENT_TO_DEVELOPER
   not_qualified: number; // DISQUALIFIED, STOPPED, COOLING, REACTIVATION

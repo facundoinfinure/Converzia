@@ -43,7 +43,7 @@ export const TENANT_FUNNEL_STAGES: TenantFunnelStage[] = [
     key: "in_chat",
     label: "En Chat",
     description: "Leads en conversación activa",
-    statuses: ["CONTACTED", "ENGAGED", "QUALIFYING"],
+    statuses: ["CONTACTED", "ENGAGED", "QUALIFYING", "HUMAN_HANDOFF"],
     color: "from-blue-500 to-cyan-500",
     bgColor: "bg-blue-500/10",
     textColor: "text-blue-400",
