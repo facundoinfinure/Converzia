@@ -219,8 +219,23 @@ export default function PortalLeadsPage() {
         query = query.eq("offer_id", offerFilter);
       }
       
+      // DEBUG: Log query parameters
+      console.log("[Leads Debug] Query params:", {
+        tenant_id: activeTenantId,
+        category: selectedCategory,
+        statuses,
+        offerFilter: offerFilter || "none"
+      });
+      
       // Reduced timeout since query is now simpler
       const { data: leadsDataRaw, error } = await queryWithTimeout(query, 10000, "leads list");
+      
+      // DEBUG: Log raw response
+      console.log("[Leads Debug] Raw response:", { 
+        data: leadsDataRaw, 
+        error,
+        count: Array.isArray(leadsDataRaw) ? leadsDataRaw.length : 0 
+      });
       
       // SIEMPRE resetear el array primero
       setLeads([]);
