@@ -118,37 +118,23 @@ export default function PortalLeadsPage() {
     setIsLoadingStats(true);
     
     try {
-      // Use tenant_funnel_stats view for consistent stats (same source as dashboard)
-      const { data: funnelStatsData } = await queryWithTimeout(
-        supabase
-          .from("tenant_funnel_stats")
-          .select("*")
-          .eq("tenant_id", activeTenantId)
-          .maybeSingle(),
-        10000,
-        "tenant funnel stats"
-      );
-
-      interface TenantFunnelStats {
-        leads_pending_mapping?: number;
-        leads_pending_contact?: number;
-        leads_in_chat?: number;
-        leads_qualified?: number;
-        leads_delivered?: number;
-        leads_disqualified?: number;
-        leads_stopped?: number;
-      }
-
-      const funnelStats = funnelStatsData as TenantFunnelStats | null;
+      // Use API endpoint to bypass RLS restrictions on lead_offers
+      // The RLS policy only allows SENT_TO_DEVELOPER status, so views show wrong counts
+      const statsResponse = await fetch(`/api/portal/leads/stats?tenant_id=${activeTenantId}`);
       
-      // Map funnel stats to our format using the same logic as standardizeFunnelStats
-      // "received" = leads_pending_mapping + leads_pending_contact
+      if (!statsResponse.ok) {
+        const errorData = await statsResponse.json();
+        throw new Error(errorData.message || "Error al cargar estadísticas");
+      }
+      
+      const { stats: apiStats } = await statsResponse.json();
+      
       const statsData: TenantLeadStats = {
-        received: (funnelStats?.leads_pending_mapping || 0) + (funnelStats?.leads_pending_contact || 0),
-        in_chat: funnelStats?.leads_in_chat || 0,
-        qualified: funnelStats?.leads_qualified || 0,
-        delivered: funnelStats?.leads_delivered || 0,
-        not_qualified: (funnelStats?.leads_disqualified || 0) + (funnelStats?.leads_stopped || 0),
+        received: apiStats?.received || 0,
+        in_chat: apiStats?.in_chat || 0,
+        qualified: apiStats?.qualified || 0,
+        delivered: apiStats?.delivered || 0,
+        not_qualified: apiStats?.not_qualified || 0,
       };
       
       setStats(statsData);
