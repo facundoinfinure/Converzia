@@ -57,8 +57,7 @@ class MockIntersectionObserver {
   rootMargin = "";
   thresholds: number[] = [];
   
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  constructor(callback: IntersectionObserverCallback) {
+  constructor(_callback: IntersectionObserverCallback) {
     // Store callback if needed
   }
   
@@ -75,8 +74,7 @@ Object.defineProperty(window, "IntersectionObserver", {
 
 // Mock ResizeObserver
 class MockResizeObserver {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  constructor(callback: ResizeObserverCallback) {
+  constructor(_callback: ResizeObserverCallback) {
     // Store callback if needed
   }
   
