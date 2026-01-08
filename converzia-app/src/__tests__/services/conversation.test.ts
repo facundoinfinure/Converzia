@@ -81,22 +81,24 @@ describe("Conversation Service", () => {
 
     it("should process budget range fields", () => {
       const fields: QualificationFields = {
-        budget_min: 100000,
-        budget_max: 200000,
+        budget: {
+          min: 100000,
+          max: 200000,
+        },
       };
 
-      expect(fields.budget_min).toBe(100000);
-      expect(fields.budget_max).toBe(200000);
-      expect(fields.budget_max! > fields.budget_min!).toBe(true);
+      expect(fields.budget?.min).toBe(100000);
+      expect(fields.budget?.max).toBe(200000);
+      expect(fields.budget!.max! > fields.budget!.min!).toBe(true);
     });
 
     it("should handle zone preferences", () => {
       const fields: QualificationFields = {
-        zones: ["Palermo", "Belgrano", "Recoleta"],
+        zone: ["Palermo", "Belgrano", "Recoleta"],
       };
 
-      expect(fields.zones).toHaveLength(3);
-      expect(fields.zones).toContain("Palermo");
+      expect(fields.zone).toHaveLength(3);
+      expect(fields.zone).toContain("Palermo");
     });
 
     it("should handle timing preferences", () => {
@@ -125,10 +127,10 @@ describe("Conversation Service", () => {
 
     it("should handle property type preferences", () => {
       const fields: QualificationFields = {
-        property_types: ["2 ambientes", "3 ambientes"],
+        property_type: "departamento",
       };
 
-      expect(fields.property_types).toHaveLength(2);
+      expect(fields.property_type).toBe("departamento");
     });
   });
 
@@ -266,15 +268,17 @@ describe("Conversation Service", () => {
   describe("Conversation Summary Generation", () => {
     it("should combine key information", () => {
       const fields: QualificationFields = {
-        budget_min: 100000,
-        budget_max: 150000,
-        zones: ["Palermo"],
+        budget: {
+          min: 100000,
+          max: 150000,
+        },
+        zone: ["Palermo"],
         timing: "3 meses",
       };
 
       const summary = [
-        fields.zones?.join(", "),
-        fields.budget_min && fields.budget_max ? `$${fields.budget_min}-$${fields.budget_max}` : null,
+        fields.zone?.join(", "),
+        fields.budget?.min && fields.budget?.max ? `$${fields.budget.min}-$${fields.budget.max}` : null,
         fields.timing,
       ].filter(Boolean).join(" | ");
 

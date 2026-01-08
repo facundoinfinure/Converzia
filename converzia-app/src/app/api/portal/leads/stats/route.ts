@@ -4,6 +4,7 @@ import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { handleApiError, handleUnauthorized, handleForbidden, handleValidationError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
 import { logger } from "@/lib/utils/logger";
 import { isAdminProfile } from "@/types/supabase-helpers";
+import { cacheService, cacheKeys, CacheTTL } from "@/lib/services/cache";
 
 export const runtime = "nodejs";
 export const maxDuration = 15;
@@ -60,6 +61,21 @@ export async function GET(request: NextRequest) {
       return handleForbidden("No tiene acceso a este tenant");
     }
 
+    // Try to get from cache first
+    const cacheKey = cacheKeys.tenantStats(tenantId);
+    const cachedStats = await cacheService.get<{
+      received: number;
+      in_chat: number;
+      qualified: number;
+      delivered: number;
+      not_qualified: number;
+    }>(cacheKey);
+
+    if (cachedStats) {
+      logger.debug("[API Stats] Returning cached stats", { tenantId });
+      return apiSuccess({ stats: cachedStats, cached: true });
+    }
+
     // Count leads by status using admin client (bypasses RLS)
     // Query directly by tenant_id on lead_offers for more reliable counts
     const { data: leadCountsData, error: countsError } = await queryWithTimeout(
@@ -100,7 +116,10 @@ export async function GET(request: NextRequest) {
       ).length,
     };
 
-    logger.info("[API Stats] Stats calculated", { tenantId, stats });
+    // Cache the stats
+    await cacheService.set(cacheKey, stats, CacheTTL.STATS);
+
+    logger.info("[API Stats] Stats calculated and cached", { tenantId, stats });
 
     return apiSuccess({ stats });
 

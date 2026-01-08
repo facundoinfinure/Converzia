@@ -6,6 +6,7 @@ import { unsafeRpc } from "@/lib/supabase/unsafe-rpc";
 import { handleApiError, handleUnauthorized, handleForbidden, handleValidationError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
+import { cacheService, cacheKeys, CacheTTL } from "@/lib/services/cache";
 
 // ============================================
 // GET /api/admin/revenue
@@ -102,13 +103,26 @@ export async function GET(request: NextRequest) {
     // Use admin client for RPC calls
     const admin = createAdminClient();
 
+    // Build cache key
+    const cacheKey = cacheKeys.adminRevenue(`${dateStartStr}:${dateEndStr}:${tenantId || "all"}`);
+
     // If refresh is requested, invalidate cache for the date range
     if (refresh) {
-      await admin
-        .from("revenue_daily_cache")
-        .delete()
-        .gte("cache_date", dateStartStr)
-        .lte("cache_date", dateEndStr);
+      await Promise.all([
+        admin
+          .from("revenue_daily_cache")
+          .delete()
+          .gte("cache_date", dateStartStr)
+          .lte("cache_date", dateEndStr),
+        cacheService.del(cacheKey),
+      ]);
+    } else {
+      // Try cache first
+      const cachedRevenue = await cacheService.get(cacheKey);
+      if (cachedRevenue) {
+        logger.debug("[API Revenue] Returning cached revenue", { dateStartStr, dateEndStr });
+        return apiSuccess({ ...cachedRevenue as Record<string, unknown>, cached: true });
+      }
     }
 
     // Call the get_revenue_summary function
@@ -299,7 +313,7 @@ export async function GET(request: NextRequest) {
 
     const byOffer = Array.from(offerMap.values()).sort((a, b) => b.leads_ready_value - a.leads_ready_value);
 
-    return apiSuccess({
+    const result = {
       date_range: {
         start: dateStartStr,
         end: dateEndStr,
@@ -307,7 +321,12 @@ export async function GET(request: NextRequest) {
       summary,
       by_tenant: byTenant,
       by_offer: byOffer,
-    });
+    };
+
+    // Cache the result
+    await cacheService.set(cacheKey, result, CacheTTL.REVENUE);
+
+    return apiSuccess(result);
   } catch (error: unknown) {
     return handleApiError(error, {
       code: ErrorCode.INTERNAL_ERROR,

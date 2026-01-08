@@ -147,7 +147,7 @@ describe("Google Sheets Service", () => {
         sheet_name: "Leads",
       };
 
-      // @ts-expect-error - intentionally testing missing required field
+      // Partial config - spreadsheet_id is optional on Partial type
       expect(config.spreadsheet_id).toBeUndefined();
     });
 
@@ -156,7 +156,7 @@ describe("Google Sheets Service", () => {
         spreadsheet_id: "abc123",
       };
 
-      // @ts-expect-error - intentionally testing missing required field
+      // Partial config - sheet_name is optional on Partial type
       expect(config.sheet_name).toBeUndefined();
     });
   });

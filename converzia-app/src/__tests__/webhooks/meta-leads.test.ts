@@ -199,9 +199,9 @@ describe("Meta Leads Webhook", () => {
     });
 
     it("should reject invalid verify token", () => {
-      const verifyToken = "test-verify-token";
-      const hubToken = "wrong-token";
-      const mode = "subscribe";
+      const verifyToken: string = "test-verify-token";
+      const hubToken: string = "wrong-token";
+      const mode: string = "subscribe";
 
       const shouldVerify = mode === "subscribe" && hubToken === verifyToken;
       expect(shouldVerify).toBe(false);

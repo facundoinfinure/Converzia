@@ -10,6 +10,7 @@ import { fetchWithTimeout } from "@/lib/utils/fetch-with-timeout";
 import { normalizePhone } from "@/lib/utils";
 import { handleApiError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
 import { logger, Metrics, Alerts, generateTraceId, setTraceId } from "@/lib/monitoring";
+import { invalidateCache } from "@/lib/services/cache";
 import type { MetaWebhookPayload, MetaLeadData, TenantIntegrationWithTokens, MetaIntegrationConfig, AdOfferMapping, AppSetting, UpsertLeadSourceResult } from "@/types/supabase-helpers";
 import type { Lead, LeadOffer } from "@/types/database";
 
@@ -342,6 +343,13 @@ export async function POST(request: NextRequest) {
           } catch (err) {
             logger.exception("Error starting conversation", err, { leadOfferId: leadOffer.id });
           }
+        }
+
+        // Invalidate tenant stats cache (new lead created)
+        try {
+          await invalidateCache.tenantLeads(adMapping.tenant_id);
+        } catch (cacheErr) {
+          logger.warn("Failed to invalidate cache", { error: cacheErr });
         }
       }
     }

@@ -5,6 +5,7 @@ import { logger } from "@/lib/utils/logger";
 import { handleApiError, handleUnauthorized, handleForbidden, handleValidationError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
 import { isAdminProfile, type MembershipWithRole } from "@/types/supabase-helpers";
 import { validateQuery, funnelQuerySchema } from "@/lib/validation/schemas";
+import { cacheService, cacheKeys, CacheTTL } from "@/lib/services/cache";
 
 /**
  * GET /api/portal/funnel
@@ -115,6 +116,18 @@ export async function GET(request: NextRequest) {
         deliveredLeads: deliveredLeads || [],
       });
     } else {
+      // Try cache first for tenant funnel (no date/offer filter)
+      const cacheKey = cacheKeys.tenantFunnel(tenantId, 30); // Default 30 days
+      const cachedFunnel = await cacheService.get<{
+        funnel: unknown;
+        offers: unknown[];
+      }>(cacheKey);
+
+      if (cachedFunnel) {
+        logger.debug("[API Funnel] Returning cached funnel", { tenantId });
+        return apiSuccess({ ...cachedFunnel, cached: true });
+      }
+
       // Aggregated tenant funnel
       const { data: tenantFunnel, error: tenantError } = await queryWithTimeout(
         supabase
@@ -146,10 +159,15 @@ export async function GET(request: NextRequest) {
         "get offer breakdown"
       );
       
-      return apiSuccess({
+      const result = {
         funnel: tenantFunnel,
         offers: offerBreakdown || [],
-      });
+      };
+
+      // Cache the result
+      await cacheService.set(cacheKey, result, CacheTTL.FUNNEL);
+      
+      return apiSuccess(result);
     }
   } catch (error) {
     return handleApiError(error, {

@@ -144,9 +144,9 @@ describe("Chatwoot Webhook", () => {
     });
 
     it("should skip outgoing messages", () => {
-      const message = {
-        message_type: "outgoing" as const,
-        sender: { type: "user" as const },
+      const message: { message_type: string; sender: { type: string }; private: boolean } = {
+        message_type: "outgoing",
+        sender: { type: "user" },
         private: false,
       };
 
@@ -166,8 +166,8 @@ describe("Chatwoot Webhook", () => {
     });
 
     it("should skip activity messages", () => {
-      const message = {
-        message_type: "activity" as const,
+      const message: { message_type: string; content: string } = {
+        message_type: "activity",
         content: "Conversation was resolved",
       };
 
