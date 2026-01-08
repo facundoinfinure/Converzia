@@ -281,7 +281,7 @@ export default function PortalLeadsPage() {
       setIsLoadingLeads(false);
       setIsRefreshing(false);
     }
-  }, [activeTenantId, selectedCategory, offerFilter, supabase, toast]);
+  }, [activeTenantId, selectedCategory, offerFilter, toast]);
 
   useEffect(() => {
     if (activeTenantId) {
