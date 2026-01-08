@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get all offer IDs for this tenant
-    const { data: offers, error: offersError } = await queryWithTimeout(
+    const { data: offersData, error: offersError } = await queryWithTimeout(
       supabase
         .from("offers")
         .select("id")
@@ -78,7 +78,8 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const offerIds = (offers || []).map(o => o.id);
+    const offers = Array.isArray(offersData) ? offersData as Array<{ id: string }> : [];
+    const offerIds = offers.map(o => o.id);
 
     if (offerIds.length === 0) {
       // No offers = no leads
@@ -94,7 +95,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Count leads by status using admin client (bypasses RLS)
-    const { data: leadCounts, error: countsError } = await queryWithTimeout(
+    const { data: leadCountsData, error: countsError } = await queryWithTimeout(
       supabase
         .from("lead_offers")
         .select("status")
@@ -111,7 +112,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const leads = leadCounts || [];
+    const leads = Array.isArray(leadCountsData) ? leadCountsData as Array<{ status: string }> : [];
 
     // Count by category (matching the view logic)
     const stats = {
