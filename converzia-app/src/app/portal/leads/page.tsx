@@ -237,26 +237,10 @@ export default function PortalLeadsPage() {
       const leadsData = Array.isArray(leadsDataRaw) ? leadsDataRaw : [];
       
       if (leadsData.length > 0) {
-        // Filtrar y validar datos antes de procesarlos
+        // Procesar todos los leads sin filtrar - siempre mostrar los resultados de la query
+        // La query ya filtra correctamente por tenant_id y status
+        // Los leads sin datos relacionados se mostrarán con valores por defecto
         const processedLeads: TenantLeadView[] = leadsData
-          .filter((d: any) => {
-            // Validar que tenga los datos mínimos necesarios
-            const lead = Array.isArray(d.lead) ? d.lead[0] : d.lead;
-            const offer = Array.isArray(d.offer) ? d.offer[0] : d.offer;
-            
-            // Para "in_chat" y "received", necesitamos al menos el lead (puede no tener offer asignado aún)
-            if (selectedCategory === "in_chat" || selectedCategory === "received") {
-              return lead !== null && lead !== undefined;
-            }
-            
-            // Para "not_qualified", no necesitamos validar lead (está oculto por privacidad)
-            if (selectedCategory === "not_qualified") {
-              return true; // Todos los leads descalificados son válidos
-            }
-            
-            // Para otras categorías, validar que exista el lead
-            return lead !== null && lead !== undefined;
-          })
           .map((d: any) => {
             const lead = Array.isArray(d.lead) ? d.lead[0] : d.lead;
             const offer = Array.isArray(d.offer) ? d.offer[0] : d.offer;

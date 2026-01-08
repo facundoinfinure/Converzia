@@ -148,6 +148,7 @@ export default function PortalOfferDetailPage() {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [isUploadingDocument, setIsUploadingDocument] = useState(false);
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
+  const [googleConnected, setGoogleConnected] = useState<boolean>(false);
 
   const canManageOffers = hasPermission?.('offers:manage') ?? false;
 
@@ -220,6 +221,22 @@ export default function PortalOfferDetailPage() {
       );
 
       setIntegrations((Array.isArray(integrationsData) ? integrationsData : []) as TenantIntegration[]);
+
+      // Check Google OAuth connection status (same logic as integrations page)
+      try {
+        const googleResponse = await fetch(
+          `/api/integrations/google/spreadsheets?tenant_id=${activeTenantId}`
+        );
+        if (googleResponse.ok) {
+          const googleData = await googleResponse.json();
+          setGoogleConnected(googleData.connected === true);
+        } else {
+          setGoogleConnected(false);
+        }
+      } catch {
+        // Silently fail - Google connection check is optional
+        setGoogleConnected(false);
+      }
 
       // Load RAG sources for this offer
       const { data: ragSourcesData } = await queryWithTimeout(
@@ -889,6 +906,10 @@ export default function PortalOfferDetailPage() {
               {/* Google Sheets */}
               {(() => {
                 const googleIntegration = integrations.find(i => i.integration_type === "GOOGLE_SHEETS");
+                // Use same logic as integrations page: check both integration entry and OAuth connection
+                const isGoogleConfigured = !!googleIntegration || googleConnected;
+                const isGoogleActive = googleIntegration?.is_active;
+                
                 return (
                   <div className="flex items-center justify-between p-4 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)]">
                     <div className="flex items-center gap-3">
@@ -898,8 +919,10 @@ export default function PortalOfferDetailPage() {
                       <div>
                         <p className="font-medium text-[var(--text-primary)]">Google Sheets</p>
                         <p className="text-sm text-[var(--text-tertiary)]">
-                          {googleIntegration?.is_active 
-                            ? `Conectado${googleIntegration.name ? `: ${googleIntegration.name}` : ''}`
+                          {isGoogleActive 
+                            ? `Conectado${googleIntegration?.name ? `: ${googleIntegration.name}` : ''}`
+                            : googleConnected
+                            ? "• Conectado"
                             : "No configurado"}
                         </p>
                       </div>
@@ -913,7 +936,7 @@ export default function PortalOfferDetailPage() {
                         setShowIntegrationModal(true);
                       }}
                     >
-                      {googleIntegration ? "Editar" : "Configurar"}
+                      {isGoogleActive ? "Editar" : isGoogleConfigured ? "Completar configuración" : "Configurar"}
                     </Button>
                   </div>
                 );
