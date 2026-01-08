@@ -197,9 +197,8 @@ export default function PortalLeadsPage() {
         ? ["PENDING_MAPPING", "TO_BE_CONTACTED"]
         : category.statuses;
       
-      // Optimized query: filter by tenant_id first (uses index), then status, then order
-      // This order matches the composite index idx_lead_offers_tenant_status_updated
-      // Specify foreign key explicitly to avoid ambiguity (offer_id vs recommended_offer_id)
+      // OPTIMIZED: Simple query without JOINs for better performance on Supabase free tier
+      // JOINs were causing 20s+ timeouts. We'll show "Lead" as default name.
       let query = supabase
         .from("lead_offers")
         .select(`
@@ -209,21 +208,19 @@ export default function PortalLeadsPage() {
           qualification_fields,
           created_at,
           updated_at,
-          lead:leads(first_name),
-          offer:offers!lead_offers_offer_id_fkey(name)
+          offer_id
         `)
         .eq("tenant_id", activeTenantId)
         .in("status", statuses)
         .order("updated_at", { ascending: false })
-        .limit(50); // Reduced from 100 to improve performance
+        .limit(50);
       
       if (offerFilter) {
-        // When filtering by offer, use the idx_lead_offers_tenant_status_offer index
         query = query.eq("offer_id", offerFilter);
       }
       
-      // Increased timeout slightly for queries with joins, but queries should be faster with indexes
-      const { data: leadsDataRaw, error } = await queryWithTimeout(query, 20000, "leads list");
+      // Reduced timeout since query is now simpler
+      const { data: leadsDataRaw, error } = await queryWithTimeout(query, 10000, "leads list");
       
       // SIEMPRE resetear el array primero
       setLeads([]);
@@ -237,15 +234,35 @@ export default function PortalLeadsPage() {
       const leadsData = Array.isArray(leadsDataRaw) ? leadsDataRaw : [];
       
       if (leadsData.length > 0) {
-        // Procesar todos los leads sin filtrar - siempre mostrar los resultados de la query
-        // La query ya filtra correctamente por tenant_id y status
-        // Los leads sin datos relacionados se mostrarán con valores por defecto
+        // Get unique offer IDs to fetch offer names in a single query
+        const offerIds = [...new Set(leadsData.map((d: any) => d.offer_id).filter(Boolean))];
+        
+        // Fetch offer names in parallel (lightweight query)
+        let offerNames: Record<string, string> = {};
+        if (offerIds.length > 0) {
+          try {
+            const { data: offersData } = await queryWithTimeout(
+              supabase
+                .from("offers")
+                .select("id, name")
+                .in("id", offerIds),
+              5000,
+              "offer names"
+            );
+            if (offersData) {
+              offerNames = Object.fromEntries(
+                (offersData as { id: string; name: string }[]).map(o => [o.id, o.name])
+              );
+            }
+          } catch {
+            // Silently fail - offer names are optional
+          }
+        }
+        
+        // Process leads with offer names
         const processedLeads: TenantLeadView[] = leadsData
           .map((d: any) => {
-            const lead = Array.isArray(d.lead) ? d.lead[0] : d.lead;
-            const offer = Array.isArray(d.offer) ? d.offer[0] : d.offer;
             const isDropped = selectedCategory === "not_qualified";
-            const isReceived = selectedCategory === "received";
             
             // Get drop reason from qualification fields or status
             let dropReason: string | null = null;
@@ -270,11 +287,9 @@ export default function PortalLeadsPage() {
               id: d.id,
               status: d.status,
               category: selectedCategory as TenantLeadView["category"],
-              // Privacy: For received, only show first name (no last name, email, phone)
-              // For dropped leads, hide all personal info
-              // Manejar caso cuando lead?.first_name es null
-              firstName: isDropped ? null : (lead?.first_name || "Lead"),
-              offerName: offer?.name || null,
+              // Privacy: For dropped leads, hide personal info. Otherwise show "Lead" as default
+              firstName: isDropped ? null : "Lead",
+              offerName: d.offer_id ? (offerNames[d.offer_id] || null) : null,
               score: d.score_total,
               createdAt: d.created_at,
               updatedAt: d.updated_at,
@@ -283,11 +298,6 @@ export default function PortalLeadsPage() {
           });
         
         setLeads(processedLeads);
-        
-        // Logging para debug de inconsistencias
-        if (processedLeads.length !== leadsData.length) {
-          console.warn(`[Leads] Filtrados ${leadsData.length - processedLeads.length} leads inválidos de ${leadsData.length} totales`);
-        }
       } else {
         // Asegurar que el array esté vacío cuando no hay resultados
         setLeads([]);
