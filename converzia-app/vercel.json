@@ -8,10 +8,6 @@
     {
       "path": "/api/cron/tokko-sync",
       "schedule": "0 3 * * *"
-    },
-    {
-      "path": "/api/cron/refresh-tenant-stats",
-      "schedule": "0 1 * * *"
     }
   ],
   "headers": [

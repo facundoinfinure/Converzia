@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
+import { queryWithTimeout, rpcWithTimeout } from "@/lib/supabase/query-with-timeout";
+import { unsafeRpc } from "@/lib/supabase/unsafe-rpc";
 import { processDelivery } from "@/lib/services/delivery";
 import { retryContact, sendReactivation } from "@/lib/services/conversation";
 import { withCronAuth } from "@/lib/security/cron-auth";
@@ -254,8 +255,31 @@ export async function GET(request: NextRequest) {
         }
       }
 
-    logger.info("Daily tasks completed", { ...results, creditAlerts });
-    return apiSuccess({ ...results, creditAlerts }, "Tareas diarias completadas");
+    // ==========================================
+    // 6. Refresh Tenant Stats Materialized View
+    // (Consolidated from separate cron to stay within Vercel Hobby 2-cron limit)
+    // ==========================================
+    let statsRefreshed = false;
+    try {
+      logger.info("Refreshing tenant_stats_mv materialized view");
+      const { error: refreshError } = await rpcWithTimeout<void>(
+        unsafeRpc<void>(supabase, "refresh_tenant_stats_mv"),
+        60000, // 60 second timeout
+        "refresh_tenant_stats_mv",
+        false // Don't retry
+      );
+      if (refreshError) {
+        logger.error("Failed to refresh tenant_stats_mv", refreshError);
+      } else {
+        statsRefreshed = true;
+        logger.info("Successfully refreshed tenant_stats_mv");
+      }
+    } catch (refreshErr) {
+      logger.error("Error refreshing tenant_stats_mv", refreshErr);
+    }
+
+    logger.info("Daily tasks completed", { ...results, creditAlerts, statsRefreshed });
+    return apiSuccess({ ...results, creditAlerts, statsRefreshed }, "Tareas diarias completadas");
   } catch (error) {
     return handleApiError(error, {
       code: ErrorCode.INTERNAL_ERROR,
