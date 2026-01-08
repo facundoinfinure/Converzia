@@ -67,11 +67,26 @@ export async function GET(request: NextRequest) {
     // Use admin client to bypass RLS
     const adminSupabase = createAdminClient();
 
-    // Get tenant's offer IDs
-    let offerIds: string[] = [];
-    
+    // Build query - use tenant_id directly for consistency with stats API
+    let query = adminSupabase
+      .from("lead_offers")
+      .select(`
+        id,
+        status,
+        score_total,
+        qualification_fields,
+        created_at,
+        updated_at,
+        offer_id
+      `)
+      .eq("tenant_id", tenantId)
+      .in("status", statuses)
+      .order("updated_at", { ascending: false })
+      .limit(limit);
+
+    // Apply offer filter if specified
     if (offerFilter) {
-      // Verify the offer belongs to this tenant
+      // Verify the offer belongs to this tenant before filtering
       const { data: offer } = await queryWithTimeout(
         adminSupabase
           .from("offers")
@@ -84,45 +99,16 @@ export async function GET(request: NextRequest) {
       );
       
       if (offer) {
-        offerIds = [offerFilter];
+        query = query.eq("offer_id", offerFilter);
+      } else {
+        // Offer doesn't belong to this tenant
+        return apiSuccess({ leads: [], offerNames: {} });
       }
-    } else {
-      // Get all tenant's offers
-      const { data: offers } = await queryWithTimeout(
-        adminSupabase
-          .from("offers")
-          .select("id")
-          .eq("tenant_id", tenantId),
-        5000,
-        "get tenant offers"
-      );
-      
-      if (offers && Array.isArray(offers)) {
-        offerIds = offers.map((o: { id: string }) => o.id);
-      }
-    }
-
-    if (offerIds.length === 0) {
-      return apiSuccess({ leads: [], offerNames: {} });
     }
 
     // Query lead_offers with admin client (bypasses RLS)
     const { data: leads, error: leadsError } = await queryWithTimeout(
-      adminSupabase
-        .from("lead_offers")
-        .select(`
-          id,
-          status,
-          score_total,
-          qualification_fields,
-          created_at,
-          updated_at,
-          offer_id
-        `)
-        .in("offer_id", offerIds)
-        .in("status", statuses)
-        .order("updated_at", { ascending: false })
-        .limit(limit),
+      query,
       10000,
       "get leads"
     );

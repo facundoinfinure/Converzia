@@ -287,15 +287,32 @@ export function AuthProvider({ children, initialUser = null }: AuthProviderProps
     }
   }, [user, fetchUserData]);
 
-  // Sign out
+  // Sign out with timeout protection
   const signOut = useCallback(async () => {
-    await supabase.auth.signOut();
+    // Clear local state immediately for instant feedback
     localStorage.removeItem("activeTenantId");
     setUser(null);
     setProfile(null);
     setMemberships([]);
     setActiveTenantId(null);
-    // Redirect to login page
+    
+    // Stop session manager
+    sessionManager.stopAutoRefresh();
+    healthMonitor.stop();
+
+    // Attempt signOut with timeout (don't block redirect)
+    const signOutPromise = supabase.auth.signOut();
+    const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 3000));
+    
+    try {
+      // Wait max 3 seconds for signOut, then proceed anyway
+      await Promise.race([signOutPromise, timeoutPromise]);
+    } catch (error) {
+      // Log but don't block - local state is already cleared
+      console.warn("SignOut error (proceeding with redirect):", error);
+    }
+
+    // Always redirect to login page
     if (typeof window !== "undefined") {
       window.location.href = "/login";
     }

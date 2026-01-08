@@ -60,46 +60,13 @@ export async function GET(request: NextRequest) {
       return handleForbidden("No tiene acceso a este tenant");
     }
 
-    // Get all offer IDs for this tenant
-    const { data: offersData, error: offersError } = await queryWithTimeout(
-      supabase
-        .from("offers")
-        .select("id")
-        .eq("tenant_id", tenantId),
-      5000,
-      "tenant offers for stats"
-    );
-
-    if (offersError) {
-      logger.error("[API Stats] Error fetching offers", offersError);
-      return handleApiError(offersError, {
-        code: ErrorCode.DATABASE_ERROR,
-        message: "Error al obtener ofertas",
-      });
-    }
-
-    const offers = Array.isArray(offersData) ? offersData as Array<{ id: string }> : [];
-    const offerIds = offers.map(o => o.id);
-
-    if (offerIds.length === 0) {
-      // No offers = no leads
-      return apiSuccess({
-        stats: {
-          received: 0,
-          in_chat: 0,
-          qualified: 0,
-          delivered: 0,
-          not_qualified: 0,
-        }
-      });
-    }
-
     // Count leads by status using admin client (bypasses RLS)
+    // Query directly by tenant_id on lead_offers for more reliable counts
     const { data: leadCountsData, error: countsError } = await queryWithTimeout(
       supabase
         .from("lead_offers")
         .select("status")
-        .in("offer_id", offerIds),
+        .eq("tenant_id", tenantId),
       10000,
       "lead counts by status"
     );
