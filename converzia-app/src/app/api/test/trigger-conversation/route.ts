@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { startInitialConversation } from "@/lib/services/conversation";
 import { createAdminClient } from "@/lib/supabase/server";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { handleApiError, handleForbidden, handleValidationError, handleNotFound, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
 import { logger } from "@/lib/utils/logger";
 import type { LeadOfferWithRelations } from "@/types/supabase-helpers";
@@ -45,11 +46,15 @@ export async function POST(request: NextRequest) {
     logger.info(`[TEST] Searching for leadOfferId`, { leadOfferId, length: leadOfferId.length });
     
     // First try a simple query without joins
-    const { data: simpleCheck, error: simpleError } = await supabase
-      .from("lead_offers")
-      .select("id, status")
-      .eq("id", leadOfferId.trim())
-      .single();
+    const { data: simpleCheck, error: simpleError } = await queryWithTimeout(
+      supabase
+        .from("lead_offers")
+        .select("id, status")
+        .eq("id", leadOfferId.trim())
+        .single(),
+      5000,
+      "check lead offer exists"
+    );
     
     logger.info(`[TEST] Simple check result`, { hasData: !!simpleCheck, error: simpleError?.message });
     
@@ -58,17 +63,21 @@ export async function POST(request: NextRequest) {
     }
     
     // Now get the full data - specify the FK relationship explicitly
-    const { data: leadOffer, error } = await supabase
-      .from("lead_offers")
-      .select(`
-        id,
-        status,
-        lead:leads!lead_id(phone, full_name),
-        offer:offers!offer_id(name),
-        tenant:tenants!tenant_id(name)
-      `)
-      .eq("id", leadOfferId.trim())
-      .single();
+    const { data: leadOffer, error } = await queryWithTimeout(
+      supabase
+        .from("lead_offers")
+        .select(`
+          id,
+          status,
+          lead:leads!lead_id(phone, full_name),
+          offer:offers!offer_id(name),
+          tenant:tenants!tenant_id(name)
+        `)
+        .eq("id", leadOfferId.trim())
+        .single(),
+      5000,
+      "get lead offer details"
+    );
 
     if (error || !leadOffer) {
       return NextResponse.json(

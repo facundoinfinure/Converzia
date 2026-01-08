@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import {
   getCampaignStructure,
   getAdAccounts,
@@ -42,25 +43,42 @@ export async function GET(request: NextRequest) {
     // First try to find one without tenant_id (global), then fall back to any active one
     let integration;
     
-    const { data: globalIntegration } = await supabase
-      .from("tenant_integrations")
-      .select("*")
-      .eq("integration_type", "META_ADS")
-      .eq("is_active", true)
-      .is("tenant_id", null)
-      .maybeSingle();
+    type TenantIntegrationRow = {
+      id: string;
+      tenant_id: string | null;
+      integration_type: string;
+      is_active: boolean;
+      oauth_tokens: unknown;
+      config: unknown;
+    };
+
+    const { data: globalIntegration } = await queryWithTimeout<TenantIntegrationRow | null>(
+      supabase
+        .from("tenant_integrations")
+        .select("*")
+        .eq("integration_type", "META_ADS")
+        .eq("is_active", true)
+        .is("tenant_id", null)
+        .maybeSingle(),
+      5000,
+      "get global meta integration"
+    );
 
     if (globalIntegration) {
       integration = globalIntegration;
     } else {
       // Fall back to any active META_ADS integration (legacy per-tenant setup)
-      const { data: anyIntegration, error: integrationError } = await supabase
-        .from("tenant_integrations")
-        .select("*")
-        .eq("integration_type", "META_ADS")
-        .eq("is_active", true)
-        .limit(1)
-        .maybeSingle();
+      const { data: anyIntegration, error: integrationError } = await queryWithTimeout<TenantIntegrationRow | null>(
+        supabase
+          .from("tenant_integrations")
+          .select("*")
+          .eq("integration_type", "META_ADS")
+          .eq("is_active", true)
+          .limit(1)
+          .maybeSingle(),
+        5000,
+        "get meta integration fallback"
+      );
 
       if (integrationError) {
         return handleApiError(integrationError, {

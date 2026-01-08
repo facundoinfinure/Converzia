@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { validateBody, metaConfigBodySchema } from "@/lib/validation/schemas";
 import { logger } from "@/lib/utils/logger";
 import { handleApiError, handleUnauthorized, handleValidationError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
@@ -20,13 +21,26 @@ export async function GET(request: NextRequest) {
       return handleUnauthorized("Debes iniciar sesión para ver la configuración de Meta");
     }
 
+    type TenantIntegrationRow = {
+      id: string;
+      tenant_id: string | null;
+      integration_type: string;
+      is_active: boolean;
+      oauth_tokens: unknown;
+      config: unknown;
+    };
+
     // Get global Meta integration
-    const { data: integration, error } = await supabase
-      .from("tenant_integrations")
-      .select("*")
-      .eq("integration_type", "META_ADS")
-      .is("tenant_id", null)
-      .maybeSingle();
+    const { data: integration, error } = await queryWithTimeout<TenantIntegrationRow | null>(
+      supabase
+        .from("tenant_integrations")
+        .select("*")
+        .eq("integration_type", "META_ADS")
+        .is("tenant_id", null)
+        .maybeSingle(),
+      5000,
+      "get meta integration"
+    );
 
     if (error) {
       return handleApiError(error, {
@@ -115,13 +129,26 @@ export async function PATCH(request: NextRequest) {
     const selected_page_id = selected_pages?.[0];
     const selected_waba_id = selected_whatsapp_accounts?.[0];
 
+    type TenantIntegrationRow2 = {
+      id: string;
+      tenant_id: string | null;
+      integration_type: string;
+      is_active: boolean;
+      oauth_tokens: unknown;
+      config: unknown;
+    };
+
     // Get existing integration
-    const { data: integration, error: fetchError } = await supabase
-      .from("tenant_integrations")
-      .select("*")
-      .eq("integration_type", "META_ADS")
-      .is("tenant_id", null)
-      .maybeSingle();
+    const { data: integration, error: fetchError } = await queryWithTimeout<TenantIntegrationRow2 | null>(
+      supabase
+        .from("tenant_integrations")
+        .select("*")
+        .eq("integration_type", "META_ADS")
+        .is("tenant_id", null)
+        .maybeSingle(),
+      5000,
+      "get meta integration for update"
+    );
 
     if (fetchError || !integration) {
       return handleApiError(new Error("Meta integration not found"), {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { google } from "googleapis";
 import { createClient } from "@/lib/supabase/server";
+import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import type { GoogleOAuthTokens } from "@/types";
 import {
   validateQuery,
@@ -68,13 +69,17 @@ export async function GET(request: NextRequest) {
     });
 
     // Verify user has access to this tenant
-    const { data: membership, error: membershipError } = await supabase
-      .from("tenant_members")
-      .select("role, status")
-      .eq("tenant_id", tenantId)
-      .eq("user_id", user.id)
-      .eq("status", "ACTIVE")
-      .single();
+    const { data: membership, error: membershipError } = await queryWithTimeout<{ role: string; status: string }>(
+      supabase
+        .from("tenant_members")
+        .select("role, status")
+        .eq("tenant_id", tenantId)
+        .eq("user_id", user.id)
+        .eq("status", "ACTIVE")
+        .single(),
+      5000,
+      "check membership"
+    );
 
     if (membershipError || !membership) {
       logger.error("[Google Spreadsheets] Membership check failed", membershipError, {
@@ -94,12 +99,16 @@ export async function GET(request: NextRequest) {
     });
 
     // Get OAuth tokens from database
-    const { data: integration, error: integrationError } = await supabase
-      .from("tenant_integrations")
-      .select("id, oauth_tokens, config")
-      .eq("tenant_id", tenantId)
-      .eq("integration_type", "GOOGLE_SHEETS")
-      .single();
+    const { data: integration, error: integrationError } = await queryWithTimeout<{ id: string; oauth_tokens: unknown; config: unknown }>(
+      supabase
+        .from("tenant_integrations")
+        .select("id, oauth_tokens, config")
+        .eq("tenant_id", tenantId)
+        .eq("integration_type", "GOOGLE_SHEETS")
+        .single(),
+      5000,
+      "get integration"
+    );
 
     if (integrationError) {
       logger.error("[Google Spreadsheets] Integration query failed", integrationError, {
