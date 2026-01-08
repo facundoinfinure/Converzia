@@ -197,44 +197,66 @@ export default function PortalLeadsPage() {
         ? ["PENDING_MAPPING", "TO_BE_CONTACTED"]
         : category.statuses;
       
-      // OPTIMIZED: Simple query without JOINs for better performance on Supabase free tier
-      // JOINs were causing 20s+ timeouts. We'll show "Lead" as default name.
-      let query = supabase
-        .from("lead_offers")
-        .select(`
-          id,
-          status,
-          score_total,
-          qualification_fields,
-          created_at,
-          updated_at,
-          offer_id
-        `)
-        .eq("tenant_id", activeTenantId)
-        .in("status", statuses)
-        .order("updated_at", { ascending: false })
-        .limit(50);
+      // FIX: Query leads using the same logic as offer_funnel_stats view
+      // The view counts leads by joining offers.tenant_id, not lead_offers.tenant_id
+      // So we need to first get tenant's offer_ids, then query lead_offers by those offer_ids
+      
+      // Step 1: Get offer IDs for this tenant (or use filter if provided)
+      let offerIdsToQuery: string[] = [];
       
       if (offerFilter) {
-        query = query.eq("offer_id", offerFilter);
+        // User selected a specific offer
+        offerIdsToQuery = [offerFilter];
+      } else {
+        // Get all tenant's offer IDs
+        const { data: tenantOffers } = await queryWithTimeout(
+          supabase
+            .from("offers")
+            .select("id")
+            .eq("tenant_id", activeTenantId),
+          5000,
+          "tenant offers"
+        );
+        
+        if (tenantOffers && Array.isArray(tenantOffers)) {
+          offerIdsToQuery = tenantOffers.map((o: { id: string }) => o.id);
+        }
       }
       
-      // DEBUG: Log query parameters
-      console.log("[Leads Debug] Query params:", {
-        tenant_id: activeTenantId,
-        category: selectedCategory,
+      // If no offers, no leads to show
+      if (offerIdsToQuery.length === 0) {
+        console.log("[Leads Debug] No offers found for tenant");
+        setLeads([]);
+        return;
+      }
+      
+      // Step 2: Query lead_offers by offer_id (matching the view's logic)
+      const { data: leadsDataRaw, error } = await queryWithTimeout(
+        supabase
+          .from("lead_offers")
+          .select(`
+            id,
+            status,
+            score_total,
+            qualification_fields,
+            created_at,
+            updated_at,
+            offer_id
+          `)
+          .in("offer_id", offerIdsToQuery)
+          .in("status", statuses)
+          .order("updated_at", { ascending: false })
+          .limit(50),
+        10000,
+        "leads list"
+      );
+      
+      // DEBUG: Log query info
+      console.log("[Leads Debug] Query:", {
+        offerIds: offerIdsToQuery.length,
         statuses,
-        offerFilter: offerFilter || "none"
-      });
-      
-      // Reduced timeout since query is now simpler
-      const { data: leadsDataRaw, error } = await queryWithTimeout(query, 10000, "leads list");
-      
-      // DEBUG: Log raw response
-      console.log("[Leads Debug] Raw response:", { 
-        data: leadsDataRaw, 
-        error,
-        count: Array.isArray(leadsDataRaw) ? leadsDataRaw.length : 0 
+        resultsCount: Array.isArray(leadsDataRaw) ? leadsDataRaw.length : 0,
+        error: error || null
       });
       
       // SIEMPRE resetear el array primero
