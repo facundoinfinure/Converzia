@@ -9,12 +9,15 @@ import { createClient } from "@supabase/supabase-js";
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SECRET_KEY || "";
 
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+const hasEnvVars = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY;
+
+if (!hasEnvVars) {
   console.warn("E2E tests require SUPABASE_URL and SUPABASE_SECRET_KEY");
 }
 
-describe("Billing Flow E2E", () => {
-  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+describe.skipIf(!hasEnvVars)("Billing Flow E2E", () => {
+  // Only create client if env vars are available (checked by skipIf above)
+  const supabase = hasEnvVars ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) : null as any;
   let testTenantId: string;
   let initialBalance: number;
 

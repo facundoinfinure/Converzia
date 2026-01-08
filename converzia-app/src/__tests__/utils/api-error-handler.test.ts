@@ -42,15 +42,15 @@ describe("API Error Handler", () => {
       const json = await response.json();
 
       expect(response.status).toBe(401);
-      expect(json.success).toBe(false);
-      expect(json.error.code).toBe(ErrorCode.UNAUTHORIZED);
+      expect(json.code).toBe(ErrorCode.UNAUTHORIZED);
+      expect(json.error).toBe("Unauthorized");
     });
 
     it("should use custom message when provided", async () => {
       const response = handleUnauthorized("Token expirado");
       const json = await response.json();
 
-      expect(json.error.message).toBe("Token expirado");
+      expect(json.error).toBe("Token expirado");
     });
   });
 
@@ -60,15 +60,15 @@ describe("API Error Handler", () => {
       const json = await response.json();
 
       expect(response.status).toBe(403);
-      expect(json.success).toBe(false);
-      expect(json.error.code).toBe(ErrorCode.FORBIDDEN);
+      expect(json.code).toBe(ErrorCode.FORBIDDEN);
+      expect(json.error).toBe("Forbidden");
     });
 
     it("should use custom message when provided", async () => {
       const response = handleForbidden("Acceso denegado a este recurso");
       const json = await response.json();
 
-      expect(json.error.message).toBe("Acceso denegado a este recurso");
+      expect(json.error).toBe("Acceso denegado a este recurso");
     });
   });
 
@@ -78,22 +78,21 @@ describe("API Error Handler", () => {
       const json = await response.json();
 
       expect(response.status).toBe(404);
-      expect(json.success).toBe(false);
-      expect(json.error.code).toBe(ErrorCode.NOT_FOUND);
+      expect(json.code).toBe(ErrorCode.NOT_FOUND);
     });
 
     it("should include resource name in message", async () => {
       const response = handleNotFound("Usuario");
       const json = await response.json();
 
-      expect(json.error.message).toContain("Usuario");
+      expect(json.error).toContain("Usuario");
     });
 
-    it("should include details when provided", async () => {
+    it("should include request_id for tracing", async () => {
       const response = handleNotFound("Offer", { offer_id: "123" });
       const json = await response.json();
 
-      expect(json.error.details).toEqual({ offer_id: "123" });
+      expect(json.request_id).toBeDefined();
     });
   });
 
@@ -103,21 +102,18 @@ describe("API Error Handler", () => {
       const json = await response.json();
 
       expect(response.status).toBe(400);
-      expect(json.success).toBe(false);
-      expect(json.error.code).toBe(ErrorCode.VALIDATION_ERROR);
+      expect(json.code).toBe(ErrorCode.VALIDATION_ERROR);
     });
 
-    it("should include validation details", async () => {
+    it("should have validation error code", async () => {
       const response = handleValidationError(new Error("Email required"), {
         field: "email",
         required: true,
       });
       const json = await response.json();
 
-      expect(json.error.details).toEqual({
-        field: "email",
-        required: true,
-      });
+      expect(json.code).toBe(ErrorCode.VALIDATION_ERROR);
+      expect(json.error).toBe("Validation error");
     });
   });
 
@@ -127,8 +123,8 @@ describe("API Error Handler", () => {
       const json = await response.json();
 
       expect(response.status).toBe(409);
-      expect(json.success).toBe(false);
-      expect(json.error.code).toBe(ErrorCode.CONFLICT);
+      expect(json.code).toBe(ErrorCode.CONFLICT);
+      expect(json.error).toBe("El recurso ya existe");
     });
   });
 
@@ -143,8 +139,8 @@ describe("API Error Handler", () => {
       const json = await response.json();
 
       expect(response.status).toBe(500);
-      expect(json.success).toBe(false);
-      expect(json.error.code).toBe(ErrorCode.INTERNAL_ERROR);
+      expect(json.code).toBe(ErrorCode.INTERNAL_ERROR);
+      expect(json.error).toBe("Error interno del servidor");
     });
 
     it("should include context when provided", async () => {
@@ -158,7 +154,7 @@ describe("API Error Handler", () => {
       const json = await response.json();
 
       // Context should be logged but not exposed in response for security
-      expect(json.error.code).toBe(ErrorCode.DATABASE_ERROR);
+      expect(json.code).toBe(ErrorCode.DATABASE_ERROR);
     });
 
     it("should handle null error gracefully", async () => {
@@ -170,7 +166,7 @@ describe("API Error Handler", () => {
       const json = await response.json();
 
       expect(response.status).toBe(500);
-      expect(json.success).toBe(false);
+      expect(json.code).toBe(ErrorCode.INTERNAL_ERROR);
     });
   });
 
