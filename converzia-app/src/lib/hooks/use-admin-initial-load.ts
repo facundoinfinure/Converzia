@@ -6,7 +6,23 @@ import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { useAdmin } from "@/lib/contexts/admin-context";
 
 // ============================================
-// Hook: Admin Initial Load
+// Types (from centralized stats service)
+// ============================================
+
+interface AdminDashboardStatsFromAPI {
+  totalLeads: number;
+  leadsToday: number;
+  activeTenants: number;
+  pendingApprovals: number;
+  leadReadyRate: number;
+  unmappedAds: number;
+  lowCreditTenants: number;
+  avgResponseTime: string;
+  leadsTrend: Array<{ date: string; value: number }>;
+}
+
+// ============================================
+// Hook: Admin Initial Load (uses centralized stats API)
 // ============================================
 
 export function useAdminInitialLoad() {
@@ -43,104 +59,21 @@ export function useAdminInitialLoad() {
 
       // Load all data in parallel using Promise.allSettled for resilience
       const [
-        totalLeadsResult,
-        activeTenantsResult,
-        pendingApprovalsCountResult,
-        unmappedLeadsResult,
-        leadsTodayResult,
-        leadReadyCountResult,
-        creditDataResult,
-        responseTimesResult,
+        statsResult,
         approvalsDataResult,
         billingStatsResult,
         billingOrdersResult,
       ] = await Promise.allSettled([
-        // 1. Total leads count - usar tenant_funnel_stats para consistencia con portal
-        // Sumar total_leads de todos los tenants para obtener el total global
-        queryWithTimeout(
-          supabase
-            .from("tenant_funnel_stats")
-            .select("total_leads"),
-          10000,
-          "all tenant stats for total leads",
-          false
-        ),
+        // 1. Stats from centralized API
+        fetch("/api/admin/stats").then(async (res) => {
+          if (!res.ok) {
+            const error = await res.json().catch(() => ({}));
+            throw new Error(error.message || "Error fetching admin stats");
+          }
+          return res.json();
+        }),
 
-        // 2. Active tenants count
-        queryWithTimeout(
-          supabase.from("tenants").select("id", { count: "exact", head: true }).eq("status", "ACTIVE"),
-          10000,
-          "tenants count",
-          false
-        ),
-
-        // 3. Pending approvals count
-        queryWithTimeout(
-          supabase.from("tenant_members").select("id", { count: "exact", head: true }).eq("status", "PENDING_APPROVAL"),
-          10000,
-          "tenant_members count",
-          false
-        ),
-
-        // 4. Unmapped leads
-        queryWithTimeout(
-          supabase.from("lead_offers").select("id").eq("status", "PENDING_MAPPING"),
-          10000,
-          "unmapped leads",
-          false
-        ),
-
-        // 5. Leads today
-        (async () => {
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          return queryWithTimeout(
-            supabase
-              .from("lead_offers")
-              .select("id", { count: "exact", head: true })
-              .gte("created_at", today.toISOString()),
-            10000,
-            "today's leads",
-            false
-          );
-        })(),
-
-        // 6. Lead ready count
-        queryWithTimeout(
-          supabase
-            .from("lead_offers")
-            .select("id", { count: "exact", head: true })
-            .in("status", ["LEAD_READY", "SENT_TO_DEVELOPER"]),
-          10000,
-          "lead ready count",
-          false
-        ),
-
-        // 7. Low credit tenants
-        queryWithTimeout(
-          supabase
-            .from("tenant_credit_balance")
-            .select("tenant_id, current_balance")
-            .lt("current_balance", 10),
-          10000,
-          "low credit tenants",
-          false
-        ),
-
-        // 8. Response times (for avg calculation)
-        queryWithTimeout(
-          supabase
-            .from("lead_offers")
-            .select("created_at, first_response_at")
-            .not("first_response_at", "is", null)
-            .gte("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-            .limit(100),
-          10000,
-          "response times",
-          false
-        ),
-
-        // 9. Pending approvals details
+        // 2. Pending approvals details
         queryWithTimeout(
           supabase
             .from("tenant_members")
@@ -160,7 +93,7 @@ export function useAdminInitialLoad() {
           false
         ),
 
-        // 10. Billing stats
+        // 3. Billing stats
         Promise.allSettled([
           // Total revenue
           supabase
@@ -199,7 +132,7 @@ export function useAdminInitialLoad() {
           ),
         ]),
 
-        // 11. Recent billing orders
+        // 4. Recent billing orders
         queryWithTimeout(
           supabase
             .from("billing_orders")
@@ -220,49 +153,25 @@ export function useAdminInitialLoad() {
         ),
       ]);
 
-      // Process results and build stats
-      // Calcular total de leads sumando desde tenant_funnel_stats para consistencia
-      const totalLeads = totalLeadsResult.status === "fulfilled" && Array.isArray(totalLeadsResult.value.data)
-        ? totalLeadsResult.value.data.reduce((sum: number, t: any) => sum + (t.total_leads || 0), 0)
-        : 0;
-      const activeTenants = activeTenantsResult.status === "fulfilled" ? (activeTenantsResult.value.count || 0) : 0;
-      const pendingApprovalsCount = pendingApprovalsCountResult.status === "fulfilled" ? (pendingApprovalsCountResult.value.count || 0) : 0;
-      const unmappedLeads = unmappedLeadsResult.status === "fulfilled" ? (Array.isArray(unmappedLeadsResult.value.data) ? unmappedLeadsResult.value.data.length : 0) : 0;
-      const leadsToday = leadsTodayResult.status === "fulfilled" ? (leadsTodayResult.value.count || 0) : 0;
-      const leadReadyCount = leadReadyCountResult.status === "fulfilled" ? (leadReadyCountResult.value.count || 0) : 0;
-      const creditData = creditDataResult.status === "fulfilled" ? (Array.isArray(creditDataResult.value.data) ? creditDataResult.value.data : []) : [];
-      const responseTimes = responseTimesResult.status === "fulfilled" ? (Array.isArray(responseTimesResult.value.data) ? responseTimesResult.value.data : []) : [];
-
-      // Calculate average response time
-      let avgResponseTime = "N/A";
-      if (responseTimes.length > 0) {
-        const times = responseTimes
-          .map((r: any) => {
-            const created = new Date(r.created_at).getTime();
-            const responded = new Date(r.first_response_at).getTime();
-            return (responded - created) / 1000 / 60;
-          })
-          .filter((t: number) => t > 0 && t < 1440);
-
-        if (times.length > 0) {
-          const avg = times.reduce((a: number, b: number) => a + b, 0) / times.length;
-          avgResponseTime = `${avg.toFixed(1)}min`;
-        }
+      // Process stats from API
+      if (statsResult.status === "fulfilled" && statsResult.value.success) {
+        const statsFromAPI = statsResult.value.data.dashboard as AdminDashboardStatsFromAPI;
+        
+        updateStats({
+          totalLeads: statsFromAPI.totalLeads,
+          leadsToday: statsFromAPI.leadsToday,
+          activeTenants: statsFromAPI.activeTenants,
+          leadReadyRate: statsFromAPI.leadReadyRate,
+          avgResponseTime: statsFromAPI.avgResponseTime,
+          pendingApprovals: statsFromAPI.pendingApprovals,
+          unmappedAds: statsFromAPI.unmappedAds,
+          lowCreditTenants: statsFromAPI.lowCreditTenants,
+          leadsTrend: statsFromAPI.leadsTrend,
+        });
+      } else {
+        console.error("Error loading admin stats:", statsResult);
+        setError("stats", "Error al cargar estadísticas");
       }
-
-      // Build dashboard stats
-      const stats = {
-        totalLeads,
-        leadsToday,
-        activeTenants,
-        leadReadyRate: totalLeads ? Math.round((leadReadyCount / totalLeads) * 100) : 0,
-        avgResponseTime,
-        pendingApprovals: pendingApprovalsCount,
-        unmappedAds: unmappedLeads,
-        lowCreditTenants: creditData.length,
-      };
-
-      updateStats(stats);
 
       // Process pending approvals
       if (approvalsDataResult.status === "fulfilled" && approvalsDataResult.value.data) {
@@ -321,66 +230,6 @@ export function useAdminInitialLoad() {
           ...prev,
           orders: processedOrders,
         }));
-      }
-
-      // Load leads trend (non-blocking, can be loaded lazily)
-      setLoading("stats", true);
-      try {
-        const daysAgo = 30;
-        const trendData: Array<{ date: string; value: number }> = [];
-        
-        // Load trend data in batches to avoid too many queries
-        const batchSize = 7; // Load 7 days at a time
-        for (let batch = 0; batch < Math.ceil((daysAgo + 1) / batchSize); batch++) {
-          const startDay = batch * batchSize;
-          const endDay = Math.min(startDay + batchSize - 1, daysAgo);
-          
-          const datePromises = [];
-          for (let i = startDay; i <= endDay; i++) {
-            const date = new Date();
-            date.setDate(date.getDate() - (daysAgo - i));
-            date.setHours(0, 0, 0, 0);
-            const nextDay = new Date(date);
-            nextDay.setDate(nextDay.getDate() + 1);
-
-            datePromises.push(
-              queryWithTimeout(
-                supabase
-                  .from("lead_offers")
-                  .select("id", { count: "exact", head: true })
-                  .gte("created_at", date.toISOString())
-                  .lt("created_at", nextDay.toISOString()),
-                5000,
-                `trend data for day ${i}`,
-                false
-              )
-            );
-          }
-
-          const batchResults = await Promise.allSettled(datePromises);
-          batchResults.forEach((result, idx) => {
-            const dayIndex = startDay + idx;
-            const date = new Date();
-            date.setDate(date.getDate() - (daysAgo - dayIndex));
-            date.setHours(0, 0, 0, 0);
-
-            const count = result.status === "fulfilled" ? (result.value.count || 0) : 0;
-            trendData.push({
-              date: date.toLocaleDateString("es-AR", { month: "short", day: "numeric" }),
-              value: count,
-            });
-          });
-        }
-
-        updateStats((prev) => ({
-          ...prev!,
-          leadsTrend: trendData,
-        }));
-      } catch (err) {
-        console.error("Error loading trend data:", err);
-        // Non-critical, don't set error
-      } finally {
-        setLoading("stats", false);
       }
 
       // Load recent activity (non-blocking)

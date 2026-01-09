@@ -7,6 +7,7 @@ import { appendToGoogleSheets, GoogleSheetsConfig } from "./google-sheets";
 import type { GoogleOAuthTokens } from "@/types";
 import { logger, Metrics, Alerts, startTimer } from "@/lib/monitoring";
 import { retryWithBackoff, logWebhookRetry, logWebhookSuccess } from "@/lib/security/webhook-retry";
+import { invalidateTenantStats, invalidateAdminStats } from "./stats";
 
 // ============================================
 // Delivery Pipeline Service
@@ -329,6 +330,18 @@ export async function processDelivery(deliveryId: string): Promise<DeliveryResul
     integrationsFailed,
     creditConsumed,
   });
+
+  // Invalidate caches when delivery status changes
+  if (creditConsumed) {
+    try {
+      // Invalidate tenant stats (lead status changed to SENT_TO_DEVELOPER)
+      await invalidateTenantStats(delivery.tenant_id);
+      // Also invalidate admin stats for global counts
+      await invalidateAdminStats();
+    } catch (cacheErr) {
+      logger.warn("Failed to invalidate cache after delivery", { error: cacheErr });
+    }
+  }
 
   return {
     success: finalStatus === "DELIVERED" || finalStatus === "PARTIAL",

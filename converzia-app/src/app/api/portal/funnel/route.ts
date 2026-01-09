@@ -1,20 +1,20 @@
-import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { NextRequest } from "next/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { logger } from "@/lib/utils/logger";
 import { handleApiError, handleUnauthorized, handleForbidden, handleValidationError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
 import { isAdminProfile, type MembershipWithRole } from "@/types/supabase-helpers";
 import { validateQuery, funnelQuerySchema } from "@/lib/validation/schemas";
-import { cacheService, cacheKeys, CacheTTL } from "@/lib/services/cache";
+import { getTenantFunnelStats, getOfferFunnelStats, getTenantOfferStats } from "@/lib/services/stats";
 
 /**
  * GET /api/portal/funnel
  * 
- * Returns funnel stats for the authenticated tenant.
+ * Returns funnel stats for the authenticated tenant using the centralized stats service.
  * Query params:
  * - offer_id: Filter by specific offer (optional)
- * - from: Start date filter (optional)
- * - to: End date filter (optional)
+ * - from: Start date filter (optional) - Note: date filtering not yet implemented in stats service
+ * - to: End date filter (optional) - Note: date filtering not yet implemented in stats service
  */
 export async function GET(request: NextRequest) {
   try {
@@ -72,36 +72,61 @@ export async function GET(request: NextRequest) {
       });
     }
     
-    const { offer_id: offerId, from: fromDate, to: toDate } = queryValidation.data;
+    const { offer_id: offerId } = queryValidation.data;
     
-    // Get funnel stats
+    // Get funnel stats using centralized service
     if (offerId) {
       // Single offer funnel
-      const { data: offerFunnel, error: offerError } = await queryWithTimeout(
-        supabase
-          .from("offer_funnel_stats")
-          .select("*")
-          .eq("offer_id", offerId)
-          .eq("tenant_id", tenantId)
-          .single(),
-        10000,
-        "get offer funnel stats"
-      );
+      const offerStats = await getOfferFunnelStats(offerId);
       
-      if (offerError) {
-        return handleApiError(offerError, {
-          code: ErrorCode.DATABASE_ERROR,
-          status: 500,
-          message: "No se pudieron obtener las estadísticas del funnel",
+      if (!offerStats) {
+        return handleApiError(new Error("Offer not found"), {
+          code: ErrorCode.NOT_FOUND,
+          status: 404,
+          message: "No se encontró el proyecto",
           context: { offerId, tenantId },
         });
       }
       
-      // Get delivered leads for this offer (with full details)
+      // Verify offer belongs to this tenant
+      if (offerStats.tenantId !== tenantId) {
+        return handleForbidden("No tienes acceso a este proyecto");
+      }
+      
+      // Convert to legacy format for backward compatibility
+      const funnel = {
+        offer_id: offerStats.offerId,
+        tenant_id: offerStats.tenantId,
+        offer_name: offerStats.offerName,
+        offer_status: offerStats.offerStatus,
+        approval_status: offerStats.approvalStatus,
+        total_leads: offerStats.totalLeads,
+        leads_pending_mapping: offerStats.pipelineStats.pendingMapping,
+        leads_pending_contact: offerStats.pipelineStats.toBeContacted,
+        leads_received: offerStats.received,
+        leads_in_chat: offerStats.inChat,
+        leads_qualified: offerStats.qualified,
+        leads_delivered: offerStats.delivered,
+        leads_disqualified: offerStats.pipelineStats.disqualified,
+        leads_stopped: offerStats.pipelineStats.stopped + offerStats.pipelineStats.cooling + offerStats.pipelineStats.reactivation,
+        leads_not_qualified: offerStats.notQualified,
+        conversion_rate: offerStats.conversionRate,
+        first_lead_at: offerStats.firstLeadAt,
+        last_lead_at: offerStats.lastLeadAt,
+      };
+      
+      // Get delivered leads for this offer (need admin client for RLS bypass)
+      const adminClient = createAdminClient();
       const { data: deliveredLeads } = await queryWithTimeout(
-        supabase
-          .from("tenant_leads_anonymized")
-          .select("*")
+        adminClient
+          .from("lead_offers")
+          .select(`
+            id,
+            status,
+            qualified_at,
+            created_at,
+            lead:leads(id, phone, full_name, email)
+          `)
           .eq("offer_id", offerId)
           .eq("tenant_id", tenantId)
           .eq("status", "SENT_TO_DEVELOPER")
@@ -112,62 +137,66 @@ export async function GET(request: NextRequest) {
       );
       
       return apiSuccess({
-        funnel: offerFunnel,
+        funnel,
         deliveredLeads: deliveredLeads || [],
       });
     } else {
-      // Try cache first for tenant funnel (no date/offer filter)
-      const cacheKey = cacheKeys.tenantFunnel(tenantId, 30); // Default 30 days
-      const cachedFunnel = await cacheService.get<{
-        funnel: unknown;
-        offers: unknown[];
-      }>(cacheKey);
-
-      if (cachedFunnel) {
-        logger.debug("[API Funnel] Returning cached funnel", { tenantId });
-        return apiSuccess({ ...cachedFunnel, cached: true });
-      }
-
-      // Aggregated tenant funnel
-      const { data: tenantFunnel, error: tenantError } = await queryWithTimeout(
-        supabase
-          .from("tenant_funnel_stats")
-          .select("*")
-          .eq("tenant_id", tenantId)
-          .single(),
-        10000,
-        "get tenant funnel stats"
-      );
+      // Get tenant stats from centralized service
+      const tenantStats = await getTenantFunnelStats(tenantId);
       
-      if (tenantError) {
-        return handleApiError(tenantError, {
-          code: ErrorCode.DATABASE_ERROR,
-          status: 500,
-          message: "No se pudieron obtener las estadísticas del funnel",
+      if (!tenantStats) {
+        return handleApiError(new Error("Tenant not found"), {
+          code: ErrorCode.NOT_FOUND,
+          status: 404,
+          message: "No se encontró el tenant",
           context: { tenantId },
         });
       }
       
-      // Get per-offer breakdown
-      const { data: offerBreakdown } = await queryWithTimeout(
-        supabase
-          .from("offer_funnel_stats")
-          .select("*")
-          .eq("tenant_id", tenantId)
-          .order("total_leads", { ascending: false }),
-        10000,
-        "get offer breakdown"
-      );
-      
-      const result = {
-        funnel: tenantFunnel,
-        offers: offerBreakdown || [],
+      // Convert to legacy format for backward compatibility
+      const funnel = {
+        tenant_id: tenantStats.tenantId,
+        tenant_name: tenantStats.tenantName,
+        total_leads: tenantStats.totalLeads,
+        leads_pending_mapping: tenantStats.pipelineStats.pendingMapping,
+        leads_pending_contact: tenantStats.pipelineStats.toBeContacted,
+        leads_received: tenantStats.received,
+        leads_in_chat: tenantStats.inChat,
+        leads_qualified: tenantStats.qualified,
+        leads_delivered: tenantStats.delivered,
+        leads_disqualified: tenantStats.pipelineStats.disqualified,
+        leads_stopped: tenantStats.pipelineStats.stopped + tenantStats.pipelineStats.cooling + tenantStats.pipelineStats.reactivation,
+        leads_not_qualified: tenantStats.notQualified,
+        conversion_rate: tenantStats.conversionRate,
+        credit_balance: tenantStats.creditBalance,
+        active_offers_count: tenantStats.activeOffers,
       };
-
-      // Cache the result
-      await cacheService.set(cacheKey, result, CacheTTL.FUNNEL);
       
-      return apiSuccess(result);
+      // Get per-offer breakdown
+      const offerStats = await getTenantOfferStats(tenantId);
+      
+      // Convert offer stats to legacy format
+      const offers = offerStats.map(os => ({
+        offer_id: os.offerId,
+        tenant_id: os.tenantId,
+        offer_name: os.offerName,
+        offer_status: os.offerStatus,
+        approval_status: os.approvalStatus,
+        total_leads: os.totalLeads,
+        leads_received: os.received,
+        leads_in_chat: os.inChat,
+        leads_qualified: os.qualified,
+        leads_delivered: os.delivered,
+        leads_not_qualified: os.notQualified,
+        conversion_rate: os.conversionRate,
+      }));
+      
+      logger.info("[API Funnel] Funnel stats retrieved", { tenantId, totalLeads: tenantStats.totalLeads });
+      
+      return apiSuccess({
+        funnel,
+        offers,
+      });
     }
   } catch (error) {
     return handleApiError(error, {
@@ -178,4 +207,3 @@ export async function GET(request: NextRequest) {
     });
   }
 }
-

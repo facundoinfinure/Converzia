@@ -53,6 +53,7 @@ interface FunnelStats {
   offer_status: string;
   approval_status: string;
   total_leads: number;
+  leads_pending_mapping: number;
   leads_pending_contact: number;
   leads_in_chat: number;
   leads_qualified: number;
@@ -179,18 +180,45 @@ export default function PortalOfferDetailPage() {
 
       setOffer(offerData as Offer);
 
-      // Load funnel stats
-      const { data: funnelData } = await queryWithTimeout(
-        supabase
-          .from("offer_funnel_stats")
-          .select("*")
-          .eq("offer_id", offerId)
-          .single(),
-        10000,
-        "load funnel"
-      );
-
-      setFunnel(funnelData as FunnelStats | null);
+      // Load funnel stats from centralized API
+      try {
+        const statsResponse = await fetch(`/api/portal/stats?tenant_id=${activeTenantId}&offer_id=${offerId}`);
+        if (statsResponse.ok) {
+          const statsResult = await statsResponse.json();
+          if (statsResult.success && statsResult.data?.offer) {
+            const offerStats = statsResult.data.offer;
+            // Convert API response to FunnelStats format for compatibility
+            const funnelData: FunnelStats = {
+              offer_id: offerStats.offerId,
+              offer_name: offerStats.offerName,
+              offer_status: offerStats.offerStatus,
+              approval_status: offerStats.approvalStatus,
+              total_leads: offerStats.totalLeads,
+              leads_pending_mapping: offerStats.pipelineStats.pendingMapping,
+              leads_pending_contact: offerStats.pipelineStats.toBeContacted,
+              leads_in_chat: offerStats.inChat,
+              leads_qualified: offerStats.qualified,
+              leads_delivered: offerStats.delivered,
+              leads_disqualified: offerStats.pipelineStats.disqualified,
+              leads_stopped: offerStats.pipelineStats.stopped + offerStats.pipelineStats.cooling + offerStats.pipelineStats.reactivation,
+              conversion_rate: offerStats.conversionRate,
+              // Disqualification breakdown
+              dq_price_high: offerStats.disqualificationBreakdown?.priceHigh || 0,
+              dq_price_low: offerStats.disqualificationBreakdown?.priceLow || 0,
+              dq_wrong_zone: offerStats.disqualificationBreakdown?.wrongZone || 0,
+              dq_wrong_typology: offerStats.disqualificationBreakdown?.wrongTypology || 0,
+              dq_no_response: offerStats.disqualificationBreakdown?.noResponse || 0,
+              dq_not_interested: offerStats.disqualificationBreakdown?.notInterested || 0,
+              dq_missing_amenity: offerStats.disqualificationBreakdown?.missingAmenity || 0,
+              dq_other: offerStats.disqualificationBreakdown?.other || 0,
+            };
+            setFunnel(funnelData);
+          }
+        }
+      } catch (error) {
+        console.error("Error loading funnel stats:", error);
+        // Non-critical, continue loading
+      }
 
       // Load delivered leads (with full contact info)
       const { data: leadsData } = await queryWithTimeout(

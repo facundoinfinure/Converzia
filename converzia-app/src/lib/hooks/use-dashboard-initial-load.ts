@@ -8,23 +8,36 @@ import { useAuth } from "@/lib/auth/context";
 import type { LeadOffer, Offer, CreditLedgerEntry } from "@/types";
 
 // ============================================
-// Types
+// Types (from centralized stats service)
 // ============================================
 
-interface TenantFunnelStats {
-  tenant_id: string;
-  tenant_name: string;
-  total_leads: number;
-  leads_pending_mapping: number;
-  leads_pending_contact: number;
-  leads_in_chat: number;
-  leads_qualified: number;
-  leads_delivered: number;
-  leads_disqualified: number;
-  leads_stopped: number;
-  conversion_rate: number;
-  credit_balance: number;
-  active_offers_count: number;
+interface TenantFunnelStatsFromAPI {
+  tenantId: string;
+  tenantName: string;
+  received: number;
+  inChat: number;
+  qualified: number;
+  delivered: number;
+  notQualified: number;
+  totalLeads: number;
+  conversionRate: number;
+  creditBalance: number;
+  activeOffers: number;
+  pipelineStats: {
+    pendingMapping: number;
+    toBeContacted: number;
+    contacted: number;
+    engaged: number;
+    qualifying: number;
+    humanHandoff: number;
+    scored: number;
+    leadReady: number;
+    sentToDeveloper: number;
+    cooling: number;
+    reactivation: number;
+    disqualified: number;
+    stopped: number;
+  };
 }
 
 interface DashboardStats {
@@ -44,7 +57,7 @@ interface DashboardStats {
 }
 
 // ============================================
-// Hook: Initial Load
+// Hook: Initial Load (uses centralized stats API)
 // ============================================
 
 export function useDashboardInitialLoad() {
@@ -80,25 +93,20 @@ export function useDashboardInitialLoad() {
     try {
       // Load all data in parallel using Promise.allSettled for resilience
       const [
-        funnelStatsResult,
+        statsResult,
         teamMembersResult,
-        contactedCountResult,
-        qualifyingCountResult,
         recentLeadsResult,
         offersResult,
         billingResult,
       ] = await Promise.allSettled([
-        // 1. Funnel stats (includes credit balance)
-        queryWithTimeout(
-          supabase
-            .from("tenant_funnel_stats")
-            .select("*")
-            .eq("tenant_id", activeTenantId)
-            .maybeSingle(),
-          10000,
-          "tenant funnel stats",
-          false
-        ),
+        // 1. Stats from centralized API (includes funnel stats, credit balance, etc.)
+        fetch(`/api/portal/stats?tenant_id=${activeTenantId}`).then(async (res) => {
+          if (!res.ok) {
+            const error = await res.json().catch(() => ({}));
+            throw new Error(error.message || "Error fetching stats");
+          }
+          return res.json();
+        }),
 
         // 2. Team members count
         queryWithTimeout(
@@ -112,31 +120,7 @@ export function useDashboardInitialLoad() {
           false
         ),
 
-        // 3. Contacted count (for pipeline stats) - includes all "in_chat" statuses
-        queryWithTimeout(
-          supabase
-            .from("lead_offers")
-            .select("id", { count: "exact", head: true })
-            .eq("tenant_id", activeTenantId)
-            .in("status", ["CONTACTED", "ENGAGED", "QUALIFYING", "HUMAN_HANDOFF"]),
-          8000,
-          "contacted count",
-          false
-        ),
-
-        // 4. Qualifying count (SCORED + LEAD_READY for pipeline stats)
-        queryWithTimeout(
-          supabase
-            .from("lead_offers")
-            .select("id", { count: "exact", head: true })
-            .eq("tenant_id", activeTenantId)
-            .in("status", ["SCORED", "LEAD_READY"]),
-          8000,
-          "qualifying count",
-          false
-        ),
-
-        // 5. Recent leads (non-blocking, can fail silently)
+        // 3. Recent leads (non-blocking, can fail silently)
         queryWithTimeout(
           supabase
             .from("lead_offers")
@@ -153,7 +137,7 @@ export function useDashboardInitialLoad() {
           false
         ),
 
-        // 6. Offers (basic info, stats can be loaded lazily)
+        // 4. Offers (basic info)
         queryWithTimeout(
           supabase
             .from("offers")
@@ -165,39 +149,26 @@ export function useDashboardInitialLoad() {
           false
         ),
 
-        // 7. Billing data (balance and recent transactions)
-        Promise.allSettled([
-          queryWithTimeout(
-            supabase
-              .from("tenant_credit_balance")
-              .select("current_balance")
-              .eq("tenant_id", activeTenantId)
-              .maybeSingle(),
-            10000,
-            "credit balance",
-            false
-          ),
-          queryWithTimeout(
-            supabase
-              .from("credit_ledger")
-              .select("*")
-              .eq("tenant_id", activeTenantId)
-              .order("created_at", { ascending: false })
-              .limit(20),
-            10000,
-            "credit ledger",
-            false
-          ),
-        ]),
+        // 5. Billing data (transactions - balance comes from stats API)
+        queryWithTimeout(
+          supabase
+            .from("credit_ledger")
+            .select("*")
+            .eq("tenant_id", activeTenantId)
+            .order("created_at", { ascending: false })
+            .limit(20),
+          10000,
+          "credit ledger",
+          false
+        ),
       ]);
 
-      // Process funnel stats
-      const funnelStats: TenantFunnelStats | null =
-        funnelStatsResult.status === "fulfilled"
-          ? (funnelStatsResult.value.data as TenantFunnelStats)
-          : null;
-
-      if (funnelStatsResult.status === "rejected") {
+      // Process stats from API
+      let statsFromAPI: TenantFunnelStatsFromAPI | null = null;
+      if (statsResult.status === "fulfilled" && statsResult.value.success) {
+        statsFromAPI = statsResult.value.data.tenant as TenantFunnelStatsFromAPI;
+      } else {
+        console.error("Error loading stats:", statsResult);
         setError("stats", "Error al cargar estadísticas");
       }
 
@@ -211,39 +182,21 @@ export function useDashboardInitialLoad() {
         setError("team", "Error al cargar miembros del equipo");
       }
 
-      // Process pipeline counts
-      const contactedCount =
-        contactedCountResult.status === "fulfilled"
-          ? contactedCountResult.value.count || 0
-          : 0;
-
-      const qualifyingCount =
-        qualifyingCountResult.status === "fulfilled"
-          ? qualifyingCountResult.value.count || 0
-          : 0;
-
-      // Build dashboard stats
-      const totalLeads = funnelStats?.total_leads || 0;
-      const deliveredCount = funnelStats?.leads_delivered || 0;
-      const leadReadyCount = funnelStats?.leads_qualified || 0;
-      const conversionRate =
-        funnelStats?.conversion_rate ||
-        (totalLeads > 0 ? Math.round((deliveredCount / totalLeads) * 100) : 0);
-
+      // Build dashboard stats from API response
       const stats: DashboardStats = {
-        totalLeads,
-        leadReadyCount,
-        deliveredCount,
-        conversionRate: Math.round(conversionRate),
-        creditBalance: funnelStats?.credit_balance || 0,
-        activeOffers: funnelStats?.active_offers_count || 0,
+        totalLeads: statsFromAPI?.totalLeads || 0,
+        leadReadyCount: statsFromAPI?.qualified || 0,
+        deliveredCount: statsFromAPI?.delivered || 0,
+        conversionRate: Math.round(statsFromAPI?.conversionRate || 0),
+        creditBalance: statsFromAPI?.creditBalance || 0,
+        activeOffers: statsFromAPI?.activeOffers || 0,
         teamMembers: teamMembersCount,
-        pipelineStats: {
-          contacted: contactedCount,
-          qualifying: qualifyingCount,
-          leadReady: leadReadyCount,
-          delivered: deliveredCount,
-        },
+        pipelineStats: statsFromAPI ? {
+          contacted: statsFromAPI.inChat,
+          qualifying: statsFromAPI.qualified,
+          leadReady: statsFromAPI.pipelineStats.leadReady,
+          delivered: statsFromAPI.delivered,
+        } : undefined,
       };
 
       updateStats(stats);
@@ -284,30 +237,18 @@ export function useDashboardInitialLoad() {
       }
 
       // Process billing data
-      if (billingResult.status === "fulfilled") {
-        const [balanceResult, transactionsResult] = billingResult.value;
+      const transactions =
+        billingResult.status === "fulfilled"
+          ? (Array.isArray(billingResult.value.data)
+              ? billingResult.value.data
+              : []) as CreditLedgerEntry[]
+          : [];
 
-        const balance =
-          balanceResult.status === "fulfilled"
-            ? (balanceResult.value.data as any)?.current_balance || 0
-            : 0;
-
-        const transactions =
-          transactionsResult.status === "fulfilled"
-            ? (Array.isArray(transactionsResult.value.data)
-                ? transactionsResult.value.data
-                : []) as CreditLedgerEntry[]
-            : [];
-
-        updateBilling({ balance, transactions });
-
-        // Also update credit balance in stats if it's different
-        if (balance !== stats.creditBalance) {
-          updateStats({ ...stats, creditBalance: balance });
-        }
-      } else if (billingResult.status === "rejected") {
-        setError("billing", "Error al cargar datos de facturación");
-      }
+      // Use credit balance from stats API
+      updateBilling({ 
+        balance: statsFromAPI?.creditBalance || 0, 
+        transactions 
+      });
 
       // Load team members details (non-blocking)
       setLoading("team", true);

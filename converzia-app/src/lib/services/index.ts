@@ -9,6 +9,7 @@ export * from "./google-sheets";
 export * from "./openai";
 export * from "./rag";
 export * from "./scoring";
+export * from "./stats";
 export * from "./tokko";
 
 

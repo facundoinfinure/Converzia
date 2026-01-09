@@ -131,3 +131,88 @@ export function standardizeFunnelStats(dbStats: DatabaseFunnelStats): Standardiz
     not_qualified: (dbStats.leads_disqualified || 0) + (dbStats.leads_stopped || 0),
   };
 }
+
+// ============================================
+// Status Sets (for consistent filtering)
+// ============================================
+
+/**
+ * Get status sets from TENANT_FUNNEL_STAGES
+ * This is the SINGLE SOURCE OF TRUTH for status groupings
+ */
+export function getStatusSets(): Record<TenantFunnelStageKey, Set<string>> {
+  return TENANT_FUNNEL_STAGES.reduce((acc, stage) => {
+    acc[stage.key] = new Set(stage.statuses);
+    return acc;
+  }, {} as Record<TenantFunnelStageKey, Set<string>>);
+}
+
+/**
+ * Get all statuses for a given funnel stage key
+ */
+export function getStatusesForStage(key: TenantFunnelStageKey): string[] {
+  const stage = getFunnelStage(key);
+  return stage?.statuses || [];
+}
+
+/**
+ * Check if a status belongs to a specific funnel stage
+ */
+export function isStatusInStage(status: string, stageKey: TenantFunnelStageKey): boolean {
+  const stage = getFunnelStage(stageKey);
+  return stage?.statuses.includes(status) || false;
+}
+
+// ============================================
+// Lead Counting (Client-side compatible)
+// ============================================
+
+/**
+ * Count leads by category using TENANT_FUNNEL_STAGES
+ * This can be used both client-side and server-side
+ */
+export function countLeadsByCategory(
+  leads: Array<{ status: string }>
+): StandardizedFunnelData {
+  const statusSets = getStatusSets();
+  
+  return {
+    received: leads.filter(l => statusSets.received.has(l.status)).length,
+    in_chat: leads.filter(l => statusSets.in_chat.has(l.status)).length,
+    qualified: leads.filter(l => statusSets.qualified.has(l.status)).length,
+    delivered: leads.filter(l => statusSets.delivered.has(l.status)).length,
+    not_qualified: leads.filter(l => statusSets.not_qualified.has(l.status)).length,
+  };
+}
+
+/**
+ * Verify that all leads are accounted for in the categories
+ * Returns true if the sum of all categories equals total leads
+ */
+export function verifyFunnelCounts(data: StandardizedFunnelData, totalLeads: number): boolean {
+  const sum = data.received + data.in_chat + data.qualified + data.delivered + data.not_qualified;
+  return sum === totalLeads;
+}
+
+/**
+ * Get all valid lead statuses from TENANT_FUNNEL_STAGES
+ */
+export function getAllValidStatuses(): string[] {
+  return TENANT_FUNNEL_STAGES.flatMap(stage => stage.statuses);
+}
+
+/**
+ * Find leads with unmapped statuses (not in any funnel stage)
+ */
+export function findUnmappedStatuses(leads: Array<{ status: string }>): string[] {
+  const validStatuses = new Set(getAllValidStatuses());
+  const unmapped = new Set<string>();
+  
+  for (const lead of leads) {
+    if (!validStatuses.has(lead.status)) {
+      unmapped.add(lead.status);
+    }
+  }
+  
+  return Array.from(unmapped);
+}

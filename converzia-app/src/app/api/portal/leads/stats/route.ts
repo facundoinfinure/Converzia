@@ -1,11 +1,10 @@
 import { NextRequest } from "next/server";
-import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 import { handleApiError, handleUnauthorized, handleForbidden, handleValidationError, apiSuccess, ErrorCode } from "@/lib/utils/api-error-handler";
 import { logger } from "@/lib/utils/logger";
 import { isAdminProfile } from "@/types/supabase-helpers";
-import { cacheService, cacheKeys, CacheTTL } from "@/lib/services/cache";
-import { TENANT_FUNNEL_STAGES } from "@/lib/constants/tenant-funnel";
+import { getTenantFunnelStats } from "@/lib/services/stats";
 
 export const runtime = "nodejs";
 export const maxDuration = 15;
@@ -13,9 +12,8 @@ export const maxDuration = 15;
 /**
  * GET /api/portal/leads/stats
  * 
- * Returns funnel stats for a tenant, bypassing RLS restrictions.
- * The RLS policy on lead_offers only allows seeing SENT_TO_DEVELOPER status,
- * which causes stats views to show 0 for other stages.
+ * Returns funnel stats for a tenant using the centralized stats service.
+ * This endpoint delegates to the stats service for consistent data.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -27,24 +25,25 @@ export async function GET(request: NextRequest) {
     }
 
     // Use regular client for auth check
-    const supabaseAuth = await createClient();
-    const { data: { user }, error: authError } = await supabaseAuth.auth.getUser();
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
     
     if (authError || !user) {
       return handleUnauthorized("Autenticación requerida");
     }
 
-    // Use admin client to bypass RLS for data queries
-    const supabase = createAdminClient();
-
     // Verify user has access to this tenant
-    const { data: membership } = await supabase
-      .from("tenant_members")
-      .select("role, status")
-      .eq("tenant_id", tenantId)
-      .eq("user_id", user.id)
-      .eq("status", "ACTIVE")
-      .single();
+    const { data: membership } = await queryWithTimeout(
+      supabase
+        .from("tenant_members")
+        .select("role, status")
+        .eq("tenant_id", tenantId)
+        .eq("user_id", user.id)
+        .eq("status", "ACTIVE")
+        .single(),
+      5000,
+      "check membership"
+    );
 
     const { data: profile } = await queryWithTimeout(
       supabase
@@ -62,73 +61,26 @@ export async function GET(request: NextRequest) {
       return handleForbidden("No tiene acceso a este tenant");
     }
 
-    // Try to get from cache first
-    const cacheKey = cacheKeys.tenantStats(tenantId);
-    const cachedStats = await cacheService.get<{
-      received: number;
-      in_chat: number;
-      qualified: number;
-      delivered: number;
-      not_qualified: number;
-    }>(cacheKey);
-
-    if (cachedStats) {
-      logger.debug("[API Stats] Returning cached stats", { tenantId });
-      return apiSuccess({ stats: cachedStats, cached: true });
-    }
-
-    // Count leads by status using admin client (bypasses RLS)
-    // Query directly by tenant_id on lead_offers for more reliable counts
-    const { data: leadCountsData, error: countsError } = await queryWithTimeout(
-      supabase
-        .from("lead_offers")
-        .select("status")
-        .eq("tenant_id", tenantId),
-      10000,
-      "lead counts by status"
-    );
-
-    if (countsError) {
-      logger.error("[API Stats] Error counting leads", countsError);
-      return handleApiError(countsError, {
+    // Use centralized stats service
+    const tenantStats = await getTenantFunnelStats(tenantId);
+    
+    if (!tenantStats) {
+      return handleApiError(new Error("Failed to get tenant stats"), {
         code: ErrorCode.DATABASE_ERROR,
-        message: "Error al contar leads",
+        message: "Error al obtener estadísticas del tenant",
       });
     }
 
-    const leads = Array.isArray(leadCountsData) ? leadCountsData as Array<{ status: string }> : [];
-
-    // Build status sets from TENANT_FUNNEL_STAGES for guaranteed consistency
-    const statusSets = TENANT_FUNNEL_STAGES.reduce((acc, stage) => {
-      acc[stage.key] = new Set(stage.statuses);
-      return acc;
-    }, {} as Record<string, Set<string>>);
-
-    // Count by category using the exact statuses from TENANT_FUNNEL_STAGES
+    // Return stats in the expected format for backward compatibility
     const stats = {
-      received: leads.filter(l => statusSets.received?.has(l.status)).length,
-      in_chat: leads.filter(l => statusSets.in_chat?.has(l.status)).length,
-      qualified: leads.filter(l => statusSets.qualified?.has(l.status)).length,
-      delivered: leads.filter(l => statusSets.delivered?.has(l.status)).length,
-      not_qualified: leads.filter(l => statusSets.not_qualified?.has(l.status)).length,
+      received: tenantStats.received,
+      in_chat: tenantStats.inChat,
+      qualified: tenantStats.qualified,
+      delivered: tenantStats.delivered,
+      not_qualified: tenantStats.notQualified,
     };
 
-    // Log any unmapped statuses for debugging
-    const allMappedStatuses = new Set(TENANT_FUNNEL_STAGES.flatMap(s => s.statuses));
-    const unmappedLeads = leads.filter(l => !allMappedStatuses.has(l.status));
-    if (unmappedLeads.length > 0) {
-      const unmappedStatuses = [...new Set(unmappedLeads.map(l => l.status))];
-      logger.warn("[API Stats] Found leads with unmapped statuses", { 
-        tenantId, 
-        unmappedStatuses,
-        count: unmappedLeads.length 
-      });
-    }
-
-    // Cache the stats
-    await cacheService.set(cacheKey, stats, CacheTTL.STATS);
-
-    logger.info("[API Stats] Stats calculated and cached", { tenantId, stats });
+    logger.info("[API Stats] Stats retrieved", { tenantId, stats });
 
     return apiSuccess({ stats });
 

@@ -6,13 +6,29 @@ import { createClient } from "@/lib/supabase/client";
 import { queryWithTimeout } from "@/lib/supabase/query-with-timeout";
 
 // ============================================
-// Hook: Admin Polling
+// Types (from centralized stats service)
+// ============================================
+
+interface AdminDashboardStatsFromAPI {
+  totalLeads: number;
+  leadsToday: number;
+  activeTenants: number;
+  pendingApprovals: number;
+  leadReadyRate: number;
+  unmappedAds: number;
+  lowCreditTenants: number;
+  avgResponseTime: string;
+  leadsTrend: Array<{ date: string; value: number }>;
+}
+
+// ============================================
+// Hook: Admin Polling (uses centralized stats API)
 // ============================================
 
 /**
  * Hook that implements intelligent polling for admin dashboard data
+ * - Uses centralized /api/admin/stats endpoint
  * - Only polls when page is visible (Page Visibility API)
- * - Different intervals for different data types
  * - Stops polling when component unmounts
  */
 export function useAdminPolling() {
@@ -57,58 +73,35 @@ export function useAdminPolling() {
 
       setLoading("stats", true);
       try {
-        const [
-          totalLeadsResult,
-          activeTenantsResult,
-          pendingApprovalsResult,
-          leadsTodayResult,
-        ] = await Promise.allSettled([
-          queryWithTimeout(
-            supabase.from("lead_offers").select("id", { count: "exact", head: true }),
-            10000,
-            "poll lead_offers count",
-            false
-          ),
-          queryWithTimeout(
-            supabase.from("tenants").select("id", { count: "exact", head: true }).eq("status", "ACTIVE"),
-            10000,
-            "poll tenants count",
-            false
-          ),
-          queryWithTimeout(
-            supabase.from("tenant_members").select("id", { count: "exact", head: true }).eq("status", "PENDING_APPROVAL"),
-            10000,
-            "poll tenant_members count",
-            false
-          ),
-          (async () => {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            return queryWithTimeout(
-              supabase
-                .from("lead_offers")
-                .select("id", { count: "exact", head: true })
-                .gte("created_at", today.toISOString()),
-              10000,
-              "poll today's leads",
-              false
-            );
-          })(),
-        ]);
-
-        const totalLeads = totalLeadsResult.status === "fulfilled" ? (totalLeadsResult.value.count || 0) : 0;
-        const activeTenants = activeTenantsResult.status === "fulfilled" ? (activeTenantsResult.value.count || 0) : 0;
-        const pendingApprovals = pendingApprovalsResult.status === "fulfilled" ? (pendingApprovalsResult.value.count || 0) : 0;
-        const leadsToday = leadsTodayResult.status === "fulfilled" ? (leadsTodayResult.value.count || 0) : 0;
-
-        // Update stats (preserve existing values for fields we don't poll)
-        updateStats((prev) => ({
-          ...prev!,
-          totalLeads,
-          activeTenants,
-          pendingApprovals,
-          leadsToday,
-        }));
+        // Use centralized admin stats API
+        const response = await fetch("/api/admin/stats");
+        
+        if (!response.ok) {
+          throw new Error("Failed to fetch admin stats");
+        }
+        
+        const result = await response.json();
+        
+        if (result.success && result.data?.dashboard) {
+          const statsFromAPI = result.data.dashboard as AdminDashboardStatsFromAPI;
+          
+          // Update stats (preserve leadsTrend if we already have it)
+          updateStats((prev) => ({
+            ...prev!,
+            totalLeads: statsFromAPI.totalLeads,
+            activeTenants: statsFromAPI.activeTenants,
+            pendingApprovals: statsFromAPI.pendingApprovals,
+            leadsToday: statsFromAPI.leadsToday,
+            leadReadyRate: statsFromAPI.leadReadyRate,
+            unmappedAds: statsFromAPI.unmappedAds,
+            lowCreditTenants: statsFromAPI.lowCreditTenants,
+            avgResponseTime: statsFromAPI.avgResponseTime,
+            // Only update leadsTrend if it's provided (avoid overwriting with empty)
+            leadsTrend: statsFromAPI.leadsTrend?.length > 0 
+              ? statsFromAPI.leadsTrend 
+              : prev?.leadsTrend,
+          }));
+        }
       } catch (err) {
         console.error("Error polling stats:", err);
         // Don't set error for polling failures - they're non-critical
@@ -130,7 +123,7 @@ export function useAdminPolling() {
     return () => {
       clearInterval(statsInterval);
     };
-  }, [supabase, updateStats, setLoading, lastUpdated.stats]);
+  }, [updateStats, setLoading, lastUpdated.stats]);
 
   // Poll billing every 60 seconds (if page is visible)
   useEffect(() => {
